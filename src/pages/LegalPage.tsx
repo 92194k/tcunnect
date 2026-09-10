@@ -1,4 +1,3 @@
-```tsx
 import Logo from "../components/Logo";
 
 type Props = {
@@ -66,15 +65,16 @@ export default function LegalPage({ page, onNavigate }: Props) {
 function TermsContent() {
   return (
     <article className="text-[#1A1033]">
-      <p className="text-sm sm:text-[15px] leading-7 text-slate-600 mb-7">
+      <p className="text-sm sm:text-[15px] leading-7 text-slate-600 mb-7 text-justify">
         These Terms of Service explain the rules for using TCUnnect. By
         creating an account or using TCUnnect, you agree to follow these
-        Terms.
+        Terms and use the platform responsibly.
       </p>
 
       <LegalSection title="1. Eligibility">
         <p>
-          TCUnnect is intended for TCU students who are 18 years old or older.
+          TCUnnect is intended for Taguig City University (TCU) students who
+          are 18 years old or older.
         </p>
 
         <p>
@@ -84,14 +84,14 @@ function TermsContent() {
 
         <p>
           You agree that the information you provide is accurate, belongs to
-          you, and is not misleading.
+          you, and is not intentionally false or misleading.
         </p>
       </LegalSection>
 
       <LegalSection title="2. Account & Verification">
         <p>
-          To help keep the community limited to legitimate TCU students,
-          accounts may require student ID or COE verification and selfie
+          To help keep TCUnnect limited to legitimate TCU students, your
+          account may require student ID or COE verification and selfie
           verification before full access is granted.
         </p>
 
@@ -107,56 +107,71 @@ function TermsContent() {
         />
 
         <p>
-          TCUnnect may restrict, suspend, or remove accounts that do not meet
-          these requirements.
+          TCUnnect may restrict, suspend, or remove an account if the
+          information provided cannot be verified or if the account does not
+          meet these requirements.
         </p>
       </LegalSection>
 
       <LegalSection title="3. Acceptable Use">
         <p>
-          You are expected to use TCUnnect respectfully and responsibly.
+          You are expected to use TCUnnect respectfully and responsibly. The
+          platform should be used for genuine social connection and
+          communication within the TCU community.
         </p>
 
         <p>You may not use TCUnnect to:</p>
 
         <LegalList
           items={[
-            "Harass, threaten, or bully other users",
-            "Post hateful or abusive content",
+            "Harass, threaten, bully, or intimidate other users",
+            "Post hateful, abusive, or seriously offensive content",
             "Share illegal or prohibited content",
-            "Spam or deliberately misuse the platform",
+            "Send spam or deliberately misuse platform features",
             "Impersonate another person",
             "Share another person's private or personal information without their consent",
-            "Use the platform for fraudulent or harmful activities",
+            "Use the platform for scams, fraud, or other harmful activities",
           ]}
         />
 
         <p>
-          Violations may result in content removal, warnings, temporary
-          suspension, or permanent account removal depending on the situation.
+          Depending on the situation, violations may result in content
+          removal, a warning, temporary suspension, restricted features, or
+          permanent account removal.
         </p>
       </LegalSection>
 
       <LegalSection title="4. Matching, Messaging & Blocking">
         <p>
-          TCUnnect allows users to discover, match, and communicate with other
-          users.
+          TCUnnect lets you discover other verified users, show interest,
+          match with someone, and communicate through private messages.
         </p>
 
         <p>
-          You may block another user at any time. Blocking is silent, meaning
-          the blocked user will not receive a notification.
+          You can block another user at any time if you no longer want to
+          interact with them or feel uncomfortable with the conversation.
+          Blocking is silent, which means the other user will not receive a
+          notification that they have been blocked.
         </p>
 
         <p>
-          When you block someone, the conversation will no longer be available
-          to the blocked user.
+          After you block someone, they will no longer be able to interact
+          with you through the platform, and the conversation will no longer
+          be available to them.
         </p>
 
         <p>
-          You may also unmatch another user. After an unmatch, the users may
-          become eligible to appear to each other again in Discover, depending
-          on the platform's matching rules.
+          You can also unmatch with someone at any time. Unmatching ends the
+          current match and removes the connection between both users.
+          Depending on the platform's matching rules, you may be able to see
+          and match with each other again in Discover later.
+        </p>
+
+        <p>
+          Please use matching and messaging responsibly. Do not use these
+          features to harass, threaten, pressure, deceive, or repeatedly
+          contact someone who has made it clear that they do not want to
+          communicate with you.
         </p>
       </LegalSection>
 
@@ -167,22 +182,23 @@ function TermsContent() {
         </p>
 
         <p>
-          Although posts and comments are displayed anonymously to other
-          users, TCUnnect may associate activity with the account that
-          submitted it when necessary for moderation, safety, security, or
-          compliance with applicable laws.
+          Posts and comments appear anonymously to other users. However,
+          TCUnnect may still associate anonymous activity with the account
+          that submitted it when necessary for moderation, safety, security,
+          or compliance with applicable laws.
         </p>
 
         <p>
-          Anonymous posting does not permit harassment, abuse, illegal
-          content, or other violations of these Terms.
+          Anonymous posting does not allow harassment, abuse, illegal
+          content, or other behavior that violates these Terms.
         </p>
       </LegalSection>
 
       <LegalSection title="6. Premium Features & Payments">
         <p>
           TCUnnect may offer optional Premium features for a one-time fee of
-          ₱30, subject to the features available at the time of purchase.
+          ₱30. The features included with Premium may depend on what is
+          available at the time of purchase.
         </p>
 
         <p>
@@ -196,31 +212,39 @@ function TermsContent() {
         </p>
 
         <p>
-          If you experience a problem with a Premium purchase or the purchased
-          features were not delivered as described, you may contact us
-          regarding a refund request within 7 days of purchase. Refund requests
-          will be reviewed on a case-by-case basis.
+          If you experience a problem with a Premium purchase or the
+          purchased features were not provided as described, you may contact
+          us within 7 days of the purchase to request a refund. Refund
+          requests will be reviewed based on the circumstances of the
+          request.
         </p>
       </LegalSection>
 
       <LegalSection title="7. Reports & Moderation">
         <p>
-          Users may report accounts, messages, posts, comments, or other
-          content that they believe violates these Terms.
+          You may report accounts, messages, posts, comments, or other
+          content that you believe violates these Terms or creates a safety
+          concern.
         </p>
 
         <p>
-          Our moderation team may review reports and take appropriate action
-          based on the circumstances.
+          Our moderation team may review reports and take action when
+          appropriate. This may include reviewing the reported content,
+          account activity, or other information needed to understand the
+          situation.
         </p>
 
         <p>
           Possible actions include removing content, issuing a warning,
-          restricting features, suspending an account, or permanently removing
-          an account.
+          restricting features, suspending an account, or permanently
+          removing an account.
         </p>
 
-        <p>Not every report will necessarily result in action.</p>
+        <p>
+          Not every report will necessarily result in action. Decisions may
+          depend on the available information and the seriousness of the
+          reported behavior.
+        </p>
       </LegalSection>
 
       <LegalSection title="8. Account Deletion">
@@ -229,9 +253,9 @@ function TermsContent() {
         </p>
 
         <p>
-          When your account is deleted, your profile and associated account
-          activity, including matches, messages, likes, and other user
-          activity, may be permanently removed from the platform.
+          When your account is deleted, your profile and associated activity,
+          including matches, messages, likes, and other user activity, may be
+          permanently removed from the platform.
         </p>
 
         <p>
@@ -243,9 +267,9 @@ function TermsContent() {
 
       <LegalSection title="9. Safety & Disclaimer">
         <p>
-          TCUnnect provides a platform for students to discover and communicate
-          with other users. We cannot guarantee that every user's information,
-          identity, intentions, or representations are accurate.
+          TCUnnect provides a platform for students to discover and
+          communicate with other users. We cannot guarantee that every user's
+          information, identity, intentions, or representations are accurate.
         </p>
 
         <p>
@@ -274,17 +298,17 @@ function TermsContent() {
         </p>
 
         <p>
-          When significant changes are made, we may provide notice through the
-          platform or other appropriate means. Your continued use of TCUnnect
-          after the updated Terms take effect means you accept the revised
-          Terms.
+          When significant changes are made, we may provide notice through
+          TCUnnect or another appropriate method. Your continued use of
+          TCUnnect after the updated Terms take effect means that you accept
+          the revised Terms.
         </p>
       </LegalSection>
 
       <LegalSection title="11. Contact" last>
         <p>
-          If you have questions or concerns about these Terms, you may contact
-          us at:
+          If you have questions, concerns, or requests regarding these Terms,
+          you may contact us at:
         </p>
 
         <a
@@ -305,11 +329,12 @@ function TermsContent() {
 function PrivacyContent() {
   return (
     <article className="text-[#1A1033]">
-      <p className="text-sm sm:text-[15px] leading-7 text-slate-600 mb-7">
+      <p className="text-sm sm:text-[15px] leading-7 text-slate-600 mb-7 text-justify">
         This Privacy Policy explains what information TCUnnect collects, how
-        we use and protect it, and your privacy rights. TCUnnect follows the
-        principles of the Philippine Data Privacy Act of 2012 (Republic Act
-        No. 10173) and applicable privacy regulations.
+        we use and protect it, and what choices and rights are available to
+        you. TCUnnect follows the principles of the Philippine Data Privacy
+        Act of 2012 (Republic Act No. 10173) and applicable privacy
+        regulations.
       </p>
 
       <LegalSection title="1. Information We Collect">
@@ -328,11 +353,15 @@ function PrivacyContent() {
 
       <LegalSection title="2. How We Use Your Information">
         <p>
-          We use collected information to operate and maintain TCUnnect,
+          We use the information we collect to operate and maintain TCUnnect,
           verify eligible users, provide matching and messaging features,
-          process Premium purchases, improve platform security, investigate
-          reports, prevent abuse, and comply with applicable legal
-          requirements.
+          process Premium purchases, maintain platform security, investigate
+          reports, prevent abuse, and meet applicable legal requirements.
+        </p>
+
+        <p>
+          Information may also be used to improve the reliability,
+          functionality, and safety of the platform.
         </p>
       </LegalSection>
 
@@ -340,13 +369,13 @@ function PrivacyContent() {
         <p>
           Student ID, COE, and selfie verification information is treated as
           restricted verification data. These materials are not displayed on
-          public profiles or made available to other users.
+          public profiles and are not made available to other users.
         </p>
 
         <p>
           Access to verification information is limited to authorized
-          personnel or service providers who need it for account verification,
-          security, or other legitimate purposes.
+          personnel or service providers who need it for account
+          verification, security, or another legitimate purpose.
         </p>
       </LegalSection>
 
@@ -358,8 +387,9 @@ function PrivacyContent() {
         </p>
 
         <p>
-          Premium features may provide additional visibility into certain
-          interactions, such as users who liked or viewed your profile.
+          Some Premium features may provide additional visibility into
+          certain interactions, such as users who liked or viewed your
+          profile.
         </p>
 
         <p>
@@ -378,9 +408,16 @@ function PrivacyContent() {
 
       <LegalSection title="5. Third-Party Services">
         <p>
-          TCUnnect may use third-party service providers necessary to operate
-          the platform, including Supabase for database, authentication, and
-          storage services, and PayMongo for payment processing.
+          TCUnnect may use third-party service providers that are necessary
+          to operate the platform. These may include Supabase for database,
+          authentication, and storage services, and PayMongo for payment
+          processing.
+        </p>
+
+        <p>
+          These providers may process information only as needed to provide
+          their services to TCUnnect and according to their applicable
+          policies and agreements.
         </p>
 
         <p>
@@ -408,27 +445,29 @@ function PrivacyContent() {
         <p>
           We take reasonable measures to protect personal information against
           unauthorized access, disclosure, alteration, or loss. Access to
-          restricted information is limited based on the needs of the platform
-          and its authorized personnel.
+          restricted information is limited based on the needs of the
+          platform and its authorized personnel.
         </p>
 
         <p>
-          However, no online service can guarantee that information will always
-          remain completely secure.
+          However, no online service can guarantee that information will
+          always remain completely secure. Users should also take reasonable
+          steps to protect their account information and login credentials.
         </p>
       </LegalSection>
 
       <LegalSection title="8. Your Privacy Rights">
         <p>
-          Subject to applicable law, you may have rights to access and correct
-          your personal information and request its deletion or other
-          appropriate processing restrictions.
+          Subject to applicable law, you may have the right to access and
+          correct your personal information and request its deletion or other
+          appropriate action regarding how your information is processed.
         </p>
 
         <p>
-          You may also raise privacy concerns with the National Privacy
-          Commission if you believe your rights under the Data Privacy Act
-          have not been properly addressed.
+          If you have a privacy concern, you may contact us first so we can
+          review and address the issue. You may also raise a concern with the
+          National Privacy Commission if you believe your rights under the
+          Data Privacy Act have not been properly addressed.
         </p>
       </LegalSection>
 
@@ -447,14 +486,15 @@ function PrivacyContent() {
 
         <p>
           When significant changes are made, we may provide notice through
-          TCUnnect or other appropriate means.
+          TCUnnect or another appropriate method. The updated version will
+          include a revised "Last updated" date.
         </p>
       </LegalSection>
 
       <LegalSection title="11. Contact" last>
         <p>
-          For privacy questions, data requests, or concerns, you may contact
-          us at:
+          For privacy questions, data requests, or concerns about how your
+          information is handled, you may contact us at:
         </p>
 
         <a
@@ -493,7 +533,7 @@ function LegalSection({
         {title}
       </h2>
 
-      <div className="space-y-4 text-sm sm:text-[15px] leading-7 text-slate-600">
+      <div className="space-y-4 text-sm sm:text-[15px] leading-7 text-slate-600 text-justify">
         {children}
       </div>
     </section>
@@ -502,7 +542,7 @@ function LegalSection({
 
 function LegalList({ items }: { items: string[] }) {
   return (
-    <ul className="list-disc pl-5 space-y-2 marker:text-slate-400">
+    <ul className="list-disc pl-5 space-y-2 marker:text-slate-400 text-left">
       {items.map((item, index) => (
         <li key={index} className="pl-1">
           {item}
@@ -511,4 +551,3 @@ function LegalList({ items }: { items: string[] }) {
     </ul>
   );
 }
-```
