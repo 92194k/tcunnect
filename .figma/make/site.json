@@ -1,0 +1,11 @@
+{
+  "title": "tcunnect",
+  "description": "Enables users to quickly generate and customize content or designs, streamlining creative workflows for professionals and enthusiasts alike.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
