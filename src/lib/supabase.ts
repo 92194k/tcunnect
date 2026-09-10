@@ -167,6 +167,15 @@ export async function unmatch(matchId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Different from unmatch() on purpose: unmatching deliberately keeps the
+ * match/message history as a record. This is a real, permanent hard
+ * delete of the conversation and every message in it, for BOTH people —
+ * genuinely gone, not just hidden. Irreversible. */
+export async function deleteConversation(matchId: string): Promise<void> {
+  const { error } = await supabase.rpc("delete_conversation", { target_match_id: matchId });
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Anonymous feed
 // ---------------------------------------------------------------------------

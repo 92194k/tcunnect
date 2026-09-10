@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import Logo from "../components/Logo";
 import { STUDENTS, MATCHES, CONVERSATIONS, FEED_POSTS, NOTIFICATIONS, ME, type Student } from "../data";
-import { supabase, likeUser, getMyLikers, getMyMatches, getMessages, sendMessage, unmatch, getFeedPosts, createFeedPost, toggleFeedUpvote, getMyVotedPostIds, reportFeedPost, fileReport, getFeedComments, createFeedComment, getMyProfile, updateMyProfile, recordProfileView, getMyProfileViewCount, getMyViewers, getMyNotifications, markNotificationRead, getReports, resolveReport, banReportedUser, suspendUser, unsuspendUser, deleteReport, deleteReportedContent, notifyReporter, getAllUsers, setUserBanned, getAllFeedPostsAdmin, setFeedPostRemoved, deleteFeedPostAdmin, getAdminStats, getMyBlockedUsers, unblockUser, unblockUserByTargetId, requestAccountDeletion, type Liker, type MatchWithUser, type ChatMessage, type FeedPost, type FeedComment, type MyProfile, type NotificationRow, type AdminReport, type AdminUser, type AdminFeedPost, type AdminStats, type BlockedUser, type Viewer } from "../lib/supabase";
+import { supabase, likeUser, getMyLikers, getMyMatches, getMessages, sendMessage, unmatch, deleteConversation, getFeedPosts, createFeedPost, toggleFeedUpvote, getMyVotedPostIds, reportFeedPost, fileReport, getFeedComments, createFeedComment, getMyProfile, updateMyProfile, recordProfileView, getMyProfileViewCount, getMyViewers, getMyNotifications, markNotificationRead, getReports, resolveReport, banReportedUser, suspendUser, unsuspendUser, deleteReport, deleteReportedContent, notifyReporter, getAllUsers, setUserBanned, getAllFeedPostsAdmin, setFeedPostRemoved, deleteFeedPostAdmin, getAdminStats, getMyBlockedUsers, unblockUser, unblockUserByTargetId, requestAccountDeletion, type Liker, type MatchWithUser, type ChatMessage, type FeedPost, type FeedComment, type MyProfile, type NotificationRow, type AdminReport, type AdminUser, type AdminFeedPost, type AdminStats, type BlockedUser, type Viewer } from "../lib/supabase";
 
 type View = "discover" | "likes" | "matches" | "messages" | "feed" | "notifications" | "profile" | "premium" | "admin" | "settings";
 type Props = { initialView: View; onNavigate: (v: string) => void };
@@ -730,6 +730,19 @@ function MessagesView() {
     }
   }
 
+  async function handleDeleteConversation() {
+    if (!activeMatchId || !conv) return;
+    if (!window.confirm(`Delete this entire conversation?\n\nThis permanently deletes every message for BOTH of you — it will be completely gone, not just hidden. This can't be undone.`)) return;
+    try {
+      await deleteConversation(activeMatchId);
+      setMatches((prev) => prev.filter((m) => m.match_id !== activeMatchId));
+      setActiveMatchId(null);
+    } catch (err) {
+      console.error("Delete conversation failed:", err);
+      window.alert(err instanceof Error ? err.message : "Failed to delete conversation — check the console for the exact error.");
+    }
+  }
+
   async function handleBlock() {
     if (!activeMatchId || !conv || !myId) return;
     if (!window.confirm(`Block this person?\n\nThey will no longer be able to contact you or access this conversation.`)) return;
@@ -817,6 +830,7 @@ function MessagesView() {
           </div>
           <div className="flex gap-2">
             <button onClick={handleUnmatch} className="text-xs text-slate-400 hover:text-like px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">Unmatch</button>
+            <button onClick={handleDeleteConversation} className="text-xs text-slate-400 hover:text-like px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">Delete Conversation</button>
             {conv.blockedByMe ? (
               <button onClick={handleUnblockFromChat} className="text-xs text-primary font-bold px-3 py-1.5 rounded-lg hover:bg-primary-light transition-colors">Unblock</button>
             ) : (
