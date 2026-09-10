@@ -30,35 +30,43 @@ export default function App() {
         return;
       }
 
-      if (event === "INITIAL_SESSION") {
-        if (session) {
-          const { data: statusRow, error: statusError } = await supabase
-            .from("users")
-            .select("is_banned, is_suspended_until, deletion_requested_at")
-            .eq("auth_id", session.user.id)
-            .maybeSingle();
+      // INITIAL_SESSION covers a normal page load/refresh with an existing
+      // session. SIGNED_IN additionally covers completing Google OAuth —
+      // that flow redirects the whole browser away and back, and while the
+      // return trip is usually a fresh page load (making INITIAL_SESSION
+      // fire correctly on its own), routing through SIGNED_IN too is a
+      // defensive belt-and-suspenders in case any browser/flow completes
+      // the OAuth redirect via history navigation instead of a hard reload.
+      if ((event === "INITIAL_SESSION" || event === "SIGNED_IN") && session) {
+        const { data: statusRow, error: statusError } = await supabase
+          .from("users")
+          .select("is_banned, is_suspended_until, deletion_requested_at")
+          .eq("auth_id", session.user.id)
+          .maybeSingle();
 
-          if (statusError) {
-            console.error("Failed to fetch account status on session restore:", statusError);
-          }
-          console.log("Session restore status check:", statusRow); // remove once confirmed working
+        if (statusError) {
+          console.error("Failed to fetch account status:", statusError);
+        }
 
-          const suspendedNow = statusRow?.is_suspended_until && new Date(statusRow.is_suspended_until) > new Date();
-          if (statusRow?.deletion_requested_at || statusRow?.is_banned || suspendedNow) {
-            await supabase.auth.signOut();
-            setView("landing");
-          } else {
-            try {
-              const status = await getMyVerificationStatus();
-              setView(status.verification_status === "approved" ? "discover" : "verification-pending");
-            } catch {
-              // Signed up but never finished onboarding (no users row yet).
-              setView("onboarding");
-            }
+        const suspendedNow = statusRow?.is_suspended_until && new Date(statusRow.is_suspended_until) > new Date();
+        if (statusRow?.deletion_requested_at || statusRow?.is_banned || suspendedNow) {
+          await supabase.auth.signOut();
+          setView("landing");
+        } else {
+          try {
+            const status = await getMyVerificationStatus();
+            setView(status.verification_status === "approved" ? "discover" : "verification-pending");
+          } catch {
+            // No users row yet — either a brand-new email signup that
+            // hasn't finished Onboarding, OR a first-time Google sign-in
+            // (new account, per the "same button handles sign-in and
+            // sign-up" flow) — both correctly land here to complete their
+            // profile before the app unlocks.
+            setView("onboarding");
           }
         }
-        setCheckingSession(false);
       }
+      if (event === "INITIAL_SESSION") setCheckingSession(false);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
