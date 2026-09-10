@@ -1,4 +1,3 @@
-```tsx
 import Logo from "../components/Logo";
 
 type Props = { page: "terms" | "privacy"; onNavigate: (v: string) => void };
