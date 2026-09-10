@@ -25,12 +25,20 @@ export default function LegalPage({ page, onNavigate }: Props) {
         <div className="max-w-3xl mx-auto px-5 sm:px-6 py-5 flex items-center justify-between">
           <Logo />
 
-          <button
-            onClick={() => onNavigate("signup")}
-            className="text-sm font-semibold text-primary hover:underline transition"
-          >
-            ← Back to sign up
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => onNavigate("landing")}
+              className="text-sm font-semibold text-slate-500 hover:text-primary transition"
+            >
+              ← Home
+            </button>
+            <button
+              onClick={() => onNavigate("signup")}
+              className="text-sm font-semibold text-primary hover:underline transition"
+            >
+              Log In / Sign Up
+            </button>
+          </div>
         </div>
       </header>
 
@@ -55,12 +63,18 @@ export default function LegalPage({ page, onNavigate }: Props) {
         </div>
 
         {/* Bottom navigation */}
-        <div className="flex justify-center mt-7">
+        <div className="flex items-center justify-center gap-6 mt-7">
+          <button
+            onClick={() => onNavigate("landing")}
+            className="text-sm font-semibold text-slate-500 hover:text-primary transition"
+          >
+            ← Back to Home
+          </button>
           <button
             onClick={() => onNavigate("signup")}
             className="text-sm font-semibold text-primary hover:underline transition"
           >
-            ← Back to sign up
+            Log In / Sign Up
           </button>
         </div>
       </main>

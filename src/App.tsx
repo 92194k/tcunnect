@@ -5,10 +5,11 @@ import Onboarding from "./pages/Onboarding";
 import VerificationPending from "./pages/VerificationPending";
 import ResetPassword from "./pages/ResetPassword";
 import LegalPage from "./pages/LegalPage";
+import InfoPage from "./pages/InfoPage";
 import Dashboard from "./pages/Dashboard";
 import { supabase, getMyVerificationStatus } from "./lib/supabase";
 
-type View = "landing" | "login" | "signup" | "onboarding" | "verification-pending" | "reset-password" | "terms" | "privacy" | "discover" | "likes" | "matches" | "messages" | "feed" | "notifications" | "profile" | "premium" | "admin";
+type View = "landing" | "login" | "signup" | "onboarding" | "verification-pending" | "reset-password" | "terms" | "privacy" | "about" | "safety" | "contact" | "discover" | "likes" | "matches" | "messages" | "feed" | "notifications" | "profile" | "premium" | "admin";
 
 export default function App() {
   const [view, setView] = useState<View>("landing");
@@ -86,6 +87,9 @@ export default function App() {
       {view === "reset-password" && <ResetPassword onNavigate={(v) => setView(v as View)} />}
       {view === "terms" && <LegalPage page="terms" onNavigate={(v) => setView(v as View)} />}
       {view === "privacy" && <LegalPage page="privacy" onNavigate={(v) => setView(v as View)} />}
+      {view === "about" && <InfoPage page="about" onNavigate={(v) => setView(v as View)} />}
+      {view === "safety" && <InfoPage page="safety" onNavigate={(v) => setView(v as View)} />}
+      {view === "contact" && <InfoPage page="contact" onNavigate={(v) => setView(v as View)} />}
     </>
   );
 }

@@ -284,11 +284,11 @@ export default function Landing({ onNavigate }: Props) {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <Logo white />
             <div className="flex flex-wrap items-center gap-6 text-sm text-slate-500">
-              <button onClick={() => window.alert("About page isn't built yet.")} className="hover:text-white transition-colors">About</button>
-              <button onClick={() => window.alert("Safety page isn't built yet.")} className="hover:text-white transition-colors">Safety</button>
+              <button onClick={() => onNavigate("about")} className="hover:text-white transition-colors">About</button>
+              <button onClick={() => onNavigate("safety")} className="hover:text-white transition-colors">Safety</button>
               <button onClick={() => onNavigate("privacy")} className="hover:text-white transition-colors">Privacy</button>
               <button onClick={() => onNavigate("terms")} className="hover:text-white transition-colors">Terms</button>
-              <a href="mailto:alaokhemberly@gmail.com" className="hover:text-white transition-colors">Contact</a>
+              <button onClick={() => onNavigate("contact")} className="hover:text-white transition-colors">Contact</button>
             </div>
             <p className="text-sm text-slate-600">© 2026 TCUnnect</p>
           </div>
