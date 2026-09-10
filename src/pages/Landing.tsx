@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import Logo from "../components/Logo";
 import { STUDENTS } from "../data";
 import { supabase } from "../lib/supabase";
+import kemAPhoto from "../assets/kem-a.jpg";
+import kemBPhoto from "../assets/kem-b.jpg";
+import kemCPhoto from "../assets/kem-c.jpg";
 
 type Props = { onNavigate: (v: string) => void };
 
@@ -20,28 +23,10 @@ const samplePosts = [
   { dept: null, text: "Who else is always at the library? 🦉", upvotes: 89 },
 ];
 
-const avatarPalettes = [
-  { bg: "from-[#7C3AED] to-[#A78BFA]" },
-  { bg: "from-[#EC4899] to-[#F9A8D4]" },
-  { bg: "from-[#F59E0B] to-[#FCD34D]" },
-];
-
-function IllustratedAvatar({ colorIndex }: { colorIndex: number }) {
-  const palette = avatarPalettes[colorIndex % avatarPalettes.length];
-  return (
-    <div className={`w-full h-36 bg-gradient-to-br ${palette.bg} flex items-center justify-center`}>
-      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
-        <circle cx="12" cy="8" r="4" fill="white" fillOpacity="0.25" />
-        <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" fill="white" fillOpacity="0.25" />
-      </svg>
-    </div>
-  );
-}
-
-function MiniProfileCard({ student, colorIndex, style }: { student: typeof STUDENTS[0]; colorIndex: number; style?: string }) {
+function MiniProfileCard({ student, photo, style }: { student: typeof STUDENTS[0]; photo: string; style?: string }) {
   return (
     <div className={`bg-white rounded-2xl shadow-lg overflow-hidden w-44 ${style ?? ""}`}>
-      <IllustratedAvatar colorIndex={colorIndex} />
+      <img src={photo} alt={student.name} className="w-full h-36 object-cover" />
       <div className="p-3">
         <p className="font-display font-bold text-sm text-[#1A1033] truncate">{student.name}</p>
         <p className="text-xs text-slate-500">{student.dept} · {student.year.replace(" Year", "Y")}</p>
@@ -56,13 +41,14 @@ function MiniProfileCard({ student, colorIndex, style }: { student: typeof STUDE
 }
 
 export default function Landing({ onNavigate }: Props) {
-  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [atTop, setAtTop] = useState(true);
   const [verifiedCount, setVerifiedCount] = useState<number | null>(null);
 
   useEffect(() => {
     function onScroll() {
-      setShowBackToTop(window.scrollY > 500);
+      setAtTop(window.scrollY < 400);
     }
+    onScroll();
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -134,13 +120,13 @@ export default function Landing({ onNavigate }: Props) {
           {/* Hero profile cards */}
           <div className="relative h-80 lg:h-96 flex items-center justify-center">
             <div className="absolute left-0 top-8 float" style={{ animationDelay: "0s" }}>
-              <MiniProfileCard student={{ name: "King", dept: "CICT", year: "4th Year", interests: ["Coding", "Movies", "Funny"] } as typeof STUDENTS[0]} colorIndex={0} />
+              <MiniProfileCard student={{ name: "Kem A", dept: "CICT", year: "4th Year", interests: ["Meme", "Codes"] } as typeof STUDENTS[0]} photo={kemAPhoto} />
             </div>
             <div className="absolute left-32 top-0 float z-10" style={{ animationDelay: "0.5s" }}>
-              <MiniProfileCard student={{ name: "Mark", dept: "CAS", year: "1st Year", interests: ["Food", "Gaming"] } as typeof STUDENTS[0]} colorIndex={1} />
+              <MiniProfileCard student={{ name: "Kem B", dept: "CBM", year: "1st Year", interests: ["Food", "Reading"] } as typeof STUDENTS[0]} photo={kemBPhoto} />
             </div>
             <div className="absolute right-0 top-12 float" style={{ animationDelay: "1s" }}>
-              <MiniProfileCard student={{ name: "Marl", dept: "CCJ", year: "3rd Year", interests: ["Friends", "Rides"] } as typeof STUDENTS[0]} colorIndex={2} />
+              <MiniProfileCard student={{ name: "Kem C", dept: "CAS", year: "3rd Year", interests: ["Friends", "Chat"] } as typeof STUDENTS[0]} photo={kemCPhoto} />
             </div>
             {/* Match badge */}
             <div className="absolute left-36 bottom-0 bg-match text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-20 sparkle">
@@ -298,15 +284,17 @@ export default function Landing({ onNavigate }: Props) {
         </div>
       </footer>
 
-      {/* Back to top */}
+      {/* Scroll to top / bottom toggle */}
       <button
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        aria-label="Back to top"
-        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95 ${
-          showBackToTop ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-4 pointer-events-none"
-        }`}
+        onClick={() =>
+          atTop
+            ? window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })
+            : window.scrollTo({ top: 0, behavior: "smooth" })
+        }
+        aria-label={atTop ? "Scroll to bottom" : "Scroll to top"}
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95"
       >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300" style={{ transform: atTop ? "rotate(180deg)" : "rotate(0deg)" }}>
           <line x1="12" y1="19" x2="12" y2="5" />
           <polyline points="5 12 12 5 19 12" />
         </svg>
