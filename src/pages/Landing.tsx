@@ -275,25 +275,25 @@ export default function Landing({ onNavigate }: Props) {
         </div>
       </section>
 
-      {/* Footer — pinned to the bottom of the screen, always reachable while scrolling */}
-      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-[#0F0A1E]/95 backdrop-blur border-t border-white/10 py-3">
+      {/* Footer */}
+      <footer className="bg-[#0F0A1E] py-12">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-2 md:gap-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <Logo white />
-            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm text-slate-400">
+            <div className="flex flex-wrap items-center gap-6 text-sm text-slate-500">
               <button onClick={() => onNavigate("about")} className="hover:text-white transition-colors">About</button>
               <button onClick={() => onNavigate("safety")} className="hover:text-white transition-colors">Safety</button>
               <button onClick={() => onNavigate("privacy")} className="hover:text-white transition-colors">Privacy</button>
               <button onClick={() => onNavigate("terms")} className="hover:text-white transition-colors">Terms</button>
               <button onClick={() => onNavigate("contact")} className="hover:text-white transition-colors">Contact</button>
             </div>
-            <p className="text-xs text-slate-600 hidden md:block">© 2026 TCUnnect</p>
+            <p className="text-sm text-slate-600">© 2026 TCUnnect</p>
           </div>
+          <p className="text-center text-xs text-slate-700 mt-8">
+            Meet. Match. Connect. — Exclusively for Taguig City University Students
+          </p>
         </div>
       </footer>
-
-      {/* Spacer so page content doesn't get hidden behind the pinned footer above */}
-      <div className="h-20" />
 
       {/* Scroll to top / bottom toggle */}
       <button
@@ -303,7 +303,7 @@ export default function Landing({ onNavigate }: Props) {
             : window.scrollTo({ top: 0, behavior: "smooth" })
         }
         aria-label={atTop ? "Scroll to bottom" : "Scroll to top"}
-        className="fixed bottom-20 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300" style={{ transform: atTop ? "rotate(180deg)" : "rotate(0deg)" }}>
           <line x1="12" y1="19" x2="12" y2="5" />
