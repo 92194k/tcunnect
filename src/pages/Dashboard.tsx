@@ -1070,6 +1070,10 @@ function FeedView() {
       await createFeedComment(postId, text, parentCommentId);
       const c = await getFeedComments(postId);
       setComments((prev) => ({ ...prev, [postId]: c }));
+      // Bump the counter shown on the post card immediately — the database
+      // trigger already updated the real value, this just keeps the
+      // already-fetched `posts` list in sync without needing a full reload.
+      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, comment_count: p.comment_count + 1 } : p)));
     } catch (err: any) {
       console.error("Comment failed:", err);
       window.alert(err?.message || "Failed to post comment — check the console for details.");
@@ -1192,7 +1196,7 @@ function FeedView() {
                 👍 {post.upvotes}
               </button>
               <button onClick={() => toggleComments(post.id)} className="flex items-center gap-1.5 font-semibold text-slate-400 hover:text-primary transition-colors">
-                💬 {comments[post.id]?.length ?? ""} Comments
+                💬 {post.comment_count} Comments
               </button>
               <button onClick={() => report(post)} className="ml-auto text-slate-300 hover:text-like text-xs transition-colors">🚩 Report</button>
             </div>

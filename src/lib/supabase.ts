@@ -193,6 +193,7 @@ export type FeedPost = {
   text: string;
   photo_url: string | null;
   upvotes: number;
+  comment_count: number;
   created_at: string;
   is_admin_post: boolean;
 };
@@ -200,7 +201,7 @@ export type FeedPost = {
 export async function getFeedPosts(): Promise<FeedPost[]> {
   const { data, error } = await supabase
     .from("feed_posts")
-    .select("id, dept_tag, text, photo_url, upvotes, created_at, is_admin_post")
+    .select("id, dept_tag, text, photo_url, upvotes, comment_count, created_at, is_admin_post")
     .eq("is_removed", false)
     .order("created_at", { ascending: false })
     .limit(100);
