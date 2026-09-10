@@ -23,7 +23,7 @@ export default function InfoPage({ page, onNavigate }: Props) {
   return (
     <div className="min-h-screen bg-[#F8F7FC]">
       {/* Header */}
-      <header className="bg-white border-b border-[#E9E5F2]">
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-[#E9E5F2]">
         <div className="max-w-3xl mx-auto px-5 sm:px-6 py-5 flex items-center justify-between">
           <Logo />
           <div className="flex items-center gap-4">
