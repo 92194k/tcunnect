@@ -221,25 +221,44 @@ export async function createFeedPost(text: string, postAsAdmin: boolean = false)
 export type FeedComment = {
   id: string;
   post_id: string;
+  parent_comment_id: string | null;
   text: string;
   created_at: string;
+  author_name: string;
+  author_photo: string | null;
 };
 
 export async function getFeedComments(postId: string): Promise<FeedComment[]> {
   const { data, error } = await supabase
     .from("feed_comments")
-    .select("id, post_id, text, created_at")
+    .select("id, post_id, parent_comment_id, text, created_at, users(name, photo_url)")
     .eq("post_id", postId)
     .eq("is_removed", false)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return data as FeedComment[];
+  return (data ?? []).map((c: any) => ({
+    id: c.id,
+    post_id: c.post_id,
+    parent_comment_id: c.parent_comment_id,
+    text: c.text,
+    created_at: c.created_at,
+    author_name: c.users?.name ?? "Unknown",
+    author_photo: c.users?.photo_url ?? null,
+  }));
 }
 
-export async function createFeedComment(postId: string, text: string): Promise<void> {
+/** Comments show the real commenter's identity (unlike posts, which are
+ * structurally anonymous) — parentCommentId is optional, set it to reply
+ * to another comment instead of the post directly. */
+export async function createFeedComment(postId: string, text: string, parentCommentId?: string | null): Promise<void> {
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) throw new Error("Not signed in.");
+  const { data: me } = await supabase.from("users").select("id").eq("auth_id", authData.user.id).single();
+  if (!me) throw new Error("Profile not found.");
+
   const { error } = await supabase
     .from("feed_comments")
-    .insert({ post_id: postId, text, poster_session_hash: getSessionHash() });
+    .insert({ post_id: postId, text, user_id: me.id, parent_comment_id: parentCommentId ?? null });
   if (error) throw error;
 }
 

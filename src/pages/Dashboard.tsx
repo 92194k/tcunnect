@@ -907,6 +907,8 @@ function FeedView() {
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [comments, setComments] = useState<Record<string, FeedComment[]>>({});
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
 
   useEffect(() => {
     loadPosts();
@@ -963,12 +965,17 @@ function FeedView() {
     }
   }
 
-  async function submitComment(postId: string) {
-    const text = (commentInputs[postId] || "").trim();
+  async function submitComment(postId: string, parentCommentId: string | null = null) {
+    const text = parentCommentId ? replyText.trim() : (commentInputs[postId] || "").trim();
     if (!text) return;
-    setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
+    if (parentCommentId) {
+      setReplyText("");
+      setReplyingTo(null);
+    } else {
+      setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
+    }
     try {
-      await createFeedComment(postId, text);
+      await createFeedComment(postId, text, parentCommentId);
       const c = await getFeedComments(postId);
       setComments((prev) => ({ ...prev, [postId]: c }));
     } catch (err) {
@@ -1099,21 +1106,68 @@ function FeedView() {
 
             {expandedComments[post.id] && (
               <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                {(comments[post.id] ?? []).map((c) => (
-                  <div key={c.id} className="flex gap-2 text-sm group">
-                    <span className="text-lg flex-shrink-0">🎭</span>
-                    <div className="flex-1">
-                      <p className="text-[#1A1033]">{c.text}</p>
-                      <p className="text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</p>
+                {(comments[post.id] ?? []).filter((c) => !c.parent_comment_id).map((c) => {
+                  const replies = (comments[post.id] ?? []).filter((r) => r.parent_comment_id === c.id);
+                  return (
+                    <div key={c.id}>
+                      <div className="flex gap-2 text-sm group">
+                        <img src={c.author_photo || "https://placehold.co/60x60?text=%F0%9F%91%A4"} alt={c.author_name} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="font-semibold text-xs text-[#1A1033]">{c.author_name}</p>
+                          <p className="text-[#1A1033]">{c.text}</p>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <p className="text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</p>
+                            <button onClick={() => { setReplyingTo(c.id); setReplyText(""); }} className="text-[10px] font-bold text-slate-400 hover:text-primary">Reply</button>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setReportTarget({ type: "feed_comment", id: c.id, label: "this comment" })}
+                          className="text-slate-300 hover:text-like text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        >
+                          🚩
+                        </button>
+                      </div>
+
+                      {/* Replies, indented under their parent */}
+                      {replies.length > 0 && (
+                        <div className="ml-9 mt-2 space-y-2 border-l-2 border-slate-100 pl-3">
+                          {replies.map((r) => (
+                            <div key={r.id} className="flex gap-2 text-sm group">
+                              <img src={r.author_photo || "https://placehold.co/60x60?text=%F0%9F%91%A4"} alt={r.author_name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                              <div className="flex-1">
+                                <p className="font-semibold text-xs text-[#1A1033]">{r.author_name}</p>
+                                <p className="text-[#1A1033]">{r.text}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">{new Date(r.created_at).toLocaleString()}</p>
+                              </div>
+                              <button
+                                onClick={() => setReportTarget({ type: "feed_comment", id: r.id, label: "this comment" })}
+                                className="text-slate-300 hover:text-like text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                              >
+                                🚩
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Reply input, shown only for the comment currently being replied to */}
+                      {replyingTo === c.id && (
+                        <div className="ml-9 mt-2 flex gap-2">
+                          <input
+                            value={replyText}
+                            onChange={(e) => setReplyText(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && submitComment(post.id, c.id)}
+                            placeholder={`Reply to ${c.author_name}…`}
+                            className="flex-1 bg-slate-100 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            autoFocus
+                          />
+                          <button onClick={() => submitComment(post.id, c.id)} className="text-primary font-bold text-sm px-2">Post</button>
+                          <button onClick={() => setReplyingTo(null)} className="text-slate-400 text-sm px-1">Cancel</button>
+                        </div>
+                      )}
                     </div>
-                    <button
-                      onClick={() => setReportTarget({ type: "feed_comment", id: c.id, label: "this comment" })}
-                      className="text-slate-300 hover:text-like text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                    >
-                      🚩
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
                 {(comments[post.id] ?? []).length === 0 && (
                   <p className="text-xs text-slate-400">No comments yet — be the first.</p>
                 )}
