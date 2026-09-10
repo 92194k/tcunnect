@@ -639,6 +639,16 @@ export async function deleteReportedContent(targetType: string, targetId: string
   }
 }
 
+/** Sends the reporter a real message (as the admin) explaining what
+ * happened with their report — they can reply or just leave it, same as
+ * any other conversation. Silently no-ops if the report/reporter can't be
+ * found or if the admin somehow reported their own thing — never let a
+ * notification failure block the actual moderation action that triggered it. */
+export async function notifyReporter(reportId: string, resolutionText: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_notify_reporter", { target_report_id: reportId, resolution_text: resolutionText });
+  if (error) console.error("Failed to notify reporter:", error);
+}
+
 export async function deleteFeedPostAdmin(postId: string): Promise<void> {
   const { error } = await supabase.from("feed_posts").delete().eq("id", postId);
   if (error) throw error;

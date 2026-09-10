@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import Logo from "../components/Logo";
 import { STUDENTS, MATCHES, CONVERSATIONS, FEED_POSTS, NOTIFICATIONS, ME, type Student } from "../data";
-import { supabase, likeUser, getMyLikers, getMyMatches, getMessages, sendMessage, unmatch, getFeedPosts, createFeedPost, toggleFeedUpvote, getMyVotedPostIds, reportFeedPost, fileReport, getFeedComments, createFeedComment, getMyProfile, updateMyProfile, recordProfileView, getMyProfileViewCount, getMyViewers, getMyNotifications, markNotificationRead, getReports, resolveReport, banReportedUser, suspendUser, unsuspendUser, deleteReport, deleteReportedContent, getAllUsers, setUserBanned, getAllFeedPostsAdmin, setFeedPostRemoved, deleteFeedPostAdmin, getAdminStats, getMyBlockedUsers, unblockUser, unblockUserByTargetId, requestAccountDeletion, type Liker, type MatchWithUser, type ChatMessage, type FeedPost, type FeedComment, type MyProfile, type NotificationRow, type AdminReport, type AdminUser, type AdminFeedPost, type AdminStats, type BlockedUser, type Viewer } from "../lib/supabase";
+import { supabase, likeUser, getMyLikers, getMyMatches, getMessages, sendMessage, unmatch, getFeedPosts, createFeedPost, toggleFeedUpvote, getMyVotedPostIds, reportFeedPost, fileReport, getFeedComments, createFeedComment, getMyProfile, updateMyProfile, recordProfileView, getMyProfileViewCount, getMyViewers, getMyNotifications, markNotificationRead, getReports, resolveReport, banReportedUser, suspendUser, unsuspendUser, deleteReport, deleteReportedContent, notifyReporter, getAllUsers, setUserBanned, getAllFeedPostsAdmin, setFeedPostRemoved, deleteFeedPostAdmin, getAdminStats, getMyBlockedUsers, unblockUser, unblockUserByTargetId, requestAccountDeletion, type Liker, type MatchWithUser, type ChatMessage, type FeedPost, type FeedComment, type MyProfile, type NotificationRow, type AdminReport, type AdminUser, type AdminFeedPost, type AdminStats, type BlockedUser, type Viewer } from "../lib/supabase";
 
 type View = "discover" | "likes" | "matches" | "messages" | "feed" | "notifications" | "profile" | "premium" | "admin" | "settings";
 type Props = { initialView: View; onNavigate: (v: string) => void };
@@ -2121,7 +2121,10 @@ function AdminReportsTab() {
 
   async function handleDismiss(r: AdminReport) {
     setReports((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "dismissed" } : x)));
-    try { await resolveReport(r.id, "dismissed"); } catch (err) { console.error(err); load(); }
+    try {
+      await resolveReport(r.id, "dismissed");
+      await notifyReporter(r.id, `Hi! We reviewed your report about "${r.reason}" — after looking into it, we didn't find a violation of our Terms, so no action was taken. Thanks for helping keep TCUnnect safe. Feel free to reply if you have more details to share.`);
+    } catch (err) { console.error(err); load(); }
   }
 
   async function handleBan(r: AdminReport) {
@@ -2134,6 +2137,7 @@ function AdminReportsTab() {
     try {
       await banReportedUser(r.target_id, r.reason);
       await resolveReport(r.id, "actioned");
+      await notifyReporter(r.id, `Hi! We reviewed your report about "${r.reason}" — the account has been banned from TCUnnect. Thanks for the report, it helps keep the community safe. Feel free to reply if you want to add anything.`);
     } catch (err) {
       console.error(err);
       load();
@@ -2153,6 +2157,7 @@ function AdminReportsTab() {
     try {
       await suspendUser(r.target_id, days);
       await resolveReport(r.id, "actioned");
+      await notifyReporter(r.id, `Hi! We reviewed your report about "${r.reason}" — the account has been suspended for ${days} day${days === 1 ? "" : "s"}. Thanks for the report. Feel free to reply if you want to add anything.`);
     } catch (err) {
       console.error(err);
       load();
@@ -2166,6 +2171,7 @@ function AdminReportsTab() {
     try {
       await setFeedPostRemoved(r.target_id, true);
       await resolveReport(r.id, "actioned");
+      await notifyReporter(r.id, `Hi! We reviewed your report about "${r.reason}" — the post has been removed from the feed. Thanks for flagging it. Feel free to reply if you want to add anything.`);
     } catch (err) {
       console.error(err);
       load();
@@ -2182,6 +2188,7 @@ function AdminReportsTab() {
     try {
       await deleteReportedContent(r.target_type, r.target_id);
       await resolveReport(r.id, "actioned");
+      await notifyReporter(r.id, `Hi! We reviewed your report about "${r.reason}" — the ${r.target_type.replace("_", " ")} has been permanently deleted. Thanks for flagging it. Feel free to reply if you want to add anything.`);
     } catch (err) {
       console.error(err);
       load();
