@@ -2369,6 +2369,15 @@ export default function Dashboard({ initialView, onNavigate }: Props) {
       setMyPhoto(p.photo_url);
       setMyFirstName(p.name.split(" ")[0] + (p.name.split(" ")[1] ? ` ${p.name.split(" ")[1][0]}.` : ""));
     }).catch(() => {});
+    // Load the REAL premium status from the database — this used to always
+    // start false regardless of the actual users.is_premium column, so an
+    // admin (or anyone else genuinely premium) would still see "Get
+    // Premium" prompts everywhere despite already having access.
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: me } = await supabase.from("users").select("is_premium").eq("auth_id", data.user.id).single();
+      if (me) setIsPremium(!!me.is_premium);
+    });
   }, []);
 
   useEffect(() => {
