@@ -46,8 +46,6 @@ export default function LegalPage({ page, onNavigate }: Props) {
 
       {/* Page */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pb-28">
-        <FooterPagesNav current={page} onNavigate={onNavigate} />
-
         {/* Page heading */}
         <div className="mb-7">
           <h1 className="text-3xl sm:text-4xl font-extrabold font-display text-[#1A1033]">
@@ -64,6 +62,10 @@ export default function LegalPage({ page, onNavigate }: Props) {
           <div className="px-6 sm:px-9 py-7 sm:py-9">
             {isTerms ? <TermsContent /> : <PrivacyContent />}
           </div>
+        </div>
+
+        <div className="mt-7">
+          <FooterPagesNav current={page} onNavigate={onNavigate} />
         </div>
       </main>
 

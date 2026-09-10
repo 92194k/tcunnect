@@ -40,8 +40,6 @@ export default function InfoPage({ page, onNavigate }: Props) {
 
       {/* Page */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pb-28">
-        <FooterPagesNav current={page} onNavigate={onNavigate} />
-
         <div className="mb-7">
           <h1 className="text-3xl sm:text-4xl font-extrabold font-display text-[#1A1033]">{titles[page]}</h1>
         </div>
@@ -52,6 +50,10 @@ export default function InfoPage({ page, onNavigate }: Props) {
             {page === "safety" && <SafetyContent />}
             {page === "contact" && <ContactContent />}
           </div>
+        </div>
+
+        <div className="mt-7">
+          <FooterPagesNav current={page} onNavigate={onNavigate} />
         </div>
       </main>
 
