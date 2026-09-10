@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Logo from "../components/Logo";
 import { STUDENTS } from "../data";
+import { supabase } from "../lib/supabase";
 
 type Props = { onNavigate: (v: string) => void };
 
@@ -19,10 +20,28 @@ const samplePosts = [
   { dept: null, text: "Who else is always at the library? 🦉", upvotes: 89 },
 ];
 
-function MiniProfileCard({ student, style }: { student: typeof STUDENTS[0]; style?: string }) {
+const avatarPalettes = [
+  { bg: "from-[#7C3AED] to-[#A78BFA]" },
+  { bg: "from-[#EC4899] to-[#F9A8D4]" },
+  { bg: "from-[#F59E0B] to-[#FCD34D]" },
+];
+
+function IllustratedAvatar({ colorIndex }: { colorIndex: number }) {
+  const palette = avatarPalettes[colorIndex % avatarPalettes.length];
+  return (
+    <div className={`w-full h-36 bg-gradient-to-br ${palette.bg} flex items-center justify-center`}>
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.9">
+        <circle cx="12" cy="8" r="4" fill="white" fillOpacity="0.25" />
+        <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" fill="white" fillOpacity="0.25" />
+      </svg>
+    </div>
+  );
+}
+
+function MiniProfileCard({ student, colorIndex, style }: { student: typeof STUDENTS[0]; colorIndex: number; style?: string }) {
   return (
     <div className={`bg-white rounded-2xl shadow-lg overflow-hidden w-44 ${style ?? ""}`}>
-      <img src={student.photo} alt={student.name} className="w-full h-36 object-cover" />
+      <IllustratedAvatar colorIndex={colorIndex} />
       <div className="p-3">
         <p className="font-display font-bold text-sm text-[#1A1033] truncate">{student.name}</p>
         <p className="text-xs text-slate-500">{student.dept} · {student.year.replace(" Year", "Y")}</p>
@@ -38,6 +57,7 @@ function MiniProfileCard({ student, style }: { student: typeof STUDENTS[0]; styl
 
 export default function Landing({ onNavigate }: Props) {
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [verifiedCount, setVerifiedCount] = useState<number | null>(null);
 
   useEffect(() => {
     function onScroll() {
@@ -45,6 +65,18 @@ export default function Landing({ onNavigate }: Props) {
     }
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    // Real, live count of verified students — no fabricated marketing number.
+    // Safe to query anonymously: it's just a count, no personal data, and the
+    // underlying RLS policy already allows this (same one that lets any
+    // visitor's future Discover query see verified profiles).
+    supabase
+      .from("users")
+      .select("*", { count: "exact", head: true })
+      .eq("is_verified", true)
+      .then(({ count }) => setVerifiedCount(count ?? 0));
   }, []);
 
   return (
@@ -102,13 +134,13 @@ export default function Landing({ onNavigate }: Props) {
           {/* Hero profile cards */}
           <div className="relative h-80 lg:h-96 flex items-center justify-center">
             <div className="absolute left-0 top-8 float" style={{ animationDelay: "0s" }}>
-              <MiniProfileCard student={STUDENTS[0]} />
+              <MiniProfileCard student={{ name: "King", dept: "CICT", year: "4th Year", interests: ["Coding", "Movies", "Funny"] } as typeof STUDENTS[0]} colorIndex={0} />
             </div>
             <div className="absolute left-32 top-0 float z-10" style={{ animationDelay: "0.5s" }}>
-              <MiniProfileCard student={STUDENTS[1]} />
+              <MiniProfileCard student={{ name: "Mark", dept: "CAS", year: "1st Year", interests: ["Food", "Gaming"] } as typeof STUDENTS[0]} colorIndex={1} />
             </div>
             <div className="absolute right-0 top-12 float" style={{ animationDelay: "1s" }}>
-              <MiniProfileCard student={STUDENTS[3]} />
+              <MiniProfileCard student={{ name: "Marl", dept: "CCJ", year: "3rd Year", interests: ["Friends", "Rides"] } as typeof STUDENTS[0]} colorIndex={2} />
             </div>
             {/* Match badge */}
             <div className="absolute left-36 bottom-0 bg-match text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg z-20 sparkle">
@@ -124,7 +156,11 @@ export default function Landing({ onNavigate }: Props) {
         {/* Stats bar */}
         <div className="max-w-6xl mx-auto px-6 mt-16">
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 grid grid-cols-3 divide-x divide-slate-100">
-            {[["500+", "TCU Students"], ["85%", "Match Rate"], ["₱30", "Lifetime Premium"]].map(([val, label]) => (
+            {[
+              [verifiedCount !== null ? String(verifiedCount) : "—", "Verified TCU Students"],
+              ["18+", "TCU Students Only"],
+              ["₱30", "Lifetime Premium"],
+            ].map(([val, label]) => (
               <div key={label} className="py-5 text-center">
                 <p className="text-2xl font-extrabold text-primary">{val}</p>
                 <p className="text-sm text-slate-500 mt-0.5">{label}</p>
@@ -248,9 +284,11 @@ export default function Landing({ onNavigate }: Props) {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <Logo white />
             <div className="flex flex-wrap items-center gap-6 text-sm text-slate-500">
-              {["About", "Safety", "Privacy", "Terms", "Contact"].map((l) => (
-                <a key={l} href="#" className="hover:text-white transition-colors">{l}</a>
-              ))}
+              <button onClick={() => window.alert("About page isn't built yet.")} className="hover:text-white transition-colors">About</button>
+              <button onClick={() => window.alert("Safety page isn't built yet.")} className="hover:text-white transition-colors">Safety</button>
+              <button onClick={() => onNavigate("privacy")} className="hover:text-white transition-colors">Privacy</button>
+              <button onClick={() => onNavigate("terms")} className="hover:text-white transition-colors">Terms</button>
+              <a href="mailto:alaokhemberly@gmail.com" className="hover:text-white transition-colors">Contact</a>
             </div>
             <p className="text-sm text-slate-600">© 2026 TCUnnect</p>
           </div>
