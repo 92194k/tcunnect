@@ -2,9 +2,14 @@ import { useState, useEffect } from "react";
 import Logo from "../components/Logo";
 import { STUDENTS } from "../data";
 import { supabase } from "../lib/supabase";
-import kemAPhoto from "../assets/kem-a.jpg";
-import kemBPhoto from "../assets/kem-b.jpg";
-import kemCPhoto from "../assets/kem-c.jpg";
+
+// Plain static paths from the /public folder instead of src/assets imports —
+// files in /public are copied as-is at their exact URL, with no build-time
+// processing/hashing, easiest to verify directly: visiting yoursite.com/kem-a.jpg
+// should show the raw image if this path is correct.
+const kemAPhoto = "/kem-a.jpg";
+const kemBPhoto = "/kem-b.jpg";
+const kemCPhoto = "/kem-c.jpg";
 
 type Props = { onNavigate: (v: string) => void };
 
