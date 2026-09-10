@@ -959,8 +959,9 @@ function FeedView() {
       try {
         const c = await getFeedComments(postId);
         setComments((prev) => ({ ...prev, [postId]: c }));
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to load comments:", err);
+        window.alert(err?.message || "Failed to load comments — check the console for details.");
       }
     }
   }
@@ -978,8 +979,9 @@ function FeedView() {
       await createFeedComment(postId, text, parentCommentId);
       const c = await getFeedComments(postId);
       setComments((prev) => ({ ...prev, [postId]: c }));
-    } catch (err) {
+    } catch (err: any) {
       console.error("Comment failed:", err);
+      window.alert(err?.message || "Failed to post comment — check the console for details.");
     }
   }
 
