@@ -71,7 +71,13 @@ export default function Landing({ onNavigate }: Props) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white font-display overflow-x-hidden">
+    <div className="min-h-screen bg-white font-display">
+      {/* Removed overflow-x-hidden from here — any overflow value other than
+          "visible" on an ancestor silently breaks position: sticky for
+          everything inside it, which is exactly why the nav below wasn't
+          staying pinned. The hero section already has its own scoped
+          overflow-hidden (line below) for the decorative blur circles, so
+          nothing that actually needed clipping loses it. */}
       {/* Nav */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -270,7 +276,7 @@ export default function Landing({ onNavigate }: Props) {
       </section>
 
       {/* Footer */}
-      <footer className="bg-[#0F0A1E] py-12">
+      <footer className="bg-[#0F0A1E] py-12 pb-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <Logo white />
@@ -289,6 +295,22 @@ export default function Landing({ onNavigate }: Props) {
         </div>
       </footer>
 
+      {/* Pinned bottom bar — always reachable while scrolling, same idea as
+          the sticky nav at top. The full footer above stays as normal
+          end-of-page content rather than being permanently pinned itself,
+          since it's tall enough that doing so would eat a lot of screen
+          space on every single page view. */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#0F0A1E]/95 backdrop-blur border-t border-white/10">
+        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-center gap-6">
+          <button onClick={() => onNavigate("login")} className="text-sm font-semibold text-slate-300 hover:text-white transition-colors">
+            Log In
+          </button>
+          <button onClick={() => onNavigate("signup")} className="text-sm font-semibold bg-primary text-white px-5 py-2 rounded-xl hover:bg-primary-dark transition-colors">
+            Get Started
+          </button>
+        </div>
+      </div>
+
       {/* Scroll to top / bottom toggle */}
       <button
         onClick={() =>
@@ -297,7 +319,7 @@ export default function Landing({ onNavigate }: Props) {
             : window.scrollTo({ top: 0, behavior: "smooth" })
         }
         aria-label={atTop ? "Scroll to bottom" : "Scroll to top"}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95"
+        className="fixed bottom-20 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300" style={{ transform: atTop ? "rotate(180deg)" : "rotate(0deg)" }}>
           <line x1="12" y1="19" x2="12" y2="5" />
