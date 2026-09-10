@@ -890,15 +890,16 @@ function MessagesView() {
 }
 
 /* ============================
-   COMMENT THREAD (recursive — every comment, at any depth, can be replied to)
+   COMMENT THREAD (flat: all replies under a top-level comment sit at one
+   consistent indent level, no matter how deep the actual reply chain goes —
+   keeps threads from creeping further right with every extra reply)
    ============================ */
 function CommentThread({
-  comment, allComments, postId, depth, replyingTo, setReplyingTo, replyText, setReplyText, onSubmitReply, onReport,
+  comment, allComments, postId, replyingTo, setReplyingTo, replyText, setReplyText, onSubmitReply, onReport,
 }: {
-  comment: FeedComment;
+  comment: FeedComment; // the TOP-LEVEL comment
   allComments: FeedComment[];
   postId: string;
-  depth: number;
   replyingTo: string | null;
   setReplyingTo: (id: string | null) => void;
   replyText: string;
@@ -906,57 +907,75 @@ function CommentThread({
   onSubmitReply: (postId: string, parentCommentId: string) => void;
   onReport: (commentId: string) => void;
 }) {
-  const children = allComments.filter((c) => c.parent_comment_id === comment.id);
-  // Cap visual indent so very deep threads don't creep off-screen — the
-  // thread relationship itself is still tracked correctly no matter how
-  // deep it actually goes, this only limits how far it visually shifts right.
-  const visualDepth = Math.min(depth, 4);
+  // Every descendant of this top-level comment, at any real depth, flattened
+  // into one chronological list — parent_comment_id in the database still
+  // tracks exactly who each reply was really replying to, this just avoids
+  // visually indenting further for every extra level.
+  const byId = new Map(allComments.map((c) => [c.id, c]));
+  function isDescendantOf(c: FeedComment, ancestorId: string): boolean {
+    let cur: FeedComment | undefined = c;
+    while (cur?.parent_comment_id) {
+      if (cur.parent_comment_id === ancestorId) return true;
+      cur = byId.get(cur.parent_comment_id);
+    }
+    return false;
+  }
+  const replies = allComments
+    .filter((c) => c.id !== comment.id && isDescendantOf(c, comment.id))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  function CommentRow({ c, replyingToName }: { c: FeedComment; replyingToName?: string }) {
+    return (
+      <div>
+        <div className="flex gap-2 text-sm group">
+          <img src={c.author_photo || "https://placehold.co/60x60?text=%F0%9F%91%A4"} alt={c.author_name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-xs text-[#1A1033]">{c.author_name}</p>
+            {replyingToName && <p className="text-[10px] text-primary font-medium">replying to @{replyingToName}</p>}
+            <p className="text-[#1A1033]">{c.text}</p>
+            <div className="flex items-center gap-3 mt-0.5">
+              <p className="text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</p>
+              <button onClick={() => { setReplyingTo(c.id); setReplyText(""); }} className="text-[10px] font-bold text-slate-400 hover:text-primary">Reply</button>
+            </div>
+          </div>
+          <button onClick={() => onReport(c.id)} className="text-slate-300 hover:text-like text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">🚩</button>
+        </div>
+
+        {replyingTo === c.id && (
+          <div className="mt-2 ml-8 flex gap-2">
+            <input
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onSubmitReply(postId, c.id)}
+              placeholder={`Reply to ${c.author_name}…`}
+              className="flex-1 bg-slate-100 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              autoFocus
+            />
+            <button onClick={() => onSubmitReply(postId, c.id)} className="text-primary font-bold text-sm px-2">Post</button>
+            <button onClick={() => setReplyingTo(null)} className="text-slate-400 text-sm px-1">Cancel</button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ marginLeft: visualDepth > 0 ? 28 : 0 }} className={visualDepth > 0 ? "mt-2 border-l-2 border-slate-100 pl-3" : ""}>
-      <div className="flex gap-2 text-sm group">
-        <img src={comment.author_photo || "https://placehold.co/60x60?text=%F0%9F%91%A4"} alt={comment.author_name} className={`${depth > 0 ? "w-6 h-6" : "w-7 h-7"} rounded-full object-cover flex-shrink-0`} />
-        <div className="flex-1">
-          <p className="font-semibold text-xs text-[#1A1033]">{comment.author_name}</p>
-          <p className="text-[#1A1033]">{comment.text}</p>
-          <div className="flex items-center gap-3 mt-0.5">
-            <p className="text-[10px] text-slate-400">{new Date(comment.created_at).toLocaleString()}</p>
-            <button onClick={() => { setReplyingTo(comment.id); setReplyText(""); }} className="text-[10px] font-bold text-slate-400 hover:text-primary">Reply</button>
-          </div>
-        </div>
-        <button onClick={() => onReport(comment.id)} className="text-slate-300 hover:text-like text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">🚩</button>
-      </div>
-
-      {replyingTo === comment.id && (
-        <div className="mt-2 ml-9 flex gap-2">
-          <input
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onSubmitReply(postId, comment.id)}
-            placeholder={`Reply to ${comment.author_name}…`}
-            className="flex-1 bg-slate-100 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-            autoFocus
-          />
-          <button onClick={() => onSubmitReply(postId, comment.id)} className="text-primary font-bold text-sm px-2">Post</button>
-          <button onClick={() => setReplyingTo(null)} className="text-slate-400 text-sm px-1">Cancel</button>
+    <div>
+      <CommentRow c={comment} />
+      {replies.length > 0 && (
+        <div className="ml-8 mt-2 space-y-3 border-l-2 border-slate-100 pl-3">
+          {replies.map((r) => (
+            <CommentRow
+              key={r.id}
+              c={r}
+              // Only label "replying to @X" when it's not a direct reply to
+              // the top-level comment itself — that relationship is already
+              // obvious from being in this indented block at all.
+              replyingToName={r.parent_comment_id !== comment.id ? byId.get(r.parent_comment_id!)?.author_name : undefined}
+            />
+          ))}
         </div>
       )}
-
-      {children.map((child) => (
-        <CommentThread
-          key={child.id}
-          comment={child}
-          allComments={allComments}
-          postId={postId}
-          depth={depth + 1}
-          replyingTo={replyingTo}
-          setReplyingTo={setReplyingTo}
-          replyText={replyText}
-          setReplyText={setReplyText}
-          onSubmitReply={onSubmitReply}
-          onReport={onReport}
-        />
-      ))}
     </div>
   );
 }
@@ -1186,7 +1205,6 @@ function FeedView() {
                     comment={c}
                     allComments={comments[post.id] ?? []}
                     postId={post.id}
-                    depth={0}
                     replyingTo={replyingTo}
                     setReplyingTo={setReplyingTo}
                     replyText={replyText}
