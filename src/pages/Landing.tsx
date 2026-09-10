@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import Logo from "../components/Logo";
 import { STUDENTS } from "../data";
 
@@ -36,6 +37,16 @@ function MiniProfileCard({ student, style }: { student: typeof STUDENTS[0]; styl
 }
 
 export default function Landing({ onNavigate }: Props) {
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    function onScroll() {
+      setShowBackToTop(window.scrollY > 500);
+    }
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
     <div className="min-h-screen bg-white font-display overflow-x-hidden">
       {/* Nav */}
@@ -248,6 +259,20 @@ export default function Landing({ onNavigate }: Props) {
           </p>
         </div>
       </footer>
+
+      {/* Back to top */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        aria-label="Back to top"
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95 ${
+          showBackToTop ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-4 pointer-events-none"
+        }`}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="19" x2="12" y2="5" />
+          <polyline points="5 12 12 5 19 12" />
+        </svg>
+      </button>
     </div>
   );
 }
