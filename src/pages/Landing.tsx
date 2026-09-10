@@ -275,41 +275,25 @@ export default function Landing({ onNavigate }: Props) {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-[#0F0A1E] py-12 pb-24">
+      {/* Footer — pinned to the bottom of the screen, always reachable while scrolling */}
+      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-[#0F0A1E]/95 backdrop-blur border-t border-white/10 py-3">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-2 md:gap-6">
             <Logo white />
-            <div className="flex flex-wrap items-center gap-6 text-sm text-slate-500">
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-sm text-slate-400">
               <button onClick={() => onNavigate("about")} className="hover:text-white transition-colors">About</button>
               <button onClick={() => onNavigate("safety")} className="hover:text-white transition-colors">Safety</button>
               <button onClick={() => onNavigate("privacy")} className="hover:text-white transition-colors">Privacy</button>
               <button onClick={() => onNavigate("terms")} className="hover:text-white transition-colors">Terms</button>
               <button onClick={() => onNavigate("contact")} className="hover:text-white transition-colors">Contact</button>
             </div>
-            <p className="text-sm text-slate-600">© 2026 TCUnnect</p>
+            <p className="text-xs text-slate-600 hidden md:block">© 2026 TCUnnect</p>
           </div>
-          <p className="text-center text-xs text-slate-700 mt-8">
-            Meet. Match. Connect. — Exclusively for Taguig City University Students
-          </p>
         </div>
       </footer>
 
-      {/* Pinned bottom bar — always reachable while scrolling, same idea as
-          the sticky nav at top. The full footer above stays as normal
-          end-of-page content rather than being permanently pinned itself,
-          since it's tall enough that doing so would eat a lot of screen
-          space on every single page view. */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#0F0A1E]/95 backdrop-blur border-t border-white/10">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-center gap-6">
-          <button onClick={() => onNavigate("login")} className="text-sm font-semibold text-slate-300 hover:text-white transition-colors">
-            Log In
-          </button>
-          <button onClick={() => onNavigate("signup")} className="text-sm font-semibold bg-primary text-white px-5 py-2 rounded-xl hover:bg-primary-dark transition-colors">
-            Get Started
-          </button>
-        </div>
-      </div>
+      {/* Spacer so page content doesn't get hidden behind the pinned footer above */}
+      <div className="h-20" />
 
       {/* Scroll to top / bottom toggle */}
       <button
