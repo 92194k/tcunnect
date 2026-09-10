@@ -229,21 +229,38 @@ export type FeedComment = {
 };
 
 export async function getFeedComments(postId: string): Promise<FeedComment[]> {
-  const { data, error } = await supabase
+  // Deliberately NOT joining users(...) directly in this query. That kind
+  // of embed silently drops the whole comment row if the RLS check on the
+  // commenter's own `users` row fails for the current viewer (e.g. a block
+  // relationship between them, or any other visibility rule) — the comment
+  // itself has nothing to do with that check, so it shouldn't disappear
+  // over it. Fetching comments and author info as two separate steps
+  // avoids that entirely: the comment always shows, worst case with a
+  // generic "Unknown" author if their profile truly can't be read.
+  const { data: rows, error } = await supabase
     .from("feed_comments")
-    .select("id, post_id, parent_comment_id, text, created_at, users(name, photo_url)")
+    .select("id, post_id, parent_comment_id, text, created_at, user_id")
     .eq("post_id", postId)
     .eq("is_removed", false)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((c: any) => ({
+  if (!rows || rows.length === 0) return [];
+
+  const authorIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+  let authorsById = new Map<string, { name: string; photo_url: string | null }>();
+  if (authorIds.length > 0) {
+    const { data: authors } = await supabase.from("users").select("id, name, photo_url").in("id", authorIds);
+    authorsById = new Map((authors ?? []).map((a) => [a.id, { name: a.name, photo_url: a.photo_url }]));
+  }
+
+  return rows.map((c) => ({
     id: c.id,
     post_id: c.post_id,
     parent_comment_id: c.parent_comment_id,
     text: c.text,
     created_at: c.created_at,
-    author_name: c.users?.name ?? "Unknown",
-    author_photo: c.users?.photo_url ?? null,
+    author_name: (c.user_id && authorsById.get(c.user_id)?.name) || "Unknown",
+    author_photo: (c.user_id && authorsById.get(c.user_id)?.photo_url) || null,
   }));
 }
 
