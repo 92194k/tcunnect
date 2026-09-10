@@ -127,9 +127,6 @@ export default function Auth({ mode, onNavigate }: Props) {
     <div className="min-h-screen bg-gradient-to-br from-[#F0EBFF] via-white to-[#FFE8F0] flex items-center justify-center p-4 font-display">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <button onClick={() => onNavigate("landing")} className="text-sm font-semibold text-slate-500 hover:text-primary transition-colors mb-4 inline-block">
-            ← Back to Home
-          </button>
           <button onClick={() => onNavigate("landing")} className="block mx-auto mb-6">
             <Logo size="lg" />
           </button>
@@ -276,6 +273,12 @@ export default function Auth({ mode, onNavigate }: Props) {
               {isLogin ? "Sign Up" : "Log In"}
             </button>
           </p>
+        </div>
+
+        <div className="text-center mt-6">
+          <button onClick={() => onNavigate("landing")} className="text-sm font-semibold text-slate-500 hover:text-primary transition-colors">
+            ← Back to Home
+          </button>
         </div>
       </div>
     </div>
