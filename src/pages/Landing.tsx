@@ -81,7 +81,7 @@ export default function Landing({ onNavigate }: Props) {
               <button onClick={() => onNavigate("signup")} className="bg-primary text-white font-bold px-8 py-4 rounded-2xl hover:bg-primary-dark transition-all hover:shadow-lg hover:shadow-primary/30 active:scale-95">
                 Get Started — Free
               </button>
-              <button onClick={() => onNavigate("discover")} className="bg-white text-[#1A1033] font-bold px-8 py-4 rounded-2xl border-2 border-slate-200 hover:border-primary hover:text-primary transition-all">
+              <button onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })} className="bg-white text-[#1A1033] font-bold px-8 py-4 rounded-2xl border-2 border-slate-200 hover:border-primary hover:text-primary transition-all">
                 Explore TCUnnect
               </button>
             </div>

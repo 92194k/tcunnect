@@ -27,7 +27,7 @@ function TermsContent() {
   return (
     <article className="prose prose-sm max-w-none text-[#1A1033]">
       <h1 className="text-2xl font-extrabold font-display mb-1">TCUnnect — Terms of Service</h1>
-      <p className="text-xs text-slate-400 mb-6">Last updated: [insert date before publishing]</p>
+      <p className="text-xs text-slate-400 mb-6">Last updated: September 10, 2026</p>
 
       <p className="text-sm leading-relaxed mb-4">
         These Terms of Service govern your access to and use of TCUnnect, operated for Taguig City University (TCU)
