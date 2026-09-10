@@ -1,5 +1,6 @@
 import { useState, useEffect, type ReactNode } from "react";
 import Logo from "../components/Logo";
+import FooterPagesNav from "../components/FooterPagesNav";
 
 type Props = {
   page: "terms" | "privacy";
@@ -45,6 +46,8 @@ export default function LegalPage({ page, onNavigate }: Props) {
 
       {/* Page */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pb-28">
+        <FooterPagesNav current={page} onNavigate={onNavigate} />
+
         {/* Page heading */}
         <div className="mb-7">
           <h1 className="text-3xl sm:text-4xl font-extrabold font-display text-[#1A1033]">
