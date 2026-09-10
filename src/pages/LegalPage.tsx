@@ -482,4 +482,3 @@ function PrivacyContent() {
     </article>
   );
 }
-```
