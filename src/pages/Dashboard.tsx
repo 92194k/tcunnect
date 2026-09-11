@@ -1787,52 +1787,40 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
       {/* STEP: SHOW QR */}
       {step === "qr" && (
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-          {/* Method header */}
-          <div className={`px-6 py-4 flex items-center gap-3 ${method === "gcash" ? "bg-[#007AFF]" : "bg-[#5BC236]"}`}>
-            <span className="text-2xl">{method === "gcash" ? "💙" : "💚"}</span>
-            <div>
-              <p className="font-extrabold text-white text-sm">{methodLabel} QR Payment</p>
-              <p className="text-white/70 text-xs">Scan with your {methodLabel} app</p>
-            </div>
+          <div className={`px-6 py-5 ${method === "gcash" ? "bg-[#007AFF]" : "bg-[#5BC236]"}`}>
+            <p className="text-xs font-bold text-white/70 uppercase tracking-wide mb-0.5">{methodLabel} Payment</p>
+            <p className="text-xl font-extrabold text-white">Pay ₱30.00 via {methodLabel}</p>
+            <p className="text-sm text-white/80 mt-1">Scan the QR code below and complete the payment.</p>
           </div>
 
-          <div className="p-6 text-center">
-            <button onClick={() => setStep("choose")} className="text-xs text-slate-400 hover:text-primary mb-4 block text-left">← Back</button>
+          <div className="p-6">
+            <button onClick={() => setStep("choose")} className="text-xs text-slate-400 hover:text-primary mb-5 block">← Back</button>
 
-            {/* Step guide */}
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mb-4 font-medium">
-              <span className="bg-primary text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0">1</span> Open {methodLabel}
-              <span className="text-slate-200">→</span>
-              <span className="bg-primary text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0">2</span> Tap Scan QR
-              <span className="text-slate-200">→</span>
-              <span className="bg-primary text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0">3</span> Pay ₱30
-            </div>
-
-            {/* QR code */}
-            <div className="relative inline-block">
+            <div className="flex justify-center mb-5">
               <img
                 src={qrImage}
                 alt={`${methodLabel} QR Code`}
-                className="w-60 h-60 mx-auto rounded-2xl border-2 border-slate-100 object-contain bg-white"
-                onError={(e) => { (e.target as HTMLImageElement).src = "https://placehold.co/240x240?text=QR+Code"; }}
+                className="w-56 h-56 rounded-2xl border border-slate-200 object-contain bg-white"
+                onError={(e) => { (e.target as HTMLImageElement).src = "https://placehold.co/224x224?text=QR+Code"; }}
               />
-              <div className={`absolute -top-2 -right-2 text-white text-xs font-bold px-2.5 py-1 rounded-full ${method === "gcash" ? "bg-[#007AFF]" : "bg-[#5BC236]"}`}>
-                ₱30
+            </div>
+
+            <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 mb-6">
+              <div className="flex justify-between px-4 py-3 text-sm">
+                <span className="text-slate-500">Amount</span>
+                <span className="font-bold text-[#1A1033]">₱30.00</span>
+              </div>
+              <div className="flex justify-between px-4 py-3 text-sm">
+                <span className="text-slate-500">Recipient</span>
+                <span className="font-bold text-[#1A1033]">{method === "gcash" ? "KH*******Y A." : "KHEMBERLY ALAO"}</span>
               </div>
             </div>
 
-            <p className={`text-base font-extrabold mt-4 ${methodColor}`}>Send exactly ₱30.00</p>
-            <p className="text-xs text-slate-400 mt-1 mb-6">To: {method === "gcash" ? "KH*******Y A." : "KHEMBERLY ALAO"}</p>
-
-            {/* CTA — very prominent */}
-            <div className="bg-primary/5 border-2 border-primary/20 rounded-2xl p-4 mb-4">
-              <p className="text-xs font-bold text-primary uppercase tracking-wide mb-1">After paying 👇</p>
-              <p className="text-sm text-slate-600">Screenshot your receipt, then tap the button below to submit it. We'll read your reference number automatically.</p>
-            </div>
-
-            <button onClick={() => setStep("submit")}
-              className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors text-base">
-              ✅ I've paid — Submit receipt
+            <button
+              onClick={() => setStep("submit")}
+              className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors text-base"
+            >
+              ✓ Paid — Submit Receipt
             </button>
           </div>
         </div>
@@ -1841,80 +1829,58 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
       {/* STEP: SUBMIT REFERENCE */}
       {step === "submit" && (
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className={`px-6 py-4 flex items-center gap-3 ${method === "gcash" ? "bg-[#007AFF]" : "bg-[#5BC236]"}`}>
-            <span className="text-2xl">{method === "gcash" ? "💙" : "💚"}</span>
-            <div>
-              <p className="font-extrabold text-white text-sm">Almost there!</p>
-              <p className="text-white/70 text-xs">Confirm your ₱30 {methodLabel} payment</p>
-            </div>
+          <div className="px-6 py-5 border-b border-slate-100">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-0.5">Payment Verification</p>
+            <p className="text-xl font-extrabold text-[#1A1033]">Upload Payment Receipt</p>
           </div>
 
           <div className="p-6">
-            <button onClick={() => setStep("qr")} className="text-xs text-slate-400 hover:text-primary mb-5 flex items-center gap-1">← Back to QR</button>
+            <button onClick={() => setStep("qr")} className="text-xs text-slate-400 hover:text-primary mb-5 block">← Back</button>
 
-            {/* Receipt upload — primary option */}
-            <div className="border-2 border-dashed border-primary/30 rounded-2xl p-5 text-center mb-4 bg-primary/5">
-              <p className="text-sm font-bold text-[#1A1033] mb-1">📸 Upload your payment screenshot</p>
-              <p className="text-xs text-slate-500 mb-3">We'll automatically read your reference number from it</p>
-              {receiptFile ? (
-                <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2 text-sm border border-slate-200">
-                  <span className="truncate text-slate-600 text-xs">{receiptFile.name}</span>
-                  <button onClick={() => { setReceiptFile(null); setRefNumber(""); setScanStatus(null); }} className="text-slate-400 hover:text-like text-xs font-bold ml-2 flex-shrink-0">Remove</button>
-                </div>
-              ) : (
-                <label className="inline-flex items-center gap-2 bg-primary text-white text-sm font-bold px-5 py-2.5 rounded-xl cursor-pointer hover:bg-primary-dark transition-colors">
-                  📎 Choose screenshot
-                  <input type="file" accept="image/*" className="hidden" onChange={handleReceiptUpload} />
-                </label>
-              )}
-              {scanStatus === "scanning" && (
-                <p className="text-xs text-primary font-medium mt-3 animate-pulse">🔍 Reading your receipt…</p>
-              )}
-              {scanStatus === "found" && refNumber && (
-                <div className="mt-3 bg-match-light border border-match/30 rounded-xl px-4 py-3">
-                  <p className="text-xs text-match font-bold mb-1">✅ Reference number found!</p>
-                  <p className="font-mono font-bold text-[#1A1033] text-lg">{refNumber}</p>
-                  <p className="text-xs text-slate-400 mt-1">You can edit it below if it looks wrong</p>
-                </div>
-              )}
-              {scanStatus === "failed" && (
-                <p className="text-xs text-like font-medium mt-3">Couldn't read the receipt — please enter the number manually below.</p>
-              )}
-            </div>
+            {/* Receipt upload */}
+            <p className="text-sm text-slate-500 mb-3">Please upload a screenshot of your completed {methodLabel} payment.</p>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-slate-200" />
-              <span className="text-xs text-slate-400 font-medium">or enter manually</span>
-              <div className="flex-1 h-px bg-slate-200" />
-            </div>
+            {receiptFile ? (
+              <div className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-3 mb-5 text-sm">
+                <span className="truncate text-slate-600 text-xs">{receiptFile.name}</span>
+                <button onClick={() => { setReceiptFile(null); setRefNumber(""); setScanStatus(null); }} className="text-slate-400 hover:text-like text-xs font-bold ml-3 flex-shrink-0">Remove</button>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl py-4 mb-5 text-sm font-semibold text-slate-500 hover:border-primary hover:text-primary cursor-pointer transition-colors">
+                📎 Upload Receipt
+                <input type="file" accept="image/*" className="hidden" onChange={handleReceiptUpload} />
+              </label>
+            )}
 
-            {/* Manual input */}
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
-              Reference / Transaction Number
-            </label>
+            {scanStatus === "scanning" && (
+              <p className="text-xs text-primary font-medium mb-4 animate-pulse">Reading receipt…</p>
+            )}
+            {scanStatus === "found" && (
+              <p className="text-xs text-match font-medium mb-4">✓ Reference number identified.</p>
+            )}
+
+            {/* Reference number */}
+            <label className="block text-sm font-bold text-[#1A1033] mb-2">Reference / Transaction Number</label>
             <input
               value={refNumber}
               onChange={(e) => setRefNumber(e.target.value)}
-              placeholder={method === "gcash" ? "e.g. 1234567890" : "e.g. TXN1234567890"}
-              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3.5 text-base font-mono focus:outline-none focus:border-primary transition-colors"
-              autoFocus={!receiptFile}
+              placeholder="Reference number"
+              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3.5 text-base font-mono focus:outline-none focus:border-primary transition-colors mb-5"
             />
-            <div className="bg-slate-50 rounded-xl p-3 mt-3 mb-5">
-              <p className="text-xs font-bold text-slate-500 mb-1">📍 Where to find it</p>
-              <p className="text-xs text-slate-500">Open {methodLabel} → <strong>Transaction History</strong> → tap the ₱30 payment → copy the <strong>Reference No.</strong> or <strong>Transaction ID</strong></p>
-            </div>
 
-            {error && <p className="text-xs text-like font-medium mb-3">{error}</p>}
+            {error && <p className="text-xs text-like font-medium mb-4">{error}</p>}
 
             <button
               onClick={handleSubmit}
               disabled={submitting || refNumber.trim().length < 6}
-              className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors disabled:opacity-40 text-base"
+              className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors disabled:opacity-40 text-base mb-4"
             >
-              {submitting ? "Submitting…" : "Submit for Verification ✓"}
+              {submitting ? "Submitting…" : "Submit for Verification"}
             </button>
-            <p className="text-xs text-slate-400 text-center mt-3">Admin will verify and activate Premium within 24 hours</p>
+
+            <p className="text-xs text-slate-400 text-center">
+              Note: If the reference number cannot be identified from the receipt, please enter it manually.
+            </p>
           </div>
         </div>
       )}
