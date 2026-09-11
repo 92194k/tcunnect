@@ -1672,6 +1672,7 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
       );
 
       const data = await response.json();
+      console.log("scan-receipt response:", response.status, JSON.stringify(data));
       if (data.error) {
         setScanStatus("failed");
         setScanError(`Scan error: ${data.error}`);
