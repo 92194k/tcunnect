@@ -34,7 +34,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 100,
+        max_tokens: 150,
         messages: [{
           role: "user",
           content: [
@@ -44,7 +44,31 @@ serve(async (req) => {
             },
             {
               type: "text",
-              text: "This is a GCash or Maya payment receipt screenshot. Find the payment reference or transaction identifier. It may be labeled in any of these ways: 'Ref No.', 'Ref. No.', 'Ref No', 'Reference No.', 'Reference No', 'Reference Number', 'Ref ID', 'Reference ID', 'Transaction No.', 'Transaction No', 'Transaction Number', 'Transaction ID', 'Txn No.', 'Txn No', 'Txn ID', 'Transac No.', 'Transac No', 'Trace No.', 'Trace No', 'Trace Number', 'Receipt No.', 'Receipt Number', or it may simply appear as a standalone sequence of 10-15 digits on the screen. Return ONLY the number itself — digits only, no label, no punctuation, no spaces, no explanation. If you truly cannot find any such number anywhere in the image, return the single word NONE."
+              text: `You are reading a GCash or Maya mobile payment receipt.
+
+Your task: find the payment reference or transaction number.
+
+This number may appear next to ANY of these labels (variations in capitalization, spacing, punctuation are all fine):
+- Ref No / Ref. No. / Ref No.
+- Reference No / Reference No. / Reference Number
+- Reference ID / Ref ID
+- Transaction ID / Transaction No / Transaction No. / Transaction Number
+- Transac ID / Transac No / Transac No. / Transac Number
+- Transaction Ref / Transaction Ref.
+- Payment Reference / Payment ID
+- Confirmation Number / Confirmation ID
+- Trace No / Trace No. / Trace Number
+
+Detection strategy (in order of confidence):
+1. LABEL FIRST: Find a label from the list above, then read the number immediately after it (after any colon, dash, or space). This is the most reliable method.
+2. CONTEXT: If the label is partially cut off or unclear, use surrounding receipt context — amounts, dates, merchant names — to identify which number is the reference.
+3. PATTERN: GCash reference numbers are typically 13 digits. Maya may vary. Use digit length as a supporting signal, not the primary one.
+
+Important rules:
+- Return ONLY the digits of the reference number — no label, no punctuation, no spaces, no explanation.
+- Do NOT grab just any 13-digit number. It must be contextually identified as the reference/transaction identifier.
+- Normalize: ignore colons, dashes, spaces between the label and the number.
+- If you find it, return the number. If you genuinely cannot find any payment reference or transaction identifier, return exactly: NONE`
             }
           ]
         }]
@@ -52,9 +76,12 @@ serve(async (req) => {
     });
 
     const data = await response.json();
-    const extracted = (data.content?.[0]?.text ?? "NONE").trim();
+    const raw = (data.content?.[0]?.text ?? "NONE").trim();
+    // Clean up: strip any accidental label text, keep only the digits if it looks like a number
+    const cleaned = raw.replace(/[^0-9A-Za-z-]/g, "").trim();
+    const result = cleaned.length >= 6 ? cleaned : "NONE";
 
-    return new Response(JSON.stringify({ referenceNumber: extracted }), {
+    return new Response(JSON.stringify({ referenceNumber: result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   } catch (err) {
