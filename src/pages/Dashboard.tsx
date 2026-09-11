@@ -1633,13 +1633,12 @@ function BlockedUsersCard() {
    PREMIUM VIEW
    ============================ */
 function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase: () => void }) {
-  const [step, setStep] = useState<"choose" | "qr" | "submit" | "pending">("choose");
+  const [step, setStep] = useState<"intro" | "choose" | "qr" | "submit" | "pending">("intro");
   const [method, setMethod] = useState<"gcash" | "maya">("gcash");
   const [refNumber, setRefNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Check if they already have a pending request ──
   useEffect(() => {
     getMyPaymentRequest().then((req) => {
       if (req?.status === "pending") setStep("pending");
@@ -1698,9 +1697,33 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
         ))}
       </div>
 
+      {/* STEP: INTRO */}
+      {step === "intro" && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 text-center">
+          <div className="text-5xl mb-3">⭐</div>
+          <h3 className="text-2xl font-extrabold text-[#1A1033] font-display mb-1">Unlock TCUnnect Premium</h3>
+          <p className="text-slate-500 text-sm mb-4">One-time payment · Lifetime access</p>
+          <p className="text-5xl font-extrabold text-primary mb-6">₱30</p>
+          <div className="grid grid-cols-2 gap-3 mb-6 text-left">
+            {[["👀","See who liked you"],["🔍","See profile viewers"],["♾️","Unlimited access"],["⭐","Premium badge"]].map(([i,t]) => (
+              <div key={t} className="bg-slate-50 rounded-2xl p-3 flex gap-2 items-center text-sm font-medium text-[#1A1033]">
+                <span className="text-lg">{i}</span>{t}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setStep("choose")}
+            className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors text-lg"
+          >
+            Get Premium — ₱30
+          </button>
+        </div>
+      )}
+
       {/* STEP: CHOOSE METHOD */}
       {step === "choose" && (
         <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+          <button onClick={() => setStep("intro")} className="text-sm text-slate-400 hover:text-primary mb-4 block text-left">← Back</button>
           <h3 className="font-bold text-[#1A1033] mb-4">Choose payment method</h3>
           <div className="grid grid-cols-2 gap-3 mb-6">
             {(["gcash","maya"] as const).map((m) => (
