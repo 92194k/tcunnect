@@ -1766,24 +1766,56 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
 
       {/* STEP: SUBMIT REFERENCE */}
       {step === "submit" && (
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-          <button onClick={() => setStep("qr")} className="text-sm text-slate-400 hover:text-primary mb-4 block">← Back</button>
-          <h3 className="font-bold text-[#1A1033] mb-1">Enter your {methodLabel} reference number</h3>
-          <p className="text-sm text-slate-500 mb-4">
-            Find it in your {methodLabel} transaction history right after paying.
-          </p>
-          <input
-            value={refNumber}
-            onChange={(e) => setRefNumber(e.target.value)}
-            placeholder={method === "gcash" ? "e.g. 1234567890" : "e.g. TXN1234567890"}
-            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary mb-2"
-          />
-          {error && <p className="text-xs text-like font-medium mb-3">{error}</p>}
-          <p className="text-xs text-slate-400 mb-4">Our admin will verify your payment within 24 hours and activate your Premium access.</p>
-          <button onClick={handleSubmit} disabled={submitting || !refNumber.trim()}
-            className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors disabled:opacity-50">
-            {submitting ? "Submitting…" : "Submit for Verification"}
-          </button>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          {/* Header strip */}
+          <div className={`px-6 py-4 flex items-center gap-3 ${method === "gcash" ? "bg-[#007AFF]" : "bg-[#5BC236]"}`}>
+            <span className="text-2xl">{method === "gcash" ? "💙" : "💚"}</span>
+            <div>
+              <p className="font-extrabold text-white text-sm">{methodLabel} Payment</p>
+              <p className="text-white/70 text-xs">Reference number verification</p>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <button onClick={() => setStep("qr")} className="text-xs text-slate-400 hover:text-primary mb-5 flex items-center gap-1">
+              ← Back to QR
+            </button>
+
+            {/* Where to find it */}
+            <div className="bg-slate-50 rounded-2xl p-4 mb-5">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Where to find your reference number</p>
+              <ol className="text-sm text-slate-600 space-y-1.5">
+                <li className="flex gap-2"><span className="font-bold text-primary">1.</span> Open your {methodLabel} app</li>
+                <li className="flex gap-2"><span className="font-bold text-primary">2.</span> Tap <strong>Transaction History</strong></li>
+                <li className="flex gap-2"><span className="font-bold text-primary">3.</span> Find the ₱30 payment you just made</li>
+                <li className="flex gap-2"><span className="font-bold text-primary">4.</span> Copy the <strong>Reference No.</strong> or <strong>Transaction ID</strong></li>
+              </ol>
+            </div>
+
+            {/* Input */}
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Reference Number</label>
+            <input
+              value={refNumber}
+              onChange={(e) => setRefNumber(e.target.value)}
+              placeholder={method === "gcash" ? "e.g. 1234567890" : "e.g. TXN1234567890"}
+              className="w-full border-2 border-slate-200 rounded-xl px-4 py-3.5 text-base font-mono focus:outline-none focus:border-primary transition-colors mb-1"
+              autoFocus
+            />
+            {error && (
+              <p className="text-xs text-like font-medium mt-1 mb-3">{error}</p>
+            )}
+            <p className="text-xs text-slate-400 mt-2 mb-5">
+              Our admin will verify your payment and activate Premium within 24 hours. You'll get a notification.
+            </p>
+
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || refNumber.trim().length < 6}
+              className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors disabled:opacity-40 text-base"
+            >
+              {submitting ? "Submitting…" : "Submit Reference Number ✓"}
+            </button>
+          </div>
         </div>
       )}
 
