@@ -20,7 +20,7 @@ serve(async (req) => {
 
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!anthropicKey) {
-      return new Response(JSON.stringify({ error: "API key not configured" }), {
+      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
@@ -44,7 +44,7 @@ serve(async (req) => {
             },
             {
               type: "text",
-              text: "This is a GCash or Maya payment receipt screenshot. Extract ONLY the reference number or transaction ID. It is typically labeled 'Reference No.', 'Ref No.', 'Transaction ID', or 'Ref. No'. Return ONLY the number or code itself — no label, no punctuation, no explanation. If you cannot find one, return NONE."
+              text: "This is a GCash or Maya payment receipt screenshot. Find and return ONLY the reference number or transaction ID — it is typically labeled 'Reference No.', 'Ref No.', 'Transaction ID', or 'Ref. No'. Return ONLY the number or code itself, nothing else, no explanation. If you cannot find one, return the single word NONE."
             }
           ]
         }]
@@ -52,7 +52,7 @@ serve(async (req) => {
     });
 
     const data = await response.json();
-    const extracted = data.content?.[0]?.text?.trim() ?? "NONE";
+    const extracted = (data.content?.[0]?.text ?? "NONE").trim();
 
     return new Response(JSON.stringify({ referenceNumber: extracted }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
