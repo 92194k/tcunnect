@@ -44,7 +44,7 @@ serve(async (req) => {
             },
             {
               type: "text",
-              text: "This is a GCash or Maya payment receipt screenshot. Find and return ONLY the reference number or transaction ID — it is typically labeled 'Reference No.', 'Ref No.', 'Transaction ID', or 'Ref. No'. Return ONLY the number or code itself, nothing else, no explanation. If you cannot find one, return the single word NONE."
+              text: "This is a GCash or Maya payment receipt screenshot. Find the payment reference or transaction identifier. It may be labeled in any of these ways: 'Ref No.', 'Ref. No.', 'Ref No', 'Reference No.', 'Reference No', 'Reference Number', 'Ref ID', 'Reference ID', 'Transaction No.', 'Transaction No', 'Transaction Number', 'Transaction ID', 'Txn No.', 'Txn No', 'Txn ID', 'Transac No.', 'Transac No', 'Trace No.', 'Trace No', 'Trace Number', 'Receipt No.', 'Receipt Number', or it may simply appear as a standalone sequence of 10-15 digits on the screen. Return ONLY the number itself — digits only, no label, no punctuation, no spaces, no explanation. If you truly cannot find any such number anywhere in the image, return the single word NONE."
             }
           ]
         }]
