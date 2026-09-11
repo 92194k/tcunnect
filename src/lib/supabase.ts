@@ -234,6 +234,7 @@ export type FeedComment = {
   parent_comment_id: string | null;
   text: string;
   created_at: string;
+  author_id: string | null;
   author_name: string;
   author_photo: string | null;
 };
@@ -269,6 +270,7 @@ export async function getFeedComments(postId: string): Promise<FeedComment[]> {
     parent_comment_id: c.parent_comment_id,
     text: c.text,
     created_at: c.created_at,
+    author_id: c.user_id,
     author_name: (c.user_id && authorsById.get(c.user_id)?.name) || "Unknown",
     author_photo: (c.user_id && authorsById.get(c.user_id)?.photo_url) || null,
   }));
@@ -589,13 +591,14 @@ export type AdminUser = {
   is_premium: boolean;
   is_banned: boolean;
   is_suspended_until: string | null;
+  deletion_requested_at: string | null;
   created_at: string;
 };
 
 export async function getAllUsers(): Promise<AdminUser[]> {
   const { data, error } = await supabase
     .from("users")
-    .select("id, name, email, dept, is_verified, is_premium, is_banned, is_suspended_until, created_at")
+    .select("id, name, email, dept, is_verified, is_premium, is_banned, is_suspended_until, deletion_requested_at, created_at")
     .order("created_at", { ascending: false })
     .limit(200);
   if (error) throw error;
@@ -768,13 +771,183 @@ export async function unblockUserByTargetId(targetUserId: string): Promise<void>
 // Account deletion
 // ---------------------------------------------------------------------------
 
-/** Real hard-deletion of every relational row tied to this account — see
- * 20250908360001_hard_delete_account_data.sql for the exact scope and the
- * one honest limitation (the auth login credential itself needs Supabase's
- * admin API, which this frontend can't call — only an admin finishing the
- * job with the provided SQL script can remove that last piece). */
-export async function requestAccountDeletion(): Promise<void> {
-  const { error } = await supabase.rpc("delete_my_account");
+/** Submits a deletion REQUEST with a reason — no data is touched yet. The
+ * admin reviews it and either approves (which then runs the real purge via
+ * admin_approve_deletion) or denies it. Replaces the old instant
+ * self-service version. */
+export async function requestAccountDeletion(reason: string, details?: string): Promise<void> {
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) throw new Error("Not signed in.");
+  const { data: me } = await supabase.from("users").select("id").eq("auth_id", authData.user.id).single();
+  if (!me) throw new Error("Profile not found.");
+
+  const { error } = await supabase
+    .from("account_deletion_requests")
+    .insert({ user_id: me.id, reason, details: details || null });
   if (error) throw error;
-  await supabase.auth.signOut();
 }
+
+export type DeletionRequest = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  reason: string;
+  details: string | null;
+  status: "pending" | "approved" | "denied";
+  created_at: string;
+};
+
+export async function getDeletionRequests(): Promise<DeletionRequest[]> {
+  const { data, error } = await supabase
+    .from("account_deletion_requests")
+    .select("id, user_id, reason, details, status, created_at")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  const userIds = [...new Set(data.map((r) => r.user_id))];
+  const { data: users } = await supabase.from("users").select("id, name, email").in("id", userIds);
+  const byId = new Map((users ?? []).map((u) => [u.id, u]));
+
+  return data.map((r) => ({
+    id: r.id,
+    user_id: r.user_id,
+    user_name: byId.get(r.user_id)?.name ?? "Unknown",
+    user_email: byId.get(r.user_id)?.email ?? "",
+    reason: r.reason,
+    details: r.details,
+    status: r.status,
+    created_at: r.created_at,
+  }));
+}
+
+export async function adminApproveDeletion(requestId: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_approve_deletion", { request_id: requestId });
+  if (error) throw error;
+}
+
+export async function adminDenyDeletion(requestId: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_deny_deletion", { request_id: requestId });
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Viewing another user's public profile (e.g. clicking a commenter's name)
+// ---------------------------------------------------------------------------
+
+export type PublicProfile = {
+  id: string;
+  name: string;
+  dept: string;
+  year_level: string;
+  program: string | null;
+  bio: string | null;
+  interests: string[];
+  photo_url: string | null;
+};
+
+export async function getPublicProfile(userId: string): Promise<PublicProfile> {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, name, dept, year_level, program, bio, interests, photo_url")
+    .eq("id", userId)
+    .single();
+  if (error) throw error;
+  return data as PublicProfile;
+}
+
+// ---------------------------------------------------------------------------
+// Premium payment requests (GCash / Maya manual verification)
+// ---------------------------------------------------------------------------
+
+export type PremiumPaymentRequest = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  payment_method: "gcash" | "maya";
+  reference_number: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  notes: string | null;
+};
+
+export async function submitPaymentRequest(
+  paymentMethod: "gcash" | "maya",
+  referenceNumber: string
+): Promise<void> {
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) throw new Error("Not signed in.");
+  const { data: me } = await supabase.from("users").select("id").eq("auth_id", authData.user.id).single();
+  if (!me) throw new Error("Profile not found.");
+
+  // Check no pending request already exists
+  const { data: existing } = await supabase
+    .from("premium_payment_requests")
+    .select("id, status")
+    .eq("user_id", me.id)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (existing) throw new Error("You already have a pending payment request. Please wait for admin review.");
+
+  const { error } = await supabase
+    .from("premium_payment_requests")
+    .insert({ user_id: me.id, payment_method: paymentMethod, reference_number: referenceNumber.trim() });
+  if (error) throw error;
+}
+
+export async function getMyPaymentRequest(): Promise<PremiumPaymentRequest | null> {
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) return null;
+  const { data: me } = await supabase.from("users").select("id").eq("auth_id", authData.user.id).single();
+  if (!me) return null;
+
+  const { data } = await supabase
+    .from("premium_payment_requests")
+    .select("id, user_id, payment_method, reference_number, amount, status, created_at, notes")
+    .eq("user_id", me.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return { ...data, user_name: "", user_email: "" } as PremiumPaymentRequest;
+}
+
+export async function getPaymentRequests(): Promise<PremiumPaymentRequest[]> {
+  const { data, error } = await supabase
+    .from("premium_payment_requests")
+    .select("id, user_id, payment_method, reference_number, amount, status, created_at, notes")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  const userIds = [...new Set(data.map((r) => r.user_id))];
+  const { data: users } = await supabase.from("users").select("id, name, email").in("id", userIds);
+  const byId = new Map((users ?? []).map((u) => [u.id, u]));
+
+  return data.map((r) => ({
+    ...r,
+    user_name: byId.get(r.user_id)?.name ?? "Unknown",
+    user_email: byId.get(r.user_id)?.email ?? "",
+  })) as PremiumPaymentRequest[];
+}
+
+export async function adminApprovePayment(requestId: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_approve_payment", { request_id: requestId });
+  if (error) throw error;
+}
+
+export async function adminRejectPayment(requestId: string, note?: string): Promise<void> {
+  const { error } = await supabase.rpc("admin_reject_payment", {
+    request_id: requestId,
+    rejection_note: note ?? null,
+  });
+  if (error) throw error;
+}
+
+
+

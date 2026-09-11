@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import Logo from "../components/Logo";
 import { STUDENTS, MATCHES, CONVERSATIONS, FEED_POSTS, NOTIFICATIONS, ME, type Student } from "../data";
-import { supabase, likeUser, getMyLikers, getMyMatches, getMessages, sendMessage, unmatch, deleteConversation, getFeedPosts, createFeedPost, toggleFeedUpvote, getMyVotedPostIds, reportFeedPost, fileReport, getFeedComments, createFeedComment, getMyProfile, updateMyProfile, recordProfileView, getMyProfileViewCount, getMyViewers, getMyNotifications, markNotificationRead, getReports, resolveReport, banReportedUser, suspendUser, unsuspendUser, deleteReport, deleteReportedContent, notifyReporter, getAllUsers, setUserBanned, getAllFeedPostsAdmin, setFeedPostRemoved, deleteFeedPostAdmin, getAdminStats, getMyBlockedUsers, unblockUser, unblockUserByTargetId, requestAccountDeletion, type Liker, type MatchWithUser, type ChatMessage, type FeedPost, type FeedComment, type MyProfile, type NotificationRow, type AdminReport, type AdminUser, type AdminFeedPost, type AdminStats, type BlockedUser, type Viewer } from "../lib/supabase";
+import { supabase, likeUser, getMyLikers, getMyMatches, getMessages, sendMessage, unmatch, deleteConversation, getFeedPosts, createFeedPost, toggleFeedUpvote, getMyVotedPostIds, reportFeedPost, fileReport, getFeedComments, createFeedComment, getMyProfile, updateMyProfile, recordProfileView, getMyProfileViewCount, getMyViewers, getMyNotifications, markNotificationRead, getReports, resolveReport, banReportedUser, suspendUser, unsuspendUser, deleteReport, deleteReportedContent, notifyReporter, getAllUsers, setUserBanned, getAllFeedPostsAdmin, setFeedPostRemoved, deleteFeedPostAdmin, getAdminStats, getMyBlockedUsers, unblockUser, unblockUserByTargetId, requestAccountDeletion, getDeletionRequests, adminApproveDeletion, adminDenyDeletion, getPublicProfile, submitPaymentRequest, getMyPaymentRequest, getPaymentRequests, adminApprovePayment, adminRejectPayment, type Liker, type MatchWithUser, type ChatMessage, type FeedPost, type FeedComment, type MyProfile, type NotificationRow, type AdminReport, type AdminUser, type AdminFeedPost, type AdminStats, type BlockedUser, type Viewer, type DeletionRequest, type PublicProfile, type PremiumPaymentRequest } from "../lib/supabase";
 
 type View = "discover" | "likes" | "matches" | "messages" | "feed" | "notifications" | "profile" | "premium" | "admin" | "settings";
 type Props = { initialView: View; onNavigate: (v: string) => void };
@@ -908,8 +908,57 @@ function MessagesView() {
    consistent indent level, no matter how deep the actual reply chain goes —
    keeps threads from creeping further right with every extra reply)
    ============================ */
+/* ============================
+   MINI PROFILE MODAL (click a commenter's name/photo to preview them)
+   ============================ */
+function MiniProfileModal({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPublicProfile(userId)
+      .then(setProfile)
+      .catch((err) => setError(err?.message || "Couldn't load this profile."))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 fade-in" onClick={onClose}>
+      <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl slide-up overflow-hidden max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {loading && <p className="text-center text-slate-400 py-16">Loading…</p>}
+        {error && <p className="text-center text-like font-medium py-16 px-6">{error}</p>}
+        {profile && (
+          <>
+            <img src={profile.photo_url || "https://placehold.co/400x300?text=%F0%9F%91%A4"} alt={profile.name} className="w-full h-64 object-cover" />
+            <div className="p-6">
+              <h3 className="text-xl font-extrabold text-[#1A1033] font-display">{profile.name}</h3>
+              <div className="flex items-center gap-2 mt-1.5">
+                <DeptBadge dept={profile.dept} />
+                <span className="text-sm text-slate-500">{profile.year_level}{profile.program && ` · ${profile.program}`}</span>
+              </div>
+              {profile.bio && <p className="text-sm text-[#1A1033] mt-4 leading-relaxed">"{profile.bio}"</p>}
+              {profile.interests.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Interests</p>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.interests.map((i) => <InterestTag key={i} label={i} />)}
+                  </div>
+                </div>
+              )}
+              <button onClick={onClose} className="w-full mt-6 py-3 rounded-xl border-2 border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+                Close
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CommentThread({
-  comment, allComments, postId, replyingTo, setReplyingTo, replyText, setReplyText, onSubmitReply, onReport,
+  comment, allComments, postId, replyingTo, setReplyingTo, replyText, setReplyText, onSubmitReply, onReport, isAdmin, onDelete, onViewProfile,
 }: {
   comment: FeedComment; // the TOP-LEVEL comment
   allComments: FeedComment[];
@@ -920,6 +969,9 @@ function CommentThread({
   setReplyText: (t: string) => void;
   onSubmitReply: (postId: string, parentCommentId: string) => void;
   onReport: (commentId: string) => void;
+  isAdmin: boolean;
+  onDelete: (commentId: string) => void;
+  onViewProfile: (userId: string) => void;
 }) {
   // Every descendant of this top-level comment, at any real depth, flattened
   // into one chronological list — parent_comment_id in the database still
@@ -942,14 +994,21 @@ function CommentThread({
     return (
       <div>
         <div className="flex gap-2 text-sm group">
-          <img src={c.author_photo || "https://placehold.co/60x60?text=%F0%9F%91%A4"} alt={c.author_name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+          <button onClick={() => c.author_id && onViewProfile(c.author_id)} disabled={!c.author_id} className="flex-shrink-0">
+            <img src={c.author_photo || "https://placehold.co/60x60?text=%F0%9F%91%A4"} alt={c.author_name} className="w-6 h-6 rounded-full object-cover hover:opacity-80 transition-opacity" />
+          </button>
           <div className="flex-1">
-            <p className="font-semibold text-xs text-[#1A1033]">{c.author_name}</p>
+            <button onClick={() => c.author_id && onViewProfile(c.author_id)} disabled={!c.author_id} className="font-semibold text-xs text-[#1A1033] hover:text-primary hover:underline">
+              {c.author_name}
+            </button>
             {replyingToName && <p className="text-[10px] text-primary font-medium">replying to @{replyingToName}</p>}
             <p className="text-[#1A1033]">{c.text}</p>
             <div className="flex items-center gap-3 mt-0.5">
               <p className="text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</p>
               <button onClick={() => { setReplyingTo(c.id); setReplyText(""); }} className="text-[10px] font-bold text-slate-400 hover:text-primary">Reply</button>
+              {isAdmin && (
+                <button onClick={() => onDelete(c.id)} className="text-[10px] font-bold text-like hover:underline">Delete</button>
+              )}
             </div>
           </div>
           <button onClick={() => onReport(c.id)} className="text-slate-300 hover:text-like text-xs opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">🚩</button>
@@ -1014,6 +1073,7 @@ function FeedView() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     loadPosts();
@@ -1068,6 +1128,30 @@ function FeedView() {
         console.error("Failed to load comments:", err);
         window.alert(err?.message || "Failed to load comments — check the console for details.");
       }
+    }
+  }
+
+  async function handleAdminDeleteComment(postId: string, commentId: string) {
+    if (!window.confirm("Delete this comment? This can't be undone.")) return;
+    try {
+      await deleteReportedContent("feed_comment", commentId);
+      const c = await getFeedComments(postId);
+      setComments((prev) => ({ ...prev, [postId]: c }));
+      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, comment_count: Math.max(p.comment_count - 1, 0) } : p)));
+    } catch (err: any) {
+      console.error("Delete comment failed:", err);
+      window.alert(err?.message || "Failed to delete comment.");
+    }
+  }
+
+  async function handleAdminDeletePost(postId: string) {
+    if (!window.confirm("Permanently delete this post? This can't be undone.")) return;
+    try {
+      await deleteFeedPostAdmin(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+    } catch (err: any) {
+      console.error("Delete post failed:", err);
+      window.alert(err?.message || "Failed to delete post.");
     }
   }
 
@@ -1212,7 +1296,10 @@ function FeedView() {
               <button onClick={() => toggleComments(post.id)} className="flex items-center gap-1.5 font-semibold text-slate-400 hover:text-primary transition-colors">
                 💬 {post.comment_count} Comments
               </button>
-              <button onClick={() => report(post)} className="ml-auto text-slate-300 hover:text-like text-xs transition-colors">🚩 Report</button>
+              <button onClick={() => report(post)} className={isAdmin ? "text-slate-300 hover:text-like text-xs transition-colors" : "ml-auto text-slate-300 hover:text-like text-xs transition-colors"}>🚩 Report</button>
+              {isAdmin && (
+                <button onClick={() => handleAdminDeletePost(post.id)} className="ml-auto text-xs font-bold text-like hover:underline">Delete</button>
+              )}
             </div>
 
             {expandedComments[post.id] && (
@@ -1229,6 +1316,9 @@ function FeedView() {
                     setReplyText={setReplyText}
                     onSubmitReply={submitComment}
                     onReport={(commentId) => setReportTarget({ type: "feed_comment", id: commentId, label: "this comment" })}
+                    isAdmin={isAdmin}
+                    onDelete={(commentId) => handleAdminDeleteComment(post.id, commentId)}
+                    onViewProfile={(userId) => setViewingProfileId(userId)}
                   />
                 ))}
                 {(comments[post.id] ?? []).length === 0 && (
@@ -1256,6 +1346,10 @@ function FeedView() {
           onClose={() => setReportTarget(null)}
           onSubmitted={() => { setReportTarget(null); window.alert("Report submitted — our team will review it."); }}
         />
+      )}
+
+      {viewingProfileId && (
+        <MiniProfileModal userId={viewingProfileId} onClose={() => setViewingProfileId(null)} />
       )}
     </div>
   );
@@ -1539,165 +1633,152 @@ function BlockedUsersCard() {
    PREMIUM VIEW
    ============================ */
 function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase: () => void }) {
-  const [checkout, setCheckout] = useState(false);
-  const [payment, setPayment] = useState("gcash");
-  const [redirecting, setRedirecting] = useState(false);
-  const [done, setDone] = useState(false);
+  const [step, setStep] = useState<"choose" | "qr" | "submit" | "pending">("choose");
+  const [method, setMethod] = useState<"gcash" | "maya">("gcash");
+  const [refNumber, setRefNumber] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handlePay() {
-    // Real flow (see TCUNNECT_PHASE3_PAYMENTS.md):
-    //   1. POST /api/premium/checkout { user_id, payment_method: payment }
-    //      -> backend creates a PayMongo Checkout Session server-side
-    //         (secret key never touches the frontend) and returns checkout_url
-    //   2. window.location.href = checkout_url  (redirect to PayMongo's hosted page)
-    //   3. PayMongo redirects back to /premium/success on completion
-    //   4. isPremium is actually flipped by the PayMongo WEBHOOK hitting the
-    //      backend, not by this client code — the redirect landing is just
-    //      a UI cue, never the source of truth for payment success.
-    setRedirecting(true);
-    setTimeout(() => {
-      // Placeholder for the redirect step above. In production this branch
-      // doesn't exist — the browser actually navigates away to PayMongo.
-      setRedirecting(false);
-      setDone(true);
-      setTimeout(() => { setCheckout(false); setDone(false); onPurchase(); }, 2000);
-    }, 1200);
+  // ── Check if they already have a pending request ──
+  useEffect(() => {
+    getMyPaymentRequest().then((req) => {
+      if (req?.status === "pending") setStep("pending");
+    }).catch(() => {});
+  }, []);
+
+  async function handleSubmit() {
+    if (!refNumber.trim() || refNumber.trim().length < 6) {
+      setError("Please enter a valid reference number (at least 6 characters).");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await submitPaymentRequest(method, refNumber.trim());
+      setStep("pending");
+    } catch (err: any) {
+      setError(err?.message || "Failed to submit. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  const comparison = [
-    ["Browse profiles", true, true],
-    ["Like profiles", true, true],
-    ["Anonymous Campus Feed", true, true],
-    ["Messaging (after match)", true, true],
-    ["See who liked you", false, true],
-    ["See profile viewers", false, true],
-    ["Unlimited likes & views", false, true],
-    ["Instant notifications", false, true],
-    ["Premium profile badge", false, true],
-  ];
+  const qrImage = method === "gcash" ? "/gcash-qr.png" : "/maya-qr.png";
+  const methodLabel = method === "gcash" ? "GCash" : "Maya";
+  const methodColor = method === "gcash" ? "text-[#007AFF]" : "text-[#5BC236]";
+
+  if (isPremium) {
+    return (
+      <div className="text-center py-24">
+        <div className="text-6xl mb-4">⭐</div>
+        <h2 className="text-3xl font-extrabold text-premium font-display">You're Premium!</h2>
+        <p className="text-slate-500 mt-3">You have lifetime access to all premium features.</p>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      {checkout && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 fade-in">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl slide-up">
-            {done ? (
-              <div className="text-center py-8">
-                <div className="text-6xl mb-4 match-pop">🎉</div>
-                <h3 className="text-2xl font-extrabold text-match font-display">Welcome to Premium!</h3>
-                <p className="text-slate-500 mt-2">You now have unlimited access.</p>
-              </div>
-            ) : redirecting ? (
-              <div className="text-center py-12">
-                <div className="w-10 h-10 mx-auto mb-4 border-4 border-primary-light border-t-primary rounded-full animate-spin" />
-                <h3 className="text-lg font-extrabold text-[#1A1033] font-display">Redirecting to secure checkout…</h3>
-                <p className="text-slate-400 text-sm mt-2">You'll complete payment on PayMongo's secure page.</p>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-extrabold text-[#1A1033] font-display">Checkout</h3>
-                  <button onClick={() => setCheckout(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-                </div>
-                <div className="bg-[#F8F7FF] rounded-2xl p-4 mb-6">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-[#1A1033]">TCUnnect Premium</p>
-                      <p className="text-xs text-slate-400">Lifetime access · No subscription</p>
-                    </div>
-                    <p className="text-2xl font-extrabold text-primary">₱30</p>
-                  </div>
-                </div>
-                <p className="text-sm font-bold text-[#1A1033] mb-3">Payment method</p>
-                <div className="grid grid-cols-3 gap-3 mb-6">
-                  {[
-                    { id: "gcash", label: "GCash", emoji: "💙" },
-                    { id: "maya", label: "Maya", emoji: "💚" },
-                    { id: "qrph", label: "QRPh", emoji: "🔳" },
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setPayment(p.id)}
-                      className={`py-4 rounded-2xl border-2 flex flex-col items-center gap-1 text-sm font-bold transition-all ${payment === p.id ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-slate-600"}`}
-                    >
-                      <span className="text-2xl">{p.emoji}</span>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-400 text-center mb-5">
-                  Payment is processed securely. TCUnnect does not store your payment details.
-                </p>
-                <button onClick={handlePay} className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors text-lg">
-                  Continue to Pay ₱30
-                </button>
-              </>
-            )}
+    <div className="max-w-lg mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center gap-2 bg-premium/10 text-premium text-sm font-bold px-4 py-2 rounded-full mb-4">
+          ⭐ TCUnnect Premium
+        </div>
+        <h1 className="text-4xl font-extrabold text-[#1A1033] font-display">See who's into you.</h1>
+        <p className="text-5xl font-extrabold text-primary mt-3">₱30</p>
+        <p className="text-slate-400">One-time · Lifetime access · No subscription</p>
+      </div>
+
+      {/* Benefits */}
+      <div className="grid grid-cols-2 gap-3 mb-8">
+        {[["👀","See who liked you"],["🔍","See profile viewers"],["♾️","Unlimited access"],["⭐","Premium badge"]].map(([i,t]) => (
+          <div key={t} className="bg-white rounded-2xl p-4 border border-slate-100 flex gap-3 items-center text-sm font-medium text-[#1A1033]">
+            <span className="text-xl">{i}</span>{t}
           </div>
+        ))}
+      </div>
+
+      {/* STEP: CHOOSE METHOD */}
+      {step === "choose" && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+          <h3 className="font-bold text-[#1A1033] mb-4">Choose payment method</h3>
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {(["gcash","maya"] as const).map((m) => (
+              <button key={m} onClick={() => setMethod(m)}
+                className={`py-4 rounded-2xl border-2 font-bold text-sm flex flex-col items-center gap-1 transition-all ${method === m ? "border-primary bg-primary-light text-primary" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                <span className="text-2xl">{m === "gcash" ? "💙" : "💚"}</span>
+                {m === "gcash" ? "GCash" : "Maya"}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setStep("qr")}
+            className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors text-lg">
+            Continue with {method === "gcash" ? "GCash" : "Maya"} →
+          </button>
         </div>
       )}
 
-      <div className="max-w-3xl">
-        {isPremium ? (
-          <div className="text-center py-16">
-            <div className="text-6xl mb-4">⭐</div>
-            <h2 className="text-3xl font-extrabold text-premium font-display">You're Premium!</h2>
-            <p className="text-slate-500 mt-3">You have lifetime access to all premium features.</p>
-          </div>
-        ) : (
-          <>
-            <div className="text-center mb-12">
-              <div className="inline-flex items-center gap-2 bg-premium/10 text-premium text-sm font-bold px-4 py-2 rounded-full mb-6">⭐ TCUnnect Premium</div>
-              <h1 className="text-4xl font-extrabold text-[#1A1033] font-display mb-3">See who's interested in you.</h1>
-              <p className="text-5xl font-extrabold text-primary mb-2">₱30</p>
-              <p className="text-slate-400 text-lg">Lifetime access</p>
-              <p className="text-sm font-bold text-match mt-1">Pay once. No monthly subscription.</p>
-            </div>
+      {/* STEP: SHOW QR */}
+      {step === "qr" && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 text-center">
+          <button onClick={() => setStep("choose")} className="text-sm text-slate-400 hover:text-primary mb-4 block text-left">← Back</button>
+          <h3 className="font-bold text-[#1A1033] mb-1">Scan to pay ₱30 via {methodLabel}</h3>
+          <p className="text-sm text-slate-500 mb-4">Open your {methodLabel} app and scan this QR code</p>
+          <img
+            src={qrImage}
+            alt={`${methodLabel} QR Code`}
+            className="w-56 h-56 mx-auto rounded-2xl border-2 border-slate-100 object-contain bg-white"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = "https://placehold.co/220x220?text=QR+Code";
+            }}
+          />
+          <p className={`text-sm font-bold mt-4 ${methodColor}`}>Amount: ₱30.00</p>
+          <p className="text-xs text-slate-400 mt-1 mb-6">After paying, tap below and enter your reference number</p>
+          <button onClick={() => setStep("submit")}
+            className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors">
+            I've paid — Enter reference number →
+          </button>
+        </div>
+      )}
 
-            {/* Benefits */}
-            <div className="grid sm:grid-cols-2 gap-4 mb-10">
-              {[
-                { icon: "👀", title: "See everyone who liked you", desc: "Full profiles revealed — not just blurs." },
-                { icon: "🔍", title: "See everyone who viewed you", desc: "Know exactly who's been checking you out." },
-                { icon: "♾️", title: "Unlimited likes & views", desc: "No limits. See as many as you want." },
-                { icon: "🔔", title: "Instant notifications", desc: "Get notified the moment someone likes you." },
-                { icon: "⭐", title: "Premium profile badge", desc: "Stand out with a premium badge on your profile." },
-              ].map((b) => (
-                <div key={b.title} className="bg-white rounded-2xl p-5 border border-slate-100 flex gap-4 items-start">
-                  <span className="text-2xl">{b.icon}</span>
-                  <div>
-                    <p className="font-bold text-[#1A1033] text-sm">{b.title}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{b.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {/* STEP: SUBMIT REFERENCE */}
+      {step === "submit" && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+          <button onClick={() => setStep("qr")} className="text-sm text-slate-400 hover:text-primary mb-4 block">← Back</button>
+          <h3 className="font-bold text-[#1A1033] mb-1">Enter your {methodLabel} reference number</h3>
+          <p className="text-sm text-slate-500 mb-4">
+            Find it in your {methodLabel} transaction history right after paying.
+          </p>
+          <input
+            value={refNumber}
+            onChange={(e) => setRefNumber(e.target.value)}
+            placeholder={method === "gcash" ? "e.g. 1234567890" : "e.g. TXN1234567890"}
+            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary mb-2"
+          />
+          {error && <p className="text-xs text-like font-medium mb-3">{error}</p>}
+          <p className="text-xs text-slate-400 mb-4">Our admin will verify your payment within 24 hours and activate your Premium access.</p>
+          <button onClick={handleSubmit} disabled={submitting || !refNumber.trim()}
+            className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors disabled:opacity-50">
+            {submitting ? "Submitting…" : "Submit for Verification"}
+          </button>
+        </div>
+      )}
 
-            <button onClick={() => setCheckout(true)} className="w-full bg-primary text-white font-extrabold py-5 rounded-2xl hover:bg-primary-dark transition-all shadow-lg shadow-primary/30 text-xl mb-12">
-              Get Premium — ₱30
-            </button>
-
-            {/* Comparison table */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="grid grid-cols-3 bg-[#F8F7FF] px-6 py-4 font-bold text-sm">
-                <span className="text-slate-400">Feature</span>
-                <span className="text-center text-slate-400">Free</span>
-                <span className="text-center text-primary">Premium ⭐</span>
-              </div>
-              {comparison.map(([feature, free, premium]) => (
-                <div key={String(feature)} className="grid grid-cols-3 px-6 py-4 border-t border-slate-50 text-sm items-center">
-                  <span className="text-[#1A1033] font-medium">{feature as string}</span>
-                  <span className="text-center">{free ? "✅" : <span className="text-slate-300 text-xs">Blurred</span>}</span>
-                  <span className="text-center text-match font-bold">✅</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      {/* STEP: PENDING */}
+      {step === "pending" && (
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 text-center">
+          <div className="text-5xl mb-4">⏳</div>
+          <h3 className="text-xl font-extrabold text-[#1A1033] font-display mb-2">Payment under review</h3>
+          <p className="text-sm text-slate-500">
+            Your payment has been submitted. Our admin will verify it and activate your Premium access within 24 hours.
+            You'll see a notification once it's approved.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
+
 
 /* ============================
    ADMIN VIEW
@@ -1717,27 +1798,32 @@ function SettingsView({ onNavigate }: { onNavigate: (v: string) => void }) {
   const [passwordMsg, setPasswordMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteDetails, setDeleteDetails] = useState("");
+  const [deleteSubmitted, setDeleteSubmitted] = useState(false);
+
+  const deletionReasons = [
+    "Found a match / no longer looking",
+    "Privacy concerns",
+    "Not using the app anymore",
+    "Getting unwanted messages",
+    "Safety concern with another user",
+    "Other",
+  ];
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => { if (data.user?.email) setEmail(data.user.email); });
   }, []);
 
-  async function handleDeleteAccount() {
-    const confirmed = window.confirm(
-      "Delete your account? This clears your profile data and signs you out immediately. " +
-      "This can't be undone from inside the app."
-    );
-    if (!confirmed) return;
-    // Double-confirm on something this destructive and irreversible-feeling.
-    const typed = window.prompt('Type "DELETE" to confirm.');
-    if (typed !== "DELETE") return;
-
+  async function handleSubmitDeletionRequest() {
+    if (!deleteReason) { window.alert("Please select a reason."); return; }
     setDeleting(true);
     try {
-      await requestAccountDeletion();
-      onNavigate("landing");
+      await requestAccountDeletion(deleteReason, deleteDetails || undefined);
+      setDeleteSubmitted(true);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to delete account. Please try again.");
+      window.alert(err instanceof Error ? err.message : "Failed to submit deletion request. Please try again.");
     } finally {
       setDeleting(false);
     }
@@ -1830,19 +1916,63 @@ function SettingsView({ onNavigate }: { onNavigate: (v: string) => void }) {
       <div className="bg-white rounded-2xl border border-like/20 shadow-sm p-6">
         <h2 className="font-bold text-like mb-1">Danger Zone</h2>
         <p className="text-sm text-slate-500 mb-4">
-          This deactivates your account immediately: your bio, photo, and interests are cleared,
-          and you're signed out and blocked from logging back in. Full permanent removal of the
-          underlying account needs an admin to finish it — this app can't do that last step safely
-          on its own — but nothing about you stays visible or usable from this point.
+          Submitting this sends a request to our admin team along with your reason — nothing about
+          your account changes until they review and approve it. You'll keep full access in the
+          meantime.
         </p>
         <button
-          onClick={handleDeleteAccount}
-          disabled={deleting}
-          className="text-like font-bold text-sm border-2 border-like/30 px-5 py-2.5 rounded-xl hover:bg-like-light transition-colors disabled:opacity-50"
+          onClick={() => { setShowDeleteModal(true); setDeleteSubmitted(false); setDeleteReason(""); setDeleteDetails(""); }}
+          className="text-like font-bold text-sm border-2 border-like/30 px-5 py-2.5 rounded-xl hover:bg-like-light transition-colors"
         >
-          {deleting ? "Deleting…" : "Request Account Deletion"}
+          Request Account Deletion
         </button>
       </div>
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 fade-in" onClick={() => setShowDeleteModal(false)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl slide-up" onClick={(e) => e.stopPropagation()}>
+            {deleteSubmitted ? (
+              <div className="text-center py-4">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-match-light flex items-center justify-center text-3xl">✅</div>
+                <h3 className="text-lg font-extrabold text-[#1A1033] mb-2">Request submitted</h3>
+                <p className="text-sm text-slate-500 mb-6">
+                  Our admin team has been notified and will review your request. Your account stays
+                  fully active until then.
+                </p>
+                <button onClick={() => setShowDeleteModal(false)} className="w-full py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary-dark">
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-lg font-extrabold text-[#1A1033] mb-1">Request Account Deletion</h3>
+                <p className="text-sm text-slate-500 mb-4">Help us understand why — this goes to our admin team for review.</p>
+                <div className="space-y-2 mb-4">
+                  {deletionReasons.map((r) => (
+                    <label key={r} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="radio" name="deleteReason" value={r} checked={deleteReason === r} onChange={() => setDeleteReason(r)} className="accent-like" />
+                      {r}
+                    </label>
+                  ))}
+                </div>
+                <textarea
+                  value={deleteDetails}
+                  onChange={(e) => setDeleteDetails(e.target.value)}
+                  placeholder="Anything else you'd like to share? (optional)"
+                  rows={3}
+                  className="w-full border-2 border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-like mb-4"
+                />
+                <div className="flex gap-3">
+                  <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50">Cancel</button>
+                  <button onClick={handleSubmitDeletionRequest} disabled={deleting || !deleteReason} className="flex-1 py-3 rounded-xl bg-like text-white font-bold text-sm hover:opacity-90 disabled:opacity-50">
+                    {deleting ? "Submitting…" : "Submit Request"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1973,7 +2103,7 @@ function AdminView() {
 
       {/* Sub-nav */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit mb-8 overflow-x-auto scrollbar-hide">
-        {["dashboard", "verification", "users", "reports", "posts"].map((t) => (
+        {["dashboard", "verification", "deletions", "payments", "users", "reports", "posts"].map((t) => (
           <button key={t} onClick={() => setAdminTab(t)} className={`relative px-4 py-2.5 rounded-lg text-sm font-bold capitalize whitespace-nowrap transition-all ${adminTab === t ? "bg-white text-primary shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
             {t}
             {t === "verification" && pendingCount > 0 && (
@@ -2105,6 +2235,10 @@ function AdminView() {
       {adminTab === "reports" && <AdminReportsTab />}
 
       {adminTab === "users" && <AdminUsersTab />}
+
+      {adminTab === "deletions" && <AdminDeletionsTab />}
+
+      {adminTab === "payments" && <AdminPaymentsTab />}
 
       {adminTab === "posts" && <AdminPostsTab />}
     </div>
@@ -2329,7 +2463,8 @@ function AdminUsersTab() {
     try { await unsuspendUser(u.id); } catch (err) { console.error(err); }
   }
 
-  function statusOf(u: AdminUser): "banned" | "suspended" | "active" {
+  function statusOf(u: AdminUser): "deleted" | "banned" | "suspended" | "active" {
+    if (u.deletion_requested_at) return "deleted";
     if (u.is_banned) return "banned";
     if (u.is_suspended_until && new Date(u.is_suspended_until) > new Date()) return "suspended";
     return "active";
@@ -2361,12 +2496,12 @@ function AdminUsersTab() {
                   <td className="px-5 py-4">{u.is_premium ? "⭐" : "—"}</td>
                   <td className="px-5 py-4 text-slate-400">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td className="px-5 py-4">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${status === "banned" ? "bg-like-light text-like" : status === "suspended" ? "bg-amber-100 text-amber-700" : "bg-match-light text-match"}`}>
-                      {status === "banned" ? "Banned" : status === "suspended" ? `Suspended until ${new Date(u.is_suspended_until!).toLocaleDateString()}` : "Active"}
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${status === "deleted" ? "bg-slate-200 text-slate-600" : status === "banned" ? "bg-like-light text-like" : status === "suspended" ? "bg-amber-100 text-amber-700" : "bg-match-light text-match"}`}>
+                      {status === "deleted" ? "Deleted" : status === "banned" ? "Banned" : status === "suspended" ? `Suspended until ${new Date(u.is_suspended_until!).toLocaleDateString()}` : "Active"}
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    {u.id === myUserId ? (
+                    {u.id === myUserId || status === "deleted" ? (
                       <span className="text-xs text-slate-300">—</span>
                     ) : (
                     <div className="flex gap-1.5">
@@ -2394,6 +2529,218 @@ function AdminUsersTab() {
 /* ============================
    ADMIN: POSTS TAB
    ============================ */
+function AdminDeletionsTab() {
+  const [requests, setRequests] = useState<DeletionRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      setRequests(await getDeletionRequests());
+    } catch (err: any) {
+      setError(err?.message || "Failed to load deletion requests.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleApprove(r: DeletionRequest) {
+    if (!window.confirm(`Approve deletion for ${r.user_name}? This permanently purges their data and blocks the account from logging in again.`)) return;
+    setBusyId(r.id);
+    try {
+      await adminApproveDeletion(r.id);
+      setRequests((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "approved" } : x)));
+    } catch (err: any) {
+      window.alert(err?.message || "Failed to approve deletion.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDeny(r: DeletionRequest) {
+    setBusyId(r.id);
+    try {
+      await adminDenyDeletion(r.id);
+      setRequests((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "denied" } : x)));
+    } catch (err: any) {
+      window.alert(err?.message || "Failed to deny request.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loading) return <p className="text-center text-slate-400 py-16">Loading deletion requests…</p>;
+  if (error) return <p className="text-center text-like font-medium py-16">{error}</p>;
+
+  const pending = requests.filter((r) => r.status === "pending");
+  const resolved = requests.filter((r) => r.status !== "pending");
+
+  return (
+    <div className="space-y-4">
+      {pending.length === 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 text-center text-slate-400 py-16">
+          <div className="text-4xl mb-3">✅</div>
+          <p className="font-medium">No pending deletion requests.</p>
+        </div>
+      )}
+      {pending.map((r) => (
+        <div key={r.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <p className="font-bold text-[#1A1033]">{r.user_name}</p>
+              <p className="text-xs text-slate-400">{r.user_email} · requested {new Date(r.created_at).toLocaleString()}</p>
+            </div>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">Pending</span>
+          </div>
+          <p className="text-sm text-[#1A1033] mb-1"><span className="font-semibold">Reason:</span> {r.reason}</p>
+          {r.details && <p className="text-sm text-slate-500 mb-3">"{r.details}"</p>}
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => handleApprove(r)} disabled={busyId === r.id} className="flex-1 py-2.5 rounded-xl bg-like text-white font-bold text-sm hover:opacity-90 disabled:opacity-50">
+              {busyId === r.id ? "Working…" : "Approve & Delete Data"}
+            </button>
+            <button onClick={() => handleDeny(r)} disabled={busyId === r.id} className="flex-1 py-2.5 rounded-xl border-2 border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50">
+              Deny
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {resolved.length > 0 && (
+        <div className="pt-2">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Resolved</p>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-50">
+            {resolved.map((r) => (
+              <div key={r.id} className="flex items-center justify-between px-5 py-3 text-sm">
+                <span className="font-medium text-slate-600">{r.user_name} — {r.reason}</span>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${r.status === "approved" ? "bg-like-light text-like" : "bg-slate-100 text-slate-500"}`}>
+                  {r.status === "approved" ? "Approved" : "Denied"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminPaymentsTab() {
+  const [requests, setRequests] = useState<PremiumPaymentRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    setLoading(true);
+    try { setRequests(await getPaymentRequests()); }
+    catch (err: any) { window.alert(err?.message || "Failed to load payments."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleApprove(r: PremiumPaymentRequest) {
+    if (!window.confirm(`Approve ₱${r.amount} ${r.payment_method.toUpperCase()} payment from ${r.user_name}?\nRef: ${r.reference_number}\n\nThis will activate their Premium immediately.`)) return;
+    setBusyId(r.id);
+    try {
+      await adminApprovePayment(r.id);
+      setRequests((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "approved" } : x)));
+    } catch (err: any) { window.alert(err?.message || "Failed to approve."); }
+    finally { setBusyId(null); }
+  }
+
+  async function handleReject(r: PremiumPaymentRequest) {
+    const note = window.prompt("Optional: reason for rejection (student will not see this, for your records only)");
+    if (note === null) return; // cancelled
+    setBusyId(r.id);
+    try {
+      await adminRejectPayment(r.id, note || undefined);
+      setRequests((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "rejected" } : x)));
+    } catch (err: any) { window.alert(err?.message || "Failed to reject."); }
+    finally { setBusyId(null); }
+  }
+
+  const pending = requests.filter((r) => r.status === "pending");
+  const resolved = requests.filter((r) => r.status !== "pending");
+
+  if (loading) return <p className="text-center text-slate-400 py-16">Loading payment requests…</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-[#F8F7FF] rounded-2xl p-4 text-sm text-slate-600 border border-primary/10">
+        <p className="font-bold text-primary mb-1">💰 How to verify payments</p>
+        <p>Open GCash or Maya → tap <strong>Transactions</strong> → search the reference number. If the amount is ₱30 and the status is Successful, approve it. If not, reject it.</p>
+      </div>
+
+      {pending.length === 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-400">
+          <div className="text-4xl mb-3">✅</div>
+          <p className="font-medium">No pending payment requests.</p>
+        </div>
+      )}
+
+      {pending.map((r) => (
+        <div key={r.id} className="bg-white rounded-2xl border border-primary/20 shadow-sm p-5">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <p className="font-bold text-[#1A1033]">{r.user_name}</p>
+              <p className="text-xs text-slate-400">{r.user_email}</p>
+            </div>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">Pending</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-xs text-slate-400 mb-0.5">Method</p>
+              <p className="font-bold text-[#1A1033]">{r.payment_method === "gcash" ? "💙 GCash" : "💚 Maya"}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3">
+              <p className="text-xs text-slate-400 mb-0.5">Amount</p>
+              <p className="font-bold text-[#1A1033]">₱{r.amount}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 col-span-2">
+              <p className="text-xs text-slate-400 mb-0.5">Reference Number</p>
+              <p className="font-bold text-primary font-mono text-lg">{r.reference_number}</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mb-3">Submitted {new Date(r.created_at).toLocaleString()}</p>
+          <div className="flex gap-2">
+            <button onClick={() => handleApprove(r)} disabled={busyId === r.id}
+              className="flex-1 py-2.5 rounded-xl bg-match text-white font-bold text-sm hover:opacity-90 disabled:opacity-50">
+              {busyId === r.id ? "Working…" : "✅ Approve Premium"}
+            </button>
+            <button onClick={() => handleReject(r)} disabled={busyId === r.id}
+              className="flex-1 py-2.5 rounded-xl border-2 border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50">
+              ❌ Reject
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {resolved.length > 0 && (
+        <div className="pt-2">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Resolved</p>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm divide-y divide-slate-50">
+            {resolved.map((r) => (
+              <div key={r.id} className="flex items-center justify-between px-5 py-3 text-sm gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-slate-600 truncate">{r.user_name} — {r.payment_method === "gcash" ? "GCash" : "Maya"} #{r.reference_number}</p>
+                </div>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${r.status === "approved" ? "bg-match-light text-match" : "bg-slate-100 text-slate-500"}`}>
+                  {r.status === "approved" ? "Approved" : "Rejected"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminPostsTab() {
   const [posts, setPosts] = useState<AdminFeedPost[]>([]);
   const [loading, setLoading] = useState(true);
