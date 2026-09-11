@@ -1654,23 +1654,25 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
         r.onerror = () => rej(new Error("Read failed"));
         r.readAsDataURL(file);
       });
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 200,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: file.type as "image/jpeg" | "image/png" | "image/webp", data: base64 } },
-              { type: "text", text: "This is a GCash or Maya payment receipt screenshot. Extract ONLY the reference number or transaction ID from it. Return ONLY the number/code itself, nothing else. If you cannot find a reference number, return the word NONE." }
-            ]
-          }]
-        })
-      });
+
+      // Route through a Supabase Edge Function — the Anthropic API blocks
+      // direct browser requests (CORS), so the key must stay server-side.
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scan-receipt`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${session?.access_token}`,
+            "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ imageBase64: base64, mediaType: file.type }),
+        }
+      );
+
       const data = await response.json();
-      const extracted = data.content?.[0]?.text?.trim() ?? "NONE";
+      const extracted = (data.referenceNumber ?? "NONE").trim();
       if (extracted && extracted !== "NONE" && extracted.length >= 6) {
         setRefNumber(extracted);
         setScanStatus("found");
