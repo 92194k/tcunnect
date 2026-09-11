@@ -1640,6 +1640,7 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
   const [error, setError] = useState<string | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [scanStatus, setScanStatus] = useState<"scanning" | "found" | "failed" | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   async function handleReceiptUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1647,6 +1648,7 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
     setReceiptFile(file);
     setScanStatus("scanning");
     setRefNumber("");
+    setScanError(null);
     try {
       const base64 = await new Promise<string>((res, rej) => {
         const r = new FileReader();
@@ -1655,8 +1657,6 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
         r.readAsDataURL(file);
       });
 
-      // Route through a Supabase Edge Function — the Anthropic API blocks
-      // direct browser requests (CORS), so the key must stay server-side.
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scan-receipt`,
@@ -1672,6 +1672,11 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
       );
 
       const data = await response.json();
+      if (data.error) {
+        setScanStatus("failed");
+        setScanError(`Scan error: ${data.error}`);
+        return;
+      }
       const extracted = (data.referenceNumber ?? "NONE").trim();
       if (extracted && extracted !== "NONE" && extracted.length >= 6) {
         setRefNumber(extracted);
@@ -1679,8 +1684,9 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
       } else {
         setScanStatus("failed");
       }
-    } catch {
+    } catch (err) {
       setScanStatus("failed");
+      setScanError(`Network error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -1859,6 +1865,11 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
             )}
             {scanStatus === "found" && (
               <p className="text-xs text-match font-medium mb-4">✓ Reference number identified.</p>
+            )}
+            {scanStatus === "failed" && (
+              <p className="text-xs text-like font-medium mb-4">
+                {scanError ?? "Could not identify reference number — please enter it manually below."}
+              </p>
             )}
 
             {/* Reference number */}
