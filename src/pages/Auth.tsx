@@ -17,6 +17,7 @@ export default function Auth({ mode, onNavigate }: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -139,6 +140,29 @@ export default function Auth({ mode, onNavigate }: Props) {
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8">
+          {resetSent ? (
+            /* ── RESET EMAIL SENT ── */
+            <div className="text-center py-4">
+              <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-primary-light flex items-center justify-center text-4xl">
+                📬
+              </div>
+              <h2 className="text-2xl font-extrabold text-[#1A1033] mb-2">Check your email</h2>
+              <p className="text-slate-500 text-sm leading-relaxed mb-2">
+                We sent a password reset link to
+              </p>
+              <p className="font-bold text-primary text-sm mb-4">{email}</p>
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700 font-medium mb-6">
+                💡 Can't find it? Check your <strong>Spam</strong> or <strong>Junk</strong> folder.
+              </div>
+              <button
+                onClick={() => { setResetSent(false); setError(null); }}
+                className="w-full py-3.5 rounded-2xl border-2 border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors"
+              >
+                ← Back to Log In
+              </button>
+            </div>
+          ) : (
+          <>
           {/* Social login */}
           <div className="space-y-3 mb-6">
             <button
@@ -210,7 +234,7 @@ export default function Auth({ mode, onNavigate }: Props) {
                         const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
                         if (resetError) throw resetError;
                         setError(null);
-                        window.alert(`Password reset link sent to ${email} (check spam too).`);
+                        setResetSent(true);
                       } catch (err) {
                         setError(err instanceof Error ? err.message : "Failed to send reset email.");
                       }
@@ -277,6 +301,8 @@ export default function Auth({ mode, onNavigate }: Props) {
               {isLogin ? "Sign Up" : "Log In"}
             </button>
           </p>
+          </>
+          )}
         </div>
 
         <div className="text-center mt-6">
