@@ -14,29 +14,24 @@ type View = "landing" | "login" | "signup" | "onboarding" | "verification-pendin
 export default function App() {
   const [view, setView] = useState<View>("landing");
   const [checkingSession, setCheckingSession] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   useEffect(() => {
-    // Both "is there an existing session to restore" and "did they arrive
-    // via a password-recovery link" are handled through the SAME ordered
-    // event stream here, on purpose — running them as two independent
-    // effects (one calling getSession(), one listening separately for
-    // PASSWORD_RECOVERY) created a race: if the session-restore check
-    // resolved after the recovery redirect fired, it could silently
-    // overwrite the view back to Discover and break password reset.
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === "PASSWORD_RECOVERY") {
+        setIsRecoveryMode(true);
         setView("reset-password");
         setCheckingSession(false);
         return;
       }
 
-      // INITIAL_SESSION covers a normal page load/refresh with an existing
-      // session. SIGNED_IN additionally covers completing Google OAuth —
-      // that flow redirects the whole browser away and back, and while the
-      // return trip is usually a fresh page load (making INITIAL_SESSION
-      // fire correctly on its own), routing through SIGNED_IN too is a
-      // defensive belt-and-suspenders in case any browser/flow completes
-      // the OAuth redirect via history navigation instead of a hard reload.
+      // Don't overwrite reset-password view when SIGNED_IN fires right
+      // after PASSWORD_RECOVERY — that's Supabase establishing the session
+      // for the reset flow, not a real login we should route away from.
+      if (isRecoveryMode && event === "SIGNED_IN") {
+        return;
+      }
+
       if ((event === "INITIAL_SESSION" || event === "SIGNED_IN") && session) {
         const { data: statusRow, error: statusError } = await supabase
           .from("users")
@@ -57,11 +52,6 @@ export default function App() {
             const status = await getMyVerificationStatus();
             setView(status.verification_status === "approved" ? "discover" : "verification-pending");
           } catch {
-            // No users row yet — either a brand-new email signup that
-            // hasn't finished Onboarding, OR a first-time Google sign-in
-            // (new account, per the "same button handles sign-in and
-            // sign-up" flow) — both correctly land here to complete their
-            // profile before the app unlocks.
             setView("onboarding");
           }
         }
@@ -69,7 +59,7 @@ export default function App() {
       if (event === "INITIAL_SESSION") setCheckingSession(false);
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [isRecoveryMode]);
 
   const dashboardViews: View[] = ["discover", "likes", "matches", "messages", "feed", "notifications", "profile", "premium", "admin"];
 
@@ -92,7 +82,7 @@ export default function App() {
       {view === "signup" && <Auth mode="signup" onNavigate={(v) => setView(v as View)} />}
       {view === "onboarding" && <Onboarding onNavigate={(v) => setView(v as View)} />}
       {view === "verification-pending" && <VerificationPending onNavigate={(v) => setView(v as View)} />}
-      {view === "reset-password" && <ResetPassword onNavigate={(v) => setView(v as View)} />}
+      {view === "reset-password" && <ResetPassword onNavigate={(v) => { setIsRecoveryMode(false); setView(v as View); }} />}
       {view === "terms" && <LegalPage page="terms" onNavigate={(v) => setView(v as View)} />}
       {view === "privacy" && <LegalPage page="privacy" onNavigate={(v) => setView(v as View)} />}
       {view === "about" && <InfoPage page="about" onNavigate={(v) => setView(v as View)} />}
