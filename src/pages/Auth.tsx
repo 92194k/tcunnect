@@ -142,22 +142,20 @@ export default function Auth({ mode, onNavigate }: Props) {
 
         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8">
           {resetSent ? (
-            /* ── RESET EMAIL SENT ── */
-            <div className="text-center py-4">
-              <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-primary-light flex items-center justify-center text-4xl">
-                📬
+            <div className="text-center py-2">
+              <div className="text-6xl mb-4 sparkle">📬</div>
+              <h2 className="text-2xl font-extrabold text-[#1A1033] mb-1">Email's on its way!</h2>
+              <p className="text-slate-400 text-sm mb-4">We just sent a reset link to</p>
+              <p className="font-bold text-primary mb-5">{email}</p>
+
+              <div className="bg-amber-50 rounded-2xl px-4 py-3 text-xs text-amber-600 mb-6 text-left flex gap-2 items-start">
+                <span className="text-base flex-shrink-0">📁</span>
+                <span>Not seeing it? Check your <strong>Spam</strong> or <strong>Junk</strong> folder — it sometimes ends up there.</span>
               </div>
-              <h2 className="text-2xl font-extrabold text-[#1A1033] mb-2">Check your email</h2>
-              <p className="text-slate-500 text-sm leading-relaxed mb-2">
-                We sent a password reset link to
-              </p>
-              <p className="font-bold text-primary text-sm mb-4">{email}</p>
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700 font-medium mb-6">
-                💡 Can't find it? Check your <strong>Spam</strong> or <strong>Junk</strong> folder.
-              </div>
+
               <button
                 onClick={() => { setResetSent(false); setError(null); }}
-                className="w-full py-3.5 rounded-2xl border-2 border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors"
+                className="w-full py-3.5 rounded-2xl border-2 border-slate-200 text-slate-500 font-bold text-sm hover:border-primary hover:text-primary transition-all"
               >
                 ← Back to Log In
               </button>

@@ -53,12 +53,10 @@ export default function ResetPassword({ onNavigate }: Props) {
           {done ? (
             /* ── SUCCESS STATE ── */
             <div className="p-8 text-center">
-              <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-match-light flex items-center justify-center text-4xl">
-                🔐
-              </div>
-              <h2 className="text-2xl font-extrabold text-[#1A1033] mb-2">Password updated!</h2>
-              <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-                Your new password has been set. You can now log in with it.
+              <div className="text-6xl mb-4 sparkle">🎉</div>
+              <h2 className="text-2xl font-extrabold text-[#1A1033] mb-2">You're all set!</h2>
+              <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                Your password has been updated. Go ahead and log in!
               </p>
               <button
                 onClick={() => onNavigate("login")}
@@ -70,16 +68,12 @@ export default function ResetPassword({ onNavigate }: Props) {
           ) : (
             /* ── FORM STATE ── */
             <>
-              {/* Header accent */}
-              <div className="bg-gradient-to-r from-primary to-[#EC4899] px-8 py-6">
-                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-2xl mb-3">
-                  🔑
-                </div>
-                <h2 className="text-xl font-extrabold text-white">Set new password</h2>
-                <p className="text-white/70 text-sm mt-1">Choose something strong and memorable.</p>
+              {/* Friendly header */}
+              <div className="text-center mb-6">
+                <div className="text-5xl mb-3">🔑</div>
+                <h2 className="text-2xl font-extrabold text-[#1A1033] mb-1">Set a new password</h2>
+                <p className="text-slate-400 text-sm">Make it something you'll actually remember 😅</p>
               </div>
-
-              <div className="p-8">
                 {error && (
                   <div className="bg-like/10 border border-like/20 rounded-2xl px-4 py-3 text-sm text-like font-medium mb-5 flex gap-2 items-start">
                     <span className="flex-shrink-0 mt-0.5">⚠️</span>
@@ -149,7 +143,6 @@ export default function ResetPassword({ onNavigate }: Props) {
                 <button onClick={() => onNavigate("login")} className="w-full text-center text-sm text-slate-400 hover:text-primary mt-4 transition-colors">
                   ← Back to Log In
                 </button>
-              </div>
             </>
           )}
         </div>
