@@ -1,5 +1,4 @@
 import { useState } from "react";
-import Logo from "../components/Logo";
 import { supabase } from "../lib/supabase";
 
 type Props = { onNavigate: (v: string) => void };
@@ -7,6 +6,8 @@ type Props = { onNavigate: (v: string) => void };
 export default function ResetPassword({ onNavigate }: Props) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -14,8 +15,8 @@ export default function ResetPassword({ onNavigate }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
-    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
+    if (password.length < 8) { setError("Password must contain at least 8 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setLoading(true);
     try {
       const { error: updateError } = await supabase.auth.updateUser({ password });
@@ -28,121 +29,144 @@ export default function ResetPassword({ onNavigate }: Props) {
     }
   }
 
-  // Password strength indicator
-  const strength = password.length === 0 ? 0 : password.length < 8 ? 1 : password.length < 12 ? 2 : 3;
-  const strengthLabel = ["", "Too short", "Good", "Strong"];
-  const strengthColor = ["", "bg-like", "bg-amber-400", "bg-match"];
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F0EBFF] via-white to-[#FFE8F0] flex items-center justify-center p-4 font-display">
-      {/* Background blobs */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-10 left-1/4 w-72 h-72 rounded-full bg-primary opacity-5 blur-3xl" />
-        <div className="absolute bottom-10 right-1/4 w-96 h-96 rounded-full bg-pink-400 opacity-5 blur-3xl" />
-      </div>
+    <div style={{
+      margin: 0,
+      minHeight: "100vh",
+      fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif",
+      background: "radial-gradient(circle at 20% 15%, rgba(124,58,237,0.07), transparent 32%), radial-gradient(circle at 85% 85%, rgba(236,72,153,0.06), transparent 30%), #fafafa",
+      color: "#171329",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "32px 20px",
+    }}>
+      <div style={{ width: "100%", maxWidth: 430 }}>
 
-      <div className="w-full max-w-sm relative">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <button onClick={() => onNavigate("landing")} className="inline-block">
-            <Logo />
-          </button>
+        {/* Brand */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, marginBottom: 30, fontSize: 22, fontWeight: 800, letterSpacing: "-0.6px" }}>
+          <div style={{ width: 27, height: 20, position: "relative", display: "flex", alignItems: "center" }}>
+            <div style={{ position: "absolute", left: 0, width: 14, height: 14, borderRadius: "50%", background: "#7c3aed" }} />
+            <div style={{ position: "absolute", right: 0, width: 14, height: 14, borderRadius: "50%", background: "#7c3aed", opacity: 0.82 }} />
+          </div>
+          <div style={{ color: "#25203b" }}>TCU<span style={{ color: "#7c3aed" }}>nnect</span></div>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden slide-up">
+        {/* Card */}
+        <div style={{ background: "#fff", border: "1px solid #ebe9f1", borderRadius: 18, padding: "38px 36px 32px", boxShadow: "0 18px 45px rgba(35,25,70,0.07), 0 2px 8px rgba(35,25,70,0.03)" }}>
+
           {done ? (
-            /* ── SUCCESS STATE ── */
-            <div className="p-8 text-center">
-              <div className="text-6xl mb-4 sparkle">🎉</div>
-              <h2 className="text-2xl font-extrabold text-[#1A1033] mb-2">You're all set!</h2>
-              <p className="text-slate-400 text-sm leading-relaxed mb-8">
-                Your password has been updated. Go ahead and log in!
-              </p>
+            <div style={{ textAlign: "center", padding: "16px 0" }}>
+              <div style={{ width: 52, height: 52, margin: "0 auto 22px", borderRadius: 14, background: "#f3efff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>🎉</div>
+              <h1 style={{ margin: "0 0 12px", fontSize: 25, fontWeight: 750, letterSpacing: "-0.6px", color: "#1e1933" }}>Password updated!</h1>
+              <p style={{ margin: "0 0 28px", fontSize: 14, color: "#8a849c", lineHeight: 1.55 }}>Your new password is active. You can now log in.</p>
               <button
                 onClick={() => onNavigate("login")}
-                className="w-full py-4 rounded-2xl bg-primary text-white font-extrabold text-base hover:bg-primary-dark transition-colors"
+                style={{ width: "100%", height: 50, border: 0, borderRadius: 10, background: "#6d28d9", color: "#fff", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
               >
                 Go to Log In →
               </button>
             </div>
           ) : (
-            /* ── FORM STATE ── */
             <>
-              {/* Friendly header */}
-              <div className="text-center mb-6">
-                <div className="text-5xl mb-3">🔑</div>
-                <h2 className="text-2xl font-extrabold text-[#1A1033] mb-1">Set a new password</h2>
-                <p className="text-slate-400 text-sm">Make it something you'll actually remember 😅</p>
-              </div>
-                {error && (
-                  <div className="bg-like/10 border border-like/20 rounded-2xl px-4 py-3 text-sm text-like font-medium mb-5 flex gap-2 items-start">
-                    <span className="flex-shrink-0 mt-0.5">⚠️</span>
-                    {error}
+              {/* Icon */}
+              <div style={{ width: 52, height: 52, margin: "0 auto 22px", borderRadius: 14, background: "#f3efff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ position: "relative", marginTop: 7 }}>
+                  <div style={{ width: 19, height: 15, border: "2px solid #6d28d9", borderRadius: 4, position: "relative" }}>
+                    <div style={{ position: "absolute", width: 10, height: 10, border: "2px solid #6d28d9", borderBottom: 0, borderRadius: "8px 8px 0 0", left: "50%", top: -10, transform: "translateX(-50%)" }} />
+                    <div style={{ position: "absolute", width: 3, height: 6, background: "#6d28d9", borderRadius: 3, left: "50%", top: 4, transform: "translateX(-50%)" }} />
                   </div>
-                )}
+                </div>
+              </div>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  {/* New password */}
-                  <div>
-                    <label className="block text-sm font-bold text-[#1A1033] mb-2">New Password</label>
+              {/* Heading */}
+              <div style={{ textAlign: "center", marginBottom: 30 }}>
+                <h1 style={{ margin: "0 0 9px", fontSize: 25, lineHeight: 1.25, letterSpacing: "-0.6px", fontWeight: 750, color: "#1e1933" }}>Set a new password</h1>
+                <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: "#8a849c" }}>Create a new password to secure your account.</p>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "12px 14px", marginBottom: 20, fontSize: 13, color: "#dc2626" }}>
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit}>
+
+                {/* New Password */}
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 650, color: "#342f47" }}>
+                    New Password
+                  </label>
+                  <div style={{ position: "relative" }}>
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="At least 8 characters"
-                      minLength={8}
-                      className="w-full border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-primary transition-colors"
+                      placeholder="Enter your new password"
+                      autoComplete="new-password"
                       required
+                      minLength={8}
+                      style={{ width: "100%", height: 50, padding: "0 48px 0 15px", border: "1px solid #ddd9e8", borderRadius: 10, background: "#fff", fontFamily: "inherit", fontSize: 14, color: "#272238", outline: "none", boxSizing: "border-box" }}
+                      onFocus={(e) => { e.target.style.borderColor = "#8b5cf6"; e.target.style.boxShadow = "0 0 0 3px rgba(124,58,237,0.09)"; }}
+                      onBlur={(e) => { e.target.style.borderColor = "#ddd9e8"; e.target.style.boxShadow = "none"; }}
                     />
-                    {/* Strength bar */}
-                    {password.length > 0 && (
-                      <div className="mt-2">
-                        <div className="flex gap-1 mb-1">
-                          {[1, 2, 3].map((i) => (
-                            <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${i <= strength ? strengthColor[strength] : "bg-slate-100"}`} />
-                          ))}
-                        </div>
-                        <p className={`text-xs font-semibold ${strength === 1 ? "text-like" : strength === 2 ? "text-amber-500" : "text-match"}`}>
-                          {strengthLabel[strength]}
-                        </p>
-                      </div>
-                    )}
+                    <button type="button" onClick={() => setShowPassword(!showPassword)}
+                      style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", border: 0, background: "transparent", padding: 4, color: "#9690a4", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
                   </div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: "#8b8796" }}>Minimum 8 characters</div>
+                </div>
 
-                  {/* Confirm password */}
-                  <div>
-                    <label className="block text-sm font-bold text-[#1A1033] mb-2">Confirm Password</label>
+                {/* Confirm Password */}
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: "block", marginBottom: 8, fontSize: 13, fontWeight: 650, color: "#342f47" }}>
+                    Confirm Password
+                  </label>
+                  <div style={{ position: "relative" }}>
                     <input
-                      type="password"
+                      type={showConfirm ? "text" : "password"}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Repeat your new password"
-                      className={`w-full border-2 rounded-2xl px-4 py-3.5 text-sm focus:outline-none transition-colors ${
-                        confirmPassword.length > 0 && confirmPassword !== password
-                          ? "border-like focus:border-like"
-                          : confirmPassword.length > 0 && confirmPassword === password
-                          ? "border-match focus:border-match"
-                          : "border-slate-200 focus:border-primary"
-                      }`}
+                      placeholder="Re-enter your new password"
+                      autoComplete="new-password"
                       required
+                      minLength={8}
+                      style={{ width: "100%", height: 50, padding: "0 48px 0 15px", border: `1px solid ${confirmPassword.length > 0 && confirmPassword !== password ? "#f87171" : "#ddd9e8"}`, borderRadius: 10, background: "#fff", fontFamily: "inherit", fontSize: 14, color: "#272238", outline: "none", boxSizing: "border-box" }}
+                      onFocus={(e) => { e.target.style.borderColor = "#8b5cf6"; e.target.style.boxShadow = "0 0 0 3px rgba(124,58,237,0.09)"; }}
+                      onBlur={(e) => { e.target.style.borderColor = confirmPassword !== password && confirmPassword.length > 0 ? "#f87171" : "#ddd9e8"; e.target.style.boxShadow = "none"; }}
                     />
-                    {confirmPassword.length > 0 && confirmPassword === password && (
-                      <p className="text-xs text-match font-semibold mt-1.5">✓ Passwords match</p>
-                    )}
+                    <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                      style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", border: 0, background: "transparent", padding: 4, color: "#9690a4", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+                      {showConfirm ? "Hide" : "Show"}
+                    </button>
                   </div>
+                </div>
 
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-primary text-white font-extrabold py-4 rounded-2xl hover:bg-primary-dark transition-colors text-base disabled:opacity-50 mt-2"
-                  >
-                    {loading ? "Updating…" : "Update Password"}
-                  </button>
-                </form>
-
-                <button onClick={() => onNavigate("login")} className="w-full text-center text-sm text-slate-400 hover:text-primary mt-4 transition-colors">
-                  ← Back to Log In
+                {/* Submit */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{ width: "100%", height: 50, marginTop: 7, border: 0, borderRadius: 10, background: loading ? "#a78bfa" : "#6d28d9", color: "#fff", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}
+                >
+                  {loading ? "Updating…" : "Update Password"}
                 </button>
+
+              </form>
+
+              {/* Back */}
+              <button onClick={() => onNavigate("login")}
+                style={{ display: "block", textAlign: "center", marginTop: 22, color: "#77718a", border: 0, background: "transparent", fontFamily: "inherit", fontSize: 13, fontWeight: 550, cursor: "pointer", width: "100%" }}>
+                ← Back to Login
+              </button>
+
+              {/* Security note */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 9, marginTop: 26, paddingTop: 20, borderTop: "1px solid #eeeaf3", fontSize: 11.5, lineHeight: 1.55, color: "#9691a0" }}>
+                <div style={{ width: 7, height: 7, minWidth: 7, marginTop: 5, borderRadius: "50%", background: "#8b5cf6" }} />
+                <div>Your password is securely updated and can be used immediately after the reset is completed.</div>
+              </div>
             </>
           )}
         </div>
