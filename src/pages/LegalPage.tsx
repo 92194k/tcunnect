@@ -45,7 +45,7 @@ export default function LegalPage({ page, onNavigate }: Props) {
       </header>
 
       {/* Page */}
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pb-36">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12 pb-24">
         {/* Page heading */}
         <div className="mb-7">
           <h1 className="text-3xl sm:text-4xl font-extrabold font-display text-[#1A1033]">
@@ -63,24 +63,21 @@ export default function LegalPage({ page, onNavigate }: Props) {
             {isTerms ? <TermsContent /> : <PrivacyContent />}
           </div>
         </div>
+
+        {/* Bottom rounded cap so content doesn't look cut off */}
+        <div className="h-4" />
       </main>
 
-      {/* Pinned bottom nav — always reachable, same idea as the sticky header */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur border-t border-[#E9E5F2]">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3">
+      {/* Pinned bottom nav — single row: pills left, actions right */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-[#E9E5F2]">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <FooterPagesNav current={page} onNavigate={onNavigate} compact />
-          <div className="flex items-center justify-center gap-6 mt-2">
-            <button
-              onClick={() => onNavigate("landing")}
-              className="text-sm font-semibold text-slate-500 hover:text-primary transition"
-            >
-              ← Back to Home
+          <div className="flex items-center gap-4 flex-shrink-0">
+            <button onClick={() => onNavigate("landing")} className="text-xs font-semibold text-slate-500 hover:text-primary transition whitespace-nowrap">
+              ← Home
             </button>
-            <button
-              onClick={() => onNavigate("signup")}
-              className="text-sm font-semibold text-primary hover:underline transition"
-            >
-              Log In / Sign Up
+            <button onClick={() => onNavigate("signup")} className="text-xs font-bold bg-primary text-white px-3 py-1.5 rounded-full hover:bg-primary-dark transition whitespace-nowrap">
+              Log In
             </button>
           </div>
         </div>
@@ -94,7 +91,7 @@ export default function LegalPage({ page, onNavigate }: Props) {
             : window.scrollTo({ top: 0, behavior: "smooth" })
         }
         aria-label={atTop ? "Scroll to bottom" : "Scroll to top"}
-        className="fixed bottom-28 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95"
+        className="fixed bottom-20 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-[#EC4899] text-white shadow-lg shadow-primary/30 flex items-center justify-center transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-primary/40 active:scale-95"
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-300" style={{ transform: atTop ? "rotate(180deg)" : "rotate(0deg)" }}>
           <line x1="12" y1="19" x2="12" y2="5" />
