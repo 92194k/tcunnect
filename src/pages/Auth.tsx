@@ -18,6 +18,7 @@ export default function Auth({ mode, onNavigate }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -230,18 +231,24 @@ export default function Auth({ mode, onNavigate }: Props) {
                     onClick={async () => {
                       if (!email) { setError("Enter your email above first, then click 'Forgot password?'"); return; }
                       setError(null);
+                      setForgotLoading(true);
                       try {
-                        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
+                        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+                          redirectTo: `${window.location.origin}`,
+                        });
                         if (resetError) throw resetError;
                         setError(null);
                         setResetSent(true);
                       } catch (err) {
-                        setError(err instanceof Error ? err.message : "Failed to send reset email.");
+                        setError(err instanceof Error ? err.message : "Failed to send reset email. Check your SMTP settings.");
+                      } finally {
+                        setForgotLoading(false);
                       }
                     }}
-                    className="text-xs text-primary hover:underline font-medium"
+                    disabled={forgotLoading}
+                    className="text-xs text-primary hover:underline font-medium disabled:opacity-50"
                   >
-                    Forgot password?
+                    {forgotLoading ? "Sending…" : "Forgot password?"}
                   </button>
                 )}
               </div>
