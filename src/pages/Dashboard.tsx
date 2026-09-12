@@ -1837,11 +1837,23 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
 
       {/* STEP: SUBMIT REFERENCE */}
       {step === "submit" && (
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden relative">
           <div className="px-6 py-5 border-b border-slate-100">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-0.5">Payment Verification</p>
             <p className="text-xl font-extrabold text-[#1A1033]">Upload Payment Receipt</p>
           </div>
+
+          {/* Full-panel scanning overlay — keeps the user on screen while we process */}
+          {scanStatus === "scanning" && (
+            <div className="absolute inset-0 bg-white/95 z-10 rounded-3xl flex flex-col items-center justify-center gap-4 p-8">
+              <div className="w-14 h-14 rounded-full border-4 border-primary-light border-t-primary animate-spin" />
+              <div className="text-center">
+                <p className="font-extrabold text-[#1A1033] text-lg">Scanning receipt…</p>
+                <p className="text-sm text-slate-400 mt-1">Reading your payment details.</p>
+                <p className="text-xs text-slate-300 mt-3">Please wait, do not close this screen.</p>
+              </div>
+            </div>
+          )}
 
           <div className="p-6">
             <button onClick={() => setStep("qr")} className="text-xs text-slate-400 hover:text-primary mb-5 block">← Back</button>
@@ -1852,7 +1864,7 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
             {receiptFile ? (
               <div className="flex items-center justify-between border border-slate-200 rounded-xl px-4 py-3 mb-5 text-sm">
                 <span className="truncate text-slate-600 text-xs">{receiptFile.name}</span>
-                <button onClick={() => { setReceiptFile(null); setRefNumber(""); setScanStatus(null); }} className="text-slate-400 hover:text-like text-xs font-bold ml-3 flex-shrink-0">Remove</button>
+                <button onClick={() => { setReceiptFile(null); setRefNumber(""); setScanStatus(null); setScanError(null); }} className="text-slate-400 hover:text-like text-xs font-bold ml-3 flex-shrink-0">Remove</button>
               </div>
             ) : (
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl py-4 mb-5 text-sm font-semibold text-slate-500 hover:border-primary hover:text-primary cursor-pointer transition-colors">
@@ -1861,9 +1873,6 @@ function PremiumView({ isPremium, onPurchase }: { isPremium: boolean; onPurchase
               </label>
             )}
 
-            {scanStatus === "scanning" && (
-              <p className="text-xs text-primary font-medium mb-4 animate-pulse">Reading receipt…</p>
-            )}
             {scanStatus === "found" && (
               <p className="text-xs text-match font-medium mb-4">✓ Reference number identified.</p>
             )}
