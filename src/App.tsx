@@ -14,9 +14,23 @@ type View = "landing" | "login" | "signup" | "onboarding" | "verification-pendin
 export default function App() {
   const [view, setView] = useState<View>("landing");
   const [checkingSession, setCheckingSession] = useState(true);
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  // Check URL hash immediately on load — if it contains type=recovery,
+  // we know this is a password reset redirect BEFORE any auth events fire.
+  // This prevents INITIAL_SESSION (which fires first) from routing to
+  // Discover and wiping out the reset page before PASSWORD_RECOVERY fires.
+  const [isRecoveryMode, setIsRecoveryMode] = useState(
+    () => window.location.hash.includes("type=recovery") ||
+          window.location.search.includes("type=recovery")
+  );
 
   useEffect(() => {
+    // If we detected recovery in the URL, go straight to reset page
+    // without waiting for the auth event sequence
+    if (isRecoveryMode) {
+      setView("reset-password");
+      setCheckingSession(false);
+    }
+
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("AUTH EVENT:", event, "recovery mode:", isRecoveryMode, "session:", !!session);
       if (event === "PASSWORD_RECOVERY") {
@@ -26,14 +40,20 @@ export default function App() {
         return;
       }
 
-      // Don't overwrite reset-password view when SIGNED_IN fires right
-      // after PASSWORD_RECOVERY — that's Supabase establishing the session
-      // for the reset flow, not a real login we should route away from.
+      // Ignore SIGNED_IN during recovery — it fires right after
+      // PASSWORD_RECOVERY as Supabase establishes the reset session,
+      // not a real login we should route away from.
       if (isRecoveryMode && event === "SIGNED_IN") {
         return;
       }
 
       if ((event === "INITIAL_SESSION" || event === "SIGNED_IN") && session) {
+        // Skip routing if we're in recovery mode — reset page stays
+        if (isRecoveryMode) {
+          if (event === "INITIAL_SESSION") setCheckingSession(false);
+          return;
+        }
+
         const { data: statusRow, error: statusError } = await supabase
           .from("users")
           .select("is_banned, is_suspended_until, deletion_requested_at")
