@@ -18,6 +18,7 @@ export default function App() {
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("AUTH EVENT:", event, "recovery mode:", isRecoveryMode, "session:", !!session);
       if (event === "PASSWORD_RECOVERY") {
         setIsRecoveryMode(true);
         setView("reset-password");
