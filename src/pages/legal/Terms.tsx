@@ -23,7 +23,7 @@ export default function Terms() {
         </Link>
 
         <h1 className="text-3xl font-bold text-slate-900 mb-1">Terms of Service</h1>
-        <p className="text-sm text-slate-400 mb-8">Last updated: 2026</p>
+        <p className="text-sm text-slate-400 mb-8">Last updated: September 25, 2026</p>
 
         <div className="prose prose-slate max-w-none space-y-8 text-slate-700 text-sm leading-relaxed">
 

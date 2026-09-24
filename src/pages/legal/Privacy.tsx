@@ -24,7 +24,7 @@ export default function Privacy() {
         </Link>
 
         <h1 className="text-3xl font-bold text-slate-900 mb-1">Privacy Policy</h1>
-        <p className="text-sm text-slate-400 mb-8">Last updated: 2026</p>
+        <p className="text-sm text-slate-400 mb-8">Last updated: September 25, 2026</p>
 
         <div className="prose prose-slate max-w-none space-y-8 text-slate-700 text-sm leading-relaxed">
 
@@ -82,7 +82,12 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-lg font-bold text-slate-900 mb-3">10. Contact</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-3">10. Data Privacy Act of 2012</h2>
+            <p>TCUnnect is committed to complying with the <a href="https://privacy.gov.ph/data-privacy-act/" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">Data Privacy Act of 2012 (Republic Act No. 10173)</a>, the primary law in the Philippines that protects individual personal information in both government and private sector systems. Under this law, you have the right to be informed about how your data is collected and used, the right to access your personal information, the right to correct inaccurate data, the right to object to the processing of your data, and the right to erasure or blocking of your data under certain conditions. TCUnnect processes your personal data only for the purposes stated in this policy and takes reasonable steps to ensure your data is protected against unauthorized access, misuse, or disclosure.</p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold text-slate-900 mb-3">11. Contact</h2>
             <p>For privacy concerns, please contact the TCUnnect administration through the contact information provided on the platform.</p>
           </section>
         </div>

@@ -211,12 +211,12 @@ export default function HelpCenter() {
         <div className="mt-12 bg-sky-50 border border-sky-100 rounded-2xl p-6 text-center">
           <p className="text-sm font-semibold text-slate-800 mb-1">Still need help?</p>
           <p className="text-sm text-slate-500 mb-4">Contact the TCUnnect team directly and we'll get back to you as soon as we can.</p>
-          <Link
-            to="/"
+          <a
+            href="mailto:alaokhemberly@gmail.com"
             className="inline-flex items-center gap-2 bg-sky-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sky-700 transition"
           >
             Contact Us
-          </Link>
+          </a>
         </div>
       </main>
 
