@@ -1,21 +1,74 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import TravelMap from "../components/TravelMap";
+import type { MapMarker } from "../components/TravelMap";
 import { useAuthStore, useMatchStore } from "../stores";
-import { MapPin, X, Heart, Sparkles } from "lucide-react";
+import { MapPin, X, Heart, Sparkles, Map } from "lucide-react";
 import type { Match, User } from "../types";
 
-const TRAVELERS: (User & { liked?: boolean })[] = [
-  { id: "u1", email: "", fullName: "Maria", age: 21, bio: "Always looking for new places to explore 🌿", location: "Quezon City", profilePhoto: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=400&q=80", travelInterests: ["Beach", "Food", "Nature"], createdAt: "", isPremium: false, isVerified: true },
-  { id: "u2", email: "", fullName: "Sam", age: 24, bio: "Hiking lover & island hopper 🏔", location: "Cebu City", profilePhoto: "https://images.unsplash.com/photo-1605741455532-384a402cf959?auto=format&fit=crop&w=400&q=80", travelInterests: ["Mountain", "Waterfalls", "Nature"], createdAt: "", isPremium: false, isVerified: false },
-  { id: "u3", email: "", fullName: "Ana", age: 23, bio: "History nerd & food traveler 🍜", location: "Davao City", profilePhoto: "https://images.unsplash.com/photo-1650666908250-b0dcbf54e08b?auto=format&fit=crop&w=400&q=80", travelInterests: ["Heritage", "Food", "City"], createdAt: "", isPremium: true, isVerified: true },
-  { id: "u4", email: "", fullName: "Jake", age: 26, bio: "Adventure seeker & cliff diver 🌊", location: "Makati", profilePhoto: "https://images.unsplash.com/photo-1488161628813-04466f872be2?auto=format&fit=crop&w=400&q=80", travelInterests: ["Beach", "Mountain", "Nature"], createdAt: "", isPremium: false, isVerified: false },
+// ── Demo travelers with coordinates ──────────────────────────────
+const TRAVELERS: (User & { lat: number; lng: number })[] = [
+  {
+    id: "u1", email: "", fullName: "Maria", age: 21,
+    bio: "Always looking for new places to explore 🌿",
+    location: "Quezon City", lat: 14.676, lng: 121.044,
+    profilePhoto: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=400&q=80",
+    travelInterests: ["Beach", "Food", "Nature"],
+    createdAt: "", isPremium: false, isVerified: true,
+  },
+  {
+    id: "u2", email: "", fullName: "Sam", age: 24,
+    bio: "Hiking lover & island hopper 🏔",
+    location: "Cebu City", lat: 10.317, lng: 123.891,
+    profilePhoto: "https://images.unsplash.com/photo-1605741455532-384a402cf959?auto=format&fit=crop&w=400&q=80",
+    travelInterests: ["Mountain", "Waterfalls", "Nature"],
+    createdAt: "", isPremium: false, isVerified: false,
+  },
+  {
+    id: "u3", email: "", fullName: "Ana", age: 23,
+    bio: "History nerd & food traveler 🍜",
+    location: "Davao City", lat: 7.073, lng: 125.613,
+    profilePhoto: "https://images.unsplash.com/photo-1650666908250-b0dcbf54e08b?auto=format&fit=crop&w=400&q=80",
+    travelInterests: ["Heritage", "Food", "City"],
+    createdAt: "", isPremium: true, isVerified: true,
+  },
+  {
+    id: "u4", email: "", fullName: "Jake", age: 26,
+    bio: "Adventure seeker & cliff diver 🌊",
+    location: "Makati", lat: 14.554, lng: 121.017,
+    profilePhoto: "https://images.unsplash.com/photo-1488161628813-04466f872be2?auto=format&fit=crop&w=400&q=80",
+    travelInterests: ["Beach", "Mountain", "Nature"],
+    createdAt: "", isPremium: false, isVerified: false,
+  },
+];
+
+// ── Static gem markers ────────────────────────────────────────────
+const GEM_MARKERS: MapMarker[] = [
+  { id: "feat1", lat: 11.967, lng: 121.924, type: "featured", label: "Boracay", sublabel: "White Beach, Aklan" },
+  { id: "feat2", lat: 11.171, lng: 119.409, type: "featured", label: "El Nido", sublabel: "Palawan" },
+  { id: "feat3", lat: 9.835,  lng: 126.050, type: "featured", label: "Siargao", sublabel: "Surigao del Norte" },
+  { id: "gem1",  lat: 16.412, lng: 120.594, type: "gem",      label: "Baguio City", sublabel: "Session Road cafes" },
+  { id: "gem2",  lat: 17.574, lng: 120.387, type: "gem",      label: "Vigan City", sublabel: "Spanish heritage town" },
+  { id: "gem3",  lat: 9.803,  lng: 124.169, type: "gem",      label: "Chocolate Hills", sublabel: "Bohol" },
+  { id: "gem4",  lat: 11.998, lng: 120.203, type: "gem",      label: "Coron", sublabel: "Palawan dive spots" },
+  { id: "gem5",  lat: 16.919, lng: 121.085, type: "gem",      label: "Batad Rice Terraces", sublabel: "Ifugao" },
+  { id: "gem6",  lat: 13.257, lng: 123.685, type: "gem",      label: "Mayon Volcano", sublabel: "Albay" },
 ];
 
 const INTEREST_EMOJI: Record<string, string> = {
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Food: "🍜",
   Heritage: "🏛", Cafe: "☕", Waterfalls: "💦", City: "🌆",
 };
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 function MatchModal({ match, onClose, onChat }: { match: User; onClose: () => void; onChat: () => void }) {
   return (
@@ -24,7 +77,6 @@ function MatchModal({ match, onClose, onChat }: { match: User; onClose: () => vo
         <div className="text-4xl mb-4">✨</div>
         <h2 className="text-2xl font-bold text-slate-900 mb-1">It's a Match!</h2>
         <p className="text-slate-500 text-sm mb-6">You and {match.fullName} both liked each other</p>
-
         <div className="flex items-center justify-center gap-4 mb-6">
           <div className="h-20 w-20 rounded-full overflow-hidden border-4 border-white shadow-lg">
             <img src="https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=200&q=80" alt="You" className="h-full w-full object-cover" />
@@ -34,7 +86,6 @@ function MatchModal({ match, onClose, onChat }: { match: User; onClose: () => vo
             <img src={match.profilePhoto} alt={match.fullName} className="h-full w-full object-cover" />
           </div>
         </div>
-
         <div className="mb-6">
           <p className="text-xs text-slate-500 mb-2">You both love:</p>
           <div className="flex justify-center gap-2 flex-wrap">
@@ -45,9 +96,7 @@ function MatchModal({ match, onClose, onChat }: { match: User; onClose: () => vo
             ))}
           </div>
         </div>
-
-        <button onClick={onChat}
-          className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 rounded-xl transition mb-3">
+        <button onClick={onChat} className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 rounded-xl transition mb-3">
           Start Chatting 💬
         </button>
         <button onClick={onClose} className="w-full text-slate-500 text-sm py-2 hover:text-slate-700 transition">
@@ -63,22 +112,29 @@ export default function DiscoverPeople() {
   const { user } = useAuthStore();
   const { addMatch } = useMatchStore();
 
+  const [deck, setDeck] = useState(() => shuffle(TRAVELERS));
   const [index, setIndex] = useState(0);
   const [liked, setLiked] = useState<Set<string>>(new Set());
   const [matchedUser, setMatchedUser] = useState<User | null>(null);
+  const [showMapMobile, setShowMapMobile] = useState(false);
 
-  const currentTraveler = TRAVELERS[index];
-  const done = index >= TRAVELERS.length;
+  const currentTraveler = deck[index] ?? null;
 
-  const handlePass = () => setIndex((i) => i + 1);
+  const advance = () => {
+    if (index + 1 >= deck.length) {
+      // Reshuffle and restart
+      setDeck(shuffle(TRAVELERS));
+      setIndex(0);
+    } else {
+      setIndex((i) => i + 1);
+    }
+  };
+
+  const handlePass = () => advance();
 
   const handleLike = () => {
     if (!currentTraveler) return;
-    const newLiked = new Set(liked);
-    newLiked.add(currentTraveler.id);
-    setLiked(newLiked);
-
-    // Simulate match on first like for demo
+    setLiked((prev) => new Set(prev).add(currentTraveler.id));
     if (index === 0) {
       const match: Match = {
         id: `match_${Date.now()}`,
@@ -91,109 +147,144 @@ export default function DiscoverPeople() {
       addMatch(match);
       setMatchedUser(currentTraveler);
     } else {
-      setIndex((i) => i + 1);
+      advance();
     }
   };
+
+  // Build all map markers
+  const mapMarkers = useMemo<MapMarker[]>(() => {
+    const userMarkers: MapMarker[] = deck.map((t, i) => ({
+      id: `u-${t.id}`,
+      lat: t.lat,
+      lng: t.lng,
+      type: "user",
+      label: `${t.fullName}, ${t.age}`,
+      sublabel: t.location,
+      photo: t.profilePhoto,
+      active: i === index,
+    }));
+    return [...GEM_MARKERS, ...userMarkers];
+  }, [deck, index]);
 
   return (
     <AppShell>
       {matchedUser && (
         <MatchModal
           match={matchedUser}
-          onClose={() => { setMatchedUser(null); setIndex((i) => i + 1); }}
+          onClose={() => { setMatchedUser(null); advance(); }}
           onChat={() => { setMatchedUser(null); navigate("/chat"); }}
         />
       )}
 
-      <div className="max-w-lg mx-auto px-4 py-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Find Your Travel People</h1>
-          <p className="text-slate-500 text-sm mt-1">Meet Filipinos who share your interests</p>
-        </div>
+      <div className="flex h-[calc(100vh-4rem)] lg:h-[calc(100vh-4rem)] overflow-hidden">
 
-        {/* Filter chips */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
-          {Object.entries(INTEREST_EMOJI).map(([label, emoji]) => (
-            <button key={label}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-sky-400 hover:text-sky-700 transition">
-              {emoji} {label}
+        {/* ── Left: Profile Card ──────────────────────────────── */}
+        <div className="w-full lg:w-[420px] xl:w-[460px] flex-shrink-0 overflow-y-auto px-4 py-5 lg:border-r lg:border-slate-100">
+
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">Find Your Travel People</h1>
+              <p className="text-slate-500 text-xs mt-0.5">Meet Filipinos who share your interests</p>
+            </div>
+            {/* Mobile map toggle */}
+            <button
+              onClick={() => setShowMapMobile((v) => !v)}
+              className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-50 text-sky-700 text-xs font-semibold border border-sky-200"
+            >
+              <Map className="h-3.5 w-3.5" /> Map
             </button>
-          ))}
+          </div>
+
+          {/* Filter chips */}
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
+            {Object.entries(INTEREST_EMOJI).map(([label, emoji]) => (
+              <button key={label}
+                className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-sky-400 hover:text-sky-700 transition">
+                {emoji} {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile map panel */}
+          {showMapMobile && (
+            <div className="lg:hidden h-56 mb-4 rounded-2xl overflow-hidden border border-slate-200 shadow">
+              <TravelMap markers={mapMarkers} />
+            </div>
+          )}
+
+          {currentTraveler && (
+            <>
+              {/* Card */}
+              <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 overflow-hidden border border-slate-100">
+                <div className="relative h-80">
+                  <img src={currentTraveler.profilePhoto} alt={currentTraveler.fullName} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent" />
+                  {currentTraveler.isVerified && (
+                    <span className="absolute top-3 right-3 bg-sky-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">✓ Verified</span>
+                  )}
+                  {currentTraveler.isPremium && (
+                    <span className="absolute top-3 left-3 bg-amber-400 text-amber-950 text-[10px] font-bold px-2.5 py-1 rounded-full">👑 Premium</span>
+                  )}
+                  <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+                    <h3 className="text-xl font-bold">{currentTraveler.fullName}, {currentTraveler.age}</h3>
+                    <p className="flex items-center gap-1 text-white/80 text-xs mt-0.5">
+                      <MapPin className="h-3 w-3" /> {currentTraveler.location}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  <p className="text-slate-600 text-sm mb-3 italic">"{currentTraveler.bio}"</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {currentTraveler.travelInterests.map((i) => (
+                      <span key={i} className="bg-sky-50 text-sky-700 text-xs font-medium px-2.5 py-1 rounded-full">
+                        {INTEREST_EMOJI[i]} {i}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center justify-center gap-6 mt-5">
+                <button onClick={handlePass}
+                  className="h-14 w-14 bg-white rounded-full shadow-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 transition-all hover:scale-110">
+                  <X className="h-6 w-6" />
+                </button>
+                <button onClick={handleLike}
+                  className="h-14 w-14 bg-rose-500 hover:bg-rose-600 rounded-full shadow-lg shadow-rose-200 flex items-center justify-center text-white transition-all hover:scale-110">
+                  <Heart className="h-6 w-6 fill-current" />
+                </button>
+              </div>
+
+              <p className="text-center text-xs text-slate-400 mt-3 flex items-center justify-center gap-1">
+                <Sparkles className="h-3 w-3" /> Likes are anonymous · You only match when it's mutual
+              </p>
+
+              {/* Progress */}
+              <div className="mt-4 bg-slate-100 rounded-full h-1">
+                <div className="bg-sky-500 h-1 rounded-full transition-all" style={{ width: `${((index + 1) / deck.length) * 100}%` }} />
+              </div>
+              <p className="text-center text-xs text-slate-400 mt-1.5">{index + 1} of {deck.length} profiles</p>
+            </>
+          )}
         </div>
 
-        {done ? (
-          <div className="text-center py-20">
-            <div className="text-5xl mb-4">🎉</div>
-            <h2 className="text-xl font-bold text-slate-900 mb-2">You've seen everyone!</h2>
-            <p className="text-slate-500 text-sm">Check back later for new travelers</p>
+        {/* ── Right: 3D Satellite Map ─────────────────────────── */}
+        <div className="hidden lg:block flex-1 p-4">
+          <div className="h-full rounded-2xl overflow-hidden border border-slate-200 shadow-xl shadow-slate-200/50">
+            <TravelMap markers={mapMarkers} />
           </div>
-        ) : (
-          <div className="relative">
-            {/* Card */}
-            <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 overflow-hidden border border-slate-100">
-              <div className="relative h-96">
-                <img
-                  src={currentTraveler.profilePhoto}
-                  alt={currentTraveler.fullName}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent" />
-                {currentTraveler.isVerified && (
-                  <span className="absolute top-4 right-4 bg-sky-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-                    ✓ Verified
-                  </span>
-                )}
-                {currentTraveler.isPremium && (
-                  <span className="absolute top-4 left-4 bg-amber-400 text-amber-950 text-[10px] font-bold px-2.5 py-1 rounded-full">
-                    👑 Premium
-                  </span>
-                )}
-                <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
-                  <h3 className="text-2xl font-bold">{currentTraveler.fullName}, {currentTraveler.age}</h3>
-                  <p className="flex items-center gap-1 text-white/80 text-sm mt-1">
-                    <MapPin className="h-3.5 w-3.5" /> {currentTraveler.location}
-                  </p>
-                </div>
-              </div>
 
-              <div className="p-5">
-                <p className="text-slate-600 text-sm mb-4 italic">"{currentTraveler.bio}"</p>
-                <div className="flex flex-wrap gap-2">
-                  {currentTraveler.travelInterests.map((i) => (
-                    <span key={i} className="bg-sky-50 text-sky-700 text-xs font-medium px-3 py-1 rounded-full">
-                      {INTEREST_EMOJI[i]} {i}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center justify-center gap-6 mt-6">
-              <button onClick={handlePass}
-                className="h-16 w-16 bg-white rounded-full shadow-lg shadow-slate-200 border border-slate-200 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 hover:shadow-rose-100 transition-all hover:scale-110">
-                <X className="h-7 w-7" />
-              </button>
-              <button onClick={handleLike}
-                className="h-16 w-16 bg-rose-500 hover:bg-rose-600 rounded-full shadow-lg shadow-rose-200 flex items-center justify-center text-white transition-all hover:scale-110">
-                <Heart className="h-7 w-7 fill-current" />
-              </button>
-            </div>
-
-            <p className="text-center text-xs text-slate-400 mt-4 flex items-center justify-center gap-1">
-              <Sparkles className="h-3 w-3" /> Likes are anonymous · You only match when it's mutual
+          {/* Map info bar */}
+          <div className="flex items-center gap-4 mt-2 px-1">
+            <p className="text-xs text-slate-400 flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-sky-500 inline-block" />
+              Active: <span className="font-semibold text-slate-600">{currentTraveler?.location}</span>
             </p>
-
-            {/* Progress */}
-            <div className="mt-6 bg-slate-200 rounded-full h-1">
-              <div
-                className="bg-sky-500 h-1 rounded-full transition-all"
-                style={{ width: `${(index / TRAVELERS.length) * 100}%` }}
-              />
-            </div>
-            <p className="text-center text-xs text-slate-400 mt-2">{index + 1} of {TRAVELERS.length} profiles</p>
+            <p className="text-xs text-slate-400 ml-auto">Satellite · Philippines</p>
           </div>
-        )}
+        </div>
       </div>
     </AppShell>
   );
