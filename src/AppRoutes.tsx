@@ -26,6 +26,12 @@ import Featured from "./pages/Featured";
 // Admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
+// Legal pages
+import Privacy from "./pages/legal/Privacy";
+import Terms from "./pages/legal/Terms";
+import Safety from "./pages/legal/Safety";
+import HelpCenter from "./pages/legal/HelpCenter";
+
 // ─── Guard components ──────────────────────────────────────────
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, onboardingComplete, isLoading } = useAuthStore();
@@ -79,6 +85,10 @@ export default function AppRoutes() {
       />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/safety" element={<Safety />} />
+      <Route path="/help" element={<HelpCenter />} />
 
       {/* Protected App */}
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />

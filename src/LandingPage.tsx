@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 const images = {
   hero: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85",
@@ -494,8 +495,13 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-col justify-between gap-3 text-xs text-slate-500 sm:flex-row">
-            <p>© 2025 TCUnnect. Made for curious Filipino travelers.</p>
-            <p>Privacy · Terms · Safety</p>
+            <p>© 2026 TCUnnect. Made for curious Filipino travelers.</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              <Link to="/help" className="hover:text-white transition">Help Center</Link>
+              <Link to="/privacy" className="hover:text-white transition">Privacy</Link>
+              <Link to="/terms" className="hover:text-white transition">Terms</Link>
+              <Link to="/safety" className="hover:text-white transition">Safety</Link>
+            </div>
           </div>
         </div>
       </footer>
