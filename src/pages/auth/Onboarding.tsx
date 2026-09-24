@@ -86,7 +86,9 @@ export default function Onboarding() {
 
   const [step, setStep] = useState(1);
   const [photoPreview, setPhotoPreview] = useState<string>(user?.profilePhoto ?? "");
+  const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
+  const [saveError, setSaveError] = useState("");
 
   const [region, setRegion]     = useState<Region | null>(null);
   const [province, setProvince] = useState<Province | null>(null);
@@ -115,16 +117,23 @@ export default function Onboarding() {
   const finish = async () => {
     if (!user || interests.length === 0) return;
     setSaving(true);
-    await updateProfile({
-      profilePhoto: photoPreview,
-      bio,
-      location: city?.name
-        ? `${city.name}, ${province?.name ?? ""}`
-        : province?.name ?? region?.name ?? "",
-      travelInterests: interests,
-    });
-    setOnboardingComplete(true);
-    navigate("/dashboard");
+    setSaveError("");
+    try {
+      await updateProfile({
+        fullName: fullName.trim() || user.fullName,
+        profilePhoto: photoPreview,
+        bio,
+        location: city?.name
+          ? `${city.name}, ${province?.name ?? ""}`
+          : province?.name ?? region?.name ?? "",
+        travelInterests: interests,
+      });
+      setOnboardingComplete(true);
+      navigate("/dashboard");
+    } catch (err) {
+      setSaveError("Something went wrong. Please try again.");
+      setSaving(false);
+    }
   };
 
   return (
@@ -171,6 +180,17 @@ export default function Onboarding() {
                   {photoPreview ? "Change photo" : "Add profile photo"}
                 </button>
                 <p className="text-center text-sm font-semibold text-slate-700 mt-2">{user?.fullName}</p>
+              </div>
+
+              {/* Full Name */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Full name</label>
+                <input
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your name"
+                  className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none"
+                />
               </div>
 
               {/* Bio */}
@@ -331,6 +351,10 @@ export default function Onboarding() {
 
               {interests.length === 0 && (
                 <p className="text-xs text-amber-600 mt-3">Pick at least one interest to continue</p>
+              )}
+
+              {saveError && (
+                <p className="text-xs text-red-600 mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>
               )}
 
               <div className="flex gap-3 mt-6">
