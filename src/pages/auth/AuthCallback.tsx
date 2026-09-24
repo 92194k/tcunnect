@@ -10,32 +10,47 @@ export default function AuthCallback() {
   const { loadSession } = useAuthStore();
 
   useEffect(() => {
-    async function handle() {
-      // Let Supabase pick up the OAuth tokens from the URL hash
-      const { data } = await supabase.auth.getSession();
+    // Supabase automatically exchanges the OAuth code in the URL.
+    // We listen for SIGNED_IN which fires once the session is ready.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          subscription.unsubscribe();
 
-      if (!data.session?.user) {
-        navigate("/login", { replace: true });
-        return;
+          // Fetch profile to check if onboarding was already completed
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("travel_interests")
+            .eq("id", session.user.id)
+            .single();
+
+          const hasInterests = (profile?.travel_interests as string[] | null)?.length ?? 0;
+
+          // Sync full auth state into the store
+          await loadSession();
+
+          navigate(hasInterests > 0 ? "/dashboard" : "/onboarding", { replace: true });
+          return;
+        }
+
+        // If no session arrives within a reasonable time, fall back to login
+        if (event === "INITIAL_SESSION" && !session) {
+          subscription.unsubscribe();
+          navigate("/login", { replace: true });
+        }
       }
+    );
 
-      // Fetch profile to check if onboarding was already completed
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("travel_interests")
-        .eq("id", data.session.user.id)
-        .single();
+    // Safety fallback: if nothing fires in 8 seconds, redirect to login
+    const timeout = setTimeout(() => {
+      subscription.unsubscribe();
+      navigate("/login", { replace: true });
+    }, 8000);
 
-      const hasInterests = (profile?.travel_interests as string[] | null)?.length ?? 0;
-
-      // Sync full auth state
-      await loadSession();
-
-      // Route based on completion
-      navigate(hasInterests > 0 ? "/dashboard" : "/onboarding", { replace: true });
-    }
-
-    handle();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   return (
