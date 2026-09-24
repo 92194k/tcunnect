@@ -43,11 +43,6 @@ export default function Login() {
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome back 👋</h1>
           <p className="text-slate-500 text-sm mb-7">Log in to continue your journey</p>
 
-          {/* Demo hint */}
-          <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-            <span className="font-semibold">Demo account:</span> demo@tcunnect.com / password123
-          </div>
-
           {error && (
             <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
               {error}
