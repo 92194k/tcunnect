@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 
 const images = {
   hero: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85",
@@ -170,6 +170,37 @@ const travelers = [
   { name: "Sam", city: "Quezon City", tags: ["Hiking", "Islands"], image: images.traveler2, color: "bg-amber-400" },
   { name: "Ana", city: "Cebu City", tags: ["Culture", "Diving"], image: images.traveler3, color: "bg-sky-500" },
 ];
+
+function ScrollArrow() {
+  const [atBottom, setAtBottom] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const scrolled = window.scrollY;
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      setVisible(total > 200);
+      setAtBottom(scrolled >= total - 40);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <button
+      onClick={() => window.scrollTo({ top: atBottom ? 0 : document.documentElement.scrollHeight, behavior: "smooth" })}
+      aria-label={atBottom ? "Scroll to top" : "Scroll to bottom"}
+      className="fixed bottom-8 right-6 z-50 h-11 w-11 rounded-full bg-sky-600 hover:bg-sky-500 active:scale-95 text-white shadow-lg shadow-sky-700/30 flex items-center justify-center transition-all duration-200"
+    >
+      <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
+        {atBottom ? <path d="m18 15-6-6-6 6" /> : <path d="m6 9 6 6 6-6" />}
+      </svg>
+    </button>
+  );
+}
 
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -468,6 +499,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      <ScrollArrow />
     </main>
   );
 }

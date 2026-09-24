@@ -5,6 +5,7 @@ import {
   Bell, LogOut, User, Crown, Menu, X
 } from "lucide-react";
 import { useState } from "react";
+import ScrollArrow from "./ScrollArrow";
 
 const NAV = [
   { to: "/dashboard", label: "Home", Icon: Home },
@@ -151,6 +152,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="pt-16 lg:pt-16 pb-20 lg:pb-8">
         {children}
       </div>
+
+      <ScrollArrow />
 
       {/* ── Mobile Bottom Nav ── */}
       <nav className="lg:hidden fixed inset-x-0 bottom-0 z-40 bg-white border-t border-slate-200 shadow-lg">
