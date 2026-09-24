@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores";
 import { Compass, MapPin, ArrowRight, ArrowLeft, Check, Camera, Search } from "lucide-react";
