@@ -81,7 +81,14 @@ function SearchableList<T extends { id: string; name: string }>({
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { user, updateProfile, setOnboardingComplete } = useAuthStore();
+  const { user, updateProfile, setOnboardingComplete, onboardingComplete, isLoggedIn } = useAuthStore();
+
+  // If already completed (e.g. returning Google user), skip onboarding
+  useEffect(() => {
+    if (isLoggedIn && onboardingComplete) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isLoggedIn, onboardingComplete, navigate]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);

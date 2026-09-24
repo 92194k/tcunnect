@@ -63,12 +63,12 @@ function profileToUser(profile: Record<string, unknown>): User {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoggedIn: false,
-  isLoading: false,
+  isLoading: true,  // true until loadSession resolves — prevents premature guard redirects
   onboardingComplete: false,
 
   // Load existing session on app start
   loadSession: async () => {
-    if (!isSupabaseConfigured) return; // demo mode — no session to load
+    if (!isSupabaseConfigured) { set({ isLoading: false }); return; } // demo mode
     set({ isLoading: true });
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) { set({ isLoading: false }); return; }
@@ -112,7 +112,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (!isSupabaseConfigured) return;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/onboarding` },
+      // Redirect to /auth/callback — let the router decide dashboard vs onboarding
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
   },
 

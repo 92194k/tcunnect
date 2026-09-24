@@ -46,6 +46,8 @@ export default function SignUp() {
       const msg = err instanceof Error ? err.message : "Sign up failed.";
       if (msg === "__EMAIL_CONFIRM__") {
         setEmailSent(true);
+      } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("user already")) {
+        setError("An account with this email already exists. Please log in instead.");
       } else {
         setError(msg);
       }

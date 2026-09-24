@@ -7,6 +7,7 @@ import LandingPage from "./LandingPage";
 import Login from "./pages/auth/Login";
 import SignUp from "./pages/auth/SignUp";
 import Onboarding from "./pages/auth/Onboarding";
+import AuthCallback from "./pages/auth/AuthCallback";
 
 // App pages
 import Dashboard from "./pages/Dashboard";
@@ -77,6 +78,7 @@ export default function AppRoutes() {
         }
       />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       {/* Protected App */}
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
