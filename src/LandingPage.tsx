@@ -185,8 +185,8 @@ export default function App() {
             <a className="nav-link" href="#community">Community</a>
           </div>
           <div className="hidden items-center gap-5 sm:flex">
-            <a className="text-sm font-semibold text-slate-700 hover:text-sky-700" href="#login">Log In</a>
-            <a className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700" href="#join">
+            <a className="text-sm font-semibold text-slate-700 hover:text-sky-700" href="/login">Log In</a>
+            <a className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700" href="/signup">
               Get Started
             </a>
           </div>
@@ -206,8 +206,8 @@ export default function App() {
               <a href="#gems" onClick={() => setMenuOpen(false)}>Hidden Gems</a>
               <a href="#community" onClick={() => setMenuOpen(false)}>Community</a>
               <div className="mt-1 flex items-center gap-3 border-t border-slate-100 pt-4">
-                <a className="flex-1 text-center" href="#login" onClick={() => setMenuOpen(false)}>Log In</a>
-                <a className="flex-1 rounded-full bg-sky-600 px-4 py-2.5 text-center text-white" href="#join" onClick={() => setMenuOpen(false)}>Get Started</a>
+                <a className="flex-1 text-center" href="/login" onClick={() => setMenuOpen(false)}>Log In</a>
+                <a className="flex-1 rounded-full bg-sky-600 px-4 py-2.5 text-center text-white" href="/signup" onClick={() => setMenuOpen(false)}>Get Started</a>
               </div>
             </div>
           </div>
@@ -232,7 +232,7 @@ export default function App() {
             <p className="mt-7 text-lg font-medium text-white/90 sm:text-xl">A social travel platform for Filipinos.</p>
             <p className="mt-2 text-base text-white/70 sm:text-lg">Connect. Discover. Enjoy.</p>
             <div className="mt-9 flex flex-wrap gap-3">
-              <a className="rounded-full bg-sky-500 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-sky-950/20 transition hover:-translate-y-0.5 hover:bg-sky-400" href="#join">
+              <a className="rounded-full bg-sky-500 px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-sky-950/20 transition hover:-translate-y-0.5 hover:bg-sky-400" href="/signup">
                 Get Started
               </a>
               <a className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/12 px-7 py-3.5 text-sm font-bold text-white backdrop-blur-md transition hover:bg-white/20" href="#gems">
@@ -288,37 +288,6 @@ export default function App() {
         </div>
       </section>
 
-      <section className="section-pad" id="discover">
-        <div className="mx-auto max-w-7xl px-5 lg:px-8">
-          <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-            <div className="max-w-xl">
-              <div className="eyebrow text-sky-700"><Icon name="compass" className="h-4 w-4" /> Hidden Gems</div>
-              <h2 className="section-title mt-4">There’s more to discover.</h2>
-              <p className="section-copy">Find quiet shores, misty mountains, and local favorites across the Philippines.</p>
-            </div>
-            <ArrowLink href="#discover">Explore All Gems</ArrowLink>
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {gems.map((gem) => (
-              <a className="group overflow-hidden rounded-3xl bg-white shadow-[0_10px_35px_rgba(15,45,65,0.07)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,45,65,0.12)]" href="#discover" key={gem.name}>
-                <div className="h-56 overflow-hidden">
-                  <img className="h-full w-full object-cover transition duration-500 group-hover:scale-105" src={gem.image} alt={`${gem.name}, ${gem.location}`} />
-                </div>
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="font-bold text-slate-900">{gem.name}</h3>
-                      <p className="mt-1 text-xs text-slate-500">{gem.location}</p>
-                    </div>
-                    <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold text-sky-700">{gem.icon} {gem.category}</span>
-                  </div>
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section className="section-pad bg-sky-50/70" id="travelers">
         <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
           <div>
@@ -349,6 +318,37 @@ export default function App() {
                   </div>
                 </div>
               </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section-pad" id="discover">
+        <div className="mx-auto max-w-7xl px-5 lg:px-8">
+          <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+            <div className="max-w-xl">
+              <div className="eyebrow text-sky-700"><Icon name="compass" className="h-4 w-4" /> Hidden Gems</div>
+              <h2 className="section-title mt-4">There’s more to discover.</h2>
+              <p className="section-copy">Find quiet shores, misty mountains, and local favorites across the Philippines.</p>
+            </div>
+            <ArrowLink href="#discover">Explore All Gems</ArrowLink>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {gems.map((gem) => (
+              <a className="group overflow-hidden rounded-3xl bg-white shadow-[0_10px_35px_rgba(15,45,65,0.07)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,45,65,0.12)]" href="#discover" key={gem.name}>
+                <div className="h-56 overflow-hidden">
+                  <img className="h-full w-full object-cover transition duration-500 group-hover:scale-105" src={gem.image} alt={`${gem.name}, ${gem.location}`} />
+                </div>
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-bold text-slate-900">{gem.name}</h3>
+                      <p className="mt-1 text-xs text-slate-500">{gem.location}</p>
+                    </div>
+                    <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold text-sky-700">{gem.icon} {gem.category}</span>
+                  </div>
+                </div>
+              </a>
             ))}
           </div>
         </div>
@@ -444,7 +444,7 @@ export default function App() {
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">The Philippines is waiting</p>
             <h2 className="mt-5 text-4xl font-bold leading-tight tracking-[-0.04em] sm:text-5xl">Ready to find your next adventure?</h2>
             <p className="mt-5 text-lg text-white/75">Connect. Discover. Enjoy.</p>
-            <a className="mt-9 inline-flex w-fit items-center gap-2 rounded-full bg-amber-300 px-7 py-3.5 text-sm font-bold text-slate-900 transition hover:gap-3 hover:bg-amber-200" href="#top">
+            <a className="mt-9 inline-flex w-fit items-center gap-2 rounded-full bg-amber-300 px-7 py-3.5 text-sm font-bold text-slate-900 transition hover:gap-3 hover:bg-amber-200" href="/signup">
               Join TCUnnect <Icon name="arrow" className="h-4 w-4" />
             </a>
           </div>
