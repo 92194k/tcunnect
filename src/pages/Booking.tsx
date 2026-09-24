@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore, useBookingStore } from "../stores";
-import { Check, Calendar, Users, MapPin, ArrowLeft, ArrowRight } from "lucide-react";
+import { Check, Calendar, Users, MapPin, ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import type { Booking, TripType } from "../types";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const TRIP_TYPES: { type: TripType; label: string; desc: string; emoji: string }[] = [
   { type: "solo", label: "Solo", desc: "Just you — your own pace, your own adventure", emoji: "🧍" },
@@ -30,12 +31,15 @@ export default function Booking() {
   const [guests, setGuests] = useState(1);
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const gemName = GEM_NAMES[gemId ?? ""] ?? "Hidden Gem";
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!user || !gemId) return;
-    const booking: Booking = {
+    setSubmitting(true);
+
+    const localBooking: Booking = {
       id: `bk_${Date.now()}`,
       userId: user.id,
       gemId,
@@ -47,7 +51,36 @@ export default function Booking() {
       status: "pending",
       createdAt: new Date().toISOString(),
     };
-    addBooking(booking);
+
+    if (isSupabaseConfigured) {
+      try {
+        const { data } = await supabase
+          .from("bookings")
+          .insert({
+            user_id: user.id,
+            gem_id: gemId,
+            gem_name: gemName,
+            trip_type: tripType,
+            date,
+            guests,
+            notes: notes || null,
+            status: "pending",
+          })
+          .select("id, created_at")
+          .single();
+
+        if (data) {
+          addBooking({ ...localBooking, id: data.id, createdAt: data.created_at });
+        }
+      } catch {
+        // Fall back to local-only
+        addBooking(localBooking);
+      }
+    } else {
+      addBooking(localBooking);
+    }
+
+    setSubmitting(false);
     setSubmitted(true);
   };
 
@@ -219,8 +252,9 @@ export default function Booking() {
             <div className="bg-sky-50 border border-sky-100 rounded-xl p-4 mb-6 text-xs text-sky-700">
               📋 This booking is <strong>free to submit</strong>. Payment (if required) is arranged directly with the local guide or venue.
             </div>
-            <button onClick={handleConfirm}
-              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-sky-200">
+            <button onClick={handleConfirm} disabled={submitting}
+              className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-sky-200 flex items-center justify-center gap-2">
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
               Confirm Booking 🎉
             </button>
           </div>

@@ -444,9 +444,11 @@ export default function Premium() {
                 <li key={f} className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-slate-500 shrink-0" />{f}</li>
               ))}
             </ul>
-            <button className="w-full border border-slate-600 hover:bg-slate-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+            <a href="mailto:alaokhemberly@gmail.com?subject=TCUnnect Business Partner Inquiry"
+              className="block w-full text-center border border-slate-600 hover:bg-slate-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
               Contact Us →
-            </button>
+            </a>
+            <p className="text-xs text-slate-400 text-center mt-2">TCUnnect Admin: alaokhemberly@gmail.com</p>
           </div>
         </div>
 
