@@ -22,6 +22,7 @@ interface AuthState {
   setUser: (user: User) => void;
   setOnboardingComplete: (val: boolean) => void;
   loadSession: () => Promise<void>;
+  updateProfile: (fields: Partial<User>) => Promise<void>;
 }
 
 // ─── Demo mode (no .env) ─────────────────────────────────────
@@ -154,6 +155,25 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   setUser: (user) => set({ user, isLoggedIn: true }),
   setOnboardingComplete: (val) => set({ onboardingComplete: val }),
+
+  updateProfile: async (fields) => {
+    const { user } = useAuthStore.getState();
+    if (!user) return;
+    const updated = { ...user, ...fields };
+    set({ user: updated });
+
+    if (!isSupabaseConfigured) return;
+
+    // Map camelCase → snake_case for Supabase
+    const row: Record<string, unknown> = {};
+    if (fields.fullName     !== undefined) row.full_name       = fields.fullName;
+    if (fields.bio          !== undefined) row.bio             = fields.bio;
+    if (fields.location     !== undefined) row.location        = fields.location;
+    if (fields.profilePhoto !== undefined) row.profile_photo   = fields.profilePhoto;
+    if (fields.travelInterests !== undefined) row.travel_interests = fields.travelInterests;
+
+    await supabase.from("profiles").update(row).eq("id", user.id);
+  },
 }));
 
 // ─── Match Store ─────────────────────────────────────────────
