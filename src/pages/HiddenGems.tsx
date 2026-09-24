@@ -16,7 +16,6 @@ interface Gem {
   name: string;
   location: string;
   category: string;
-  emoji: string;
   images: string[];
   rating: number;
   review_count: number;
@@ -67,7 +66,7 @@ export default function HiddenGems() {
 
     const { data } = await supabase
       .from("hidden_gems")
-      .select("id, name, location, category, emoji, images, rating, review_count, budget_level, tip, is_featured")
+      .select("id, name, location, category, images, rating, review_count, budget_level, tip, is_featured")
       .eq("status", "approved")
       .order("is_featured", { ascending: false })
       .order("rating", { ascending: false });
@@ -111,7 +110,6 @@ export default function HiddenGems() {
     setSubmitting(true);
     setSubmitError("");
 
-    const emoji = CATEGORY_EMOJIS[form.category] ?? "📍";
     const status = isAdmin ? "approved" : "pending";
 
     try {
@@ -144,7 +142,6 @@ export default function HiddenGems() {
         rating: form.rating ? parseFloat(form.rating) : 0,
         review_count: form.review_count ? parseInt(form.review_count) : 0,
         tip: form.tip.trim(),
-        emoji,
         is_featured: isAdmin ? form.is_featured : false,
         status,
         submitted_by: user?.id ?? null,
@@ -477,7 +474,7 @@ export default function HiddenGems() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-5xl">
-                      {gem.emoji}
+                      {CATEGORY_EMOJIS[gem.category] ?? "📍"}
                     </div>
                   )}
                   <button
@@ -487,7 +484,7 @@ export default function HiddenGems() {
                     <Bookmark className={`h-4 w-4 ${saved.has(gem.id) ? "fill-sky-600 text-sky-600" : "text-slate-500"}`} />
                   </button>
                   <span className="absolute top-3 left-3 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-full">
-                    {gem.emoji} {gem.category}
+                    {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
                   </span>
                   {gem.is_featured && (
                     <span className="absolute bottom-3 left-3 bg-amber-400 text-amber-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full">

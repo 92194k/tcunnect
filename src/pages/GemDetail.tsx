@@ -1,4 +1,9 @@
 import { useState, useEffect } from "react";
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+  Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
+  Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
+};
 import { useParams, Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { MapPin, Star, ArrowLeft, Heart, Share2, Calendar, Clock, Users, ChevronRight, Loader2 } from "lucide-react";
@@ -9,7 +14,6 @@ interface Gem {
   name: string;
   location: string;
   category: string;
-  emoji: string;
   images: string[];
   rating: number;
   review_count: number;
@@ -47,7 +51,7 @@ export default function GemDetail() {
 
     const { data, error } = await supabase
       .from("hidden_gems")
-      .select("id, name, location, category, emoji, images, rating, review_count, budget_level, description, tip, best_time, is_featured")
+      .select("id, name, location, category, images, rating, review_count, budget_level, description, tip, best_time, is_featured")
       .eq("id", id)
       .eq("status", "approved")
       .single();
@@ -126,7 +130,7 @@ export default function GemDetail() {
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-7xl">
-              {gem.emoji}
+              {CATEGORY_EMOJIS[gem.category] ?? "📍"}
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
@@ -151,7 +155,7 @@ export default function GemDetail() {
           {/* Category badge */}
           <div className="absolute bottom-4 left-4 flex items-center gap-2">
             <span className="bg-white/90 text-slate-700 text-xs font-bold px-3 py-1 rounded-full">
-              {gem.emoji} {gem.category}
+              {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
             </span>
             {gem.is_featured && (
               <span className="bg-amber-400 text-amber-950 text-xs font-extrabold px-3 py-1 rounded-full">
