@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
-import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check } from "lucide-react";
+import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check, Image, Link2 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const CATEGORIES = ["All", "Beach", "Mountain", "Nature", "Heritage", "Cafe", "Waterfalls", "City", "Food"];
@@ -40,22 +40,26 @@ const EMPTY_FORM = {
 
 export default function HiddenGems() {
   const { user } = useAuthStore();
+  const isAdmin = user?.isAdmin === true;
+
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [gems, setGems] = useState<Gem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Submit gem modal
+  // Submit gem modal state
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageMode, setImageMode] = useState<"upload" | "url">("upload");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchGems();
-  }, []);
+  useEffect(() => { fetchGems(); }, []);
 
   async function fetchGems() {
     setLoading(true);
@@ -73,7 +77,8 @@ export default function HiddenGems() {
   }
 
   const filtered = gems.filter((g) => {
-    const matchesQuery = g.name.toLowerCase().includes(query.toLowerCase()) || g.location.toLowerCase().includes(query.toLowerCase());
+    const q = query.toLowerCase();
+    const matchesQuery = g.name.toLowerCase().includes(q) || g.location.toLowerCase().includes(q);
     const matchesCat = activeCategory === "All" || g.category === activeCategory;
     return matchesQuery && matchesCat;
   });
@@ -87,21 +92,46 @@ export default function HiddenGems() {
     });
   };
 
+  function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setForm({ ...form, imageUrl: "" });
+  }
+
+  function clearImage() {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
   const handleSubmit = async () => {
     if (!form.name.trim() || !form.location.trim()) return;
     setSubmitting(true);
     setSubmitError("");
 
     const emoji = CATEGORY_EMOJIS[form.category] ?? "📍";
-    const isAdmin = user?.isAdmin === true;
     const status = isAdmin ? "approved" : "pending";
 
     try {
       if (!isSupabaseConfigured) {
-        // Demo mode — just show success
         setSubmitted(true);
         setSubmitting(false);
         return;
+      }
+
+      // Upload image if file was picked
+      let finalImageUrl = form.imageUrl.trim();
+      if (imageFile) {
+        const ext = imageFile.name.split(".").pop();
+        const path = `gems/${user?.id ?? "anon"}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("gem-images")
+          .upload(path, imageFile, { upsert: true, contentType: imageFile.type });
+        if (uploadError) throw new Error("Image upload failed: " + uploadError.message);
+        const { data: { publicUrl } } = supabase.storage.from("gem-images").getPublicUrl(path);
+        finalImageUrl = publicUrl;
       }
 
       const { error } = await supabase.from("hidden_gems").insert({
@@ -109,21 +139,21 @@ export default function HiddenGems() {
         location: form.location.trim(),
         category: form.category,
         description: form.description.trim(),
-        images: form.imageUrl.trim() ? [form.imageUrl.trim()] : [],
+        images: finalImageUrl ? [finalImageUrl] : [],
         budget_level: form.budget_level,
         rating: form.rating ? parseFloat(form.rating) : 0,
         review_count: form.review_count ? parseInt(form.review_count) : 0,
         tip: form.tip.trim(),
         emoji,
-        is_featured: form.is_featured,
+        is_featured: isAdmin ? form.is_featured : false,
         status,
         submitted_by: user?.id ?? null,
       });
 
-      if (error) throw error;
+      if (error) throw new Error(error.message);
 
       setSubmitted(true);
-      if (isAdmin) fetchGems(); // refresh list immediately for admin
+      if (isAdmin) fetchGems();
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Failed to submit. Please try again.");
     } finally {
@@ -136,17 +166,18 @@ export default function HiddenGems() {
     setSubmitted(false);
     setForm(EMPTY_FORM);
     setSubmitError("");
+    clearImage();
   };
 
   return (
     <AppShell>
-      {/* ── Submit Gem Modal ──────────────────────────────────────── */}
+      {/* ── Submit Gem Modal ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl z-10">
               <h2 className="font-bold text-slate-900">
-                {submitted ? "Gem Submitted! 🎉" : "Submit a Hidden Gem"}
+                {submitted ? "Gem Submitted! 🎉" : isAdmin ? "Add a Hidden Gem" : "Submit a Hidden Gem"}
               </h2>
               <button onClick={closeModal} className="text-slate-400 hover:text-slate-600">
                 <X className="h-5 w-5" />
@@ -159,10 +190,10 @@ export default function HiddenGems() {
                   <Check className="h-8 w-8 text-emerald-600" />
                 </div>
                 <h3 className="font-bold text-slate-900 text-lg mb-2">
-                  {user?.isAdmin ? "Gem added successfully!" : "Thanks for sharing!"}
+                  {isAdmin ? "Gem added successfully!" : "Thanks for sharing!"}
                 </h3>
                 <p className="text-slate-500 text-sm mb-6">
-                  {user?.isAdmin
+                  {isAdmin
                     ? "Your gem is now live and visible to everyone."
                     : "Your submission is pending review. We'll add it to the map soon!"}
                 </p>
@@ -175,105 +206,204 @@ export default function HiddenGems() {
               <div className="p-5 space-y-4">
                 {submitError && (
                   <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-600">
-                    {submitError}
+                    ⚠️ {submitError}
                   </div>
                 )}
 
+                {/* Name */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Gem Name *</label>
+                  <input
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Tinago Falls"
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Location *</label>
+                  <input
+                    value={form.location}
+                    onChange={(e) => setForm({ ...form, location: e.target.value })}
+                    placeholder="e.g. Iligan City, Lanao del Norte"
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+
+                {/* Category + Budget */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Gem Name *</label>
-                    <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="e.g. Tinago Falls"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
-                  </div>
-
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Location *</label>
-                    <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
-                      placeholder="e.g. Iligan City, Lanao del Norte"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
-                  </div>
-
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
-                    <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none">
-                      {CATEGORIES.filter(c => c !== "All").map(c => (
+                    <select
+                      value={form.category}
+                      onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                    >
+                      {CATEGORIES.filter((c) => c !== "All").map((c) => (
                         <option key={c} value={c}>{CATEGORY_EMOJIS[c]} {c}</option>
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-xs font-medium text-slate-600 mb-1">Budget</label>
-                    <select value={form.budget_level} onChange={(e) => setForm({ ...form, budget_level: e.target.value })}
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none">
+                    <select
+                      value={form.budget_level}
+                      onChange={(e) => setForm({ ...form, budget_level: e.target.value })}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                    >
                       <option value="₱">₱ Budget</option>
                       <option value="₱₱">₱₱ Mid-range</option>
                       <option value="₱₱₱">₱₱₱ Premium</option>
                     </select>
                   </div>
+                </div>
 
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
-                    <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                      placeholder="What makes this place special?"
-                      rows={3}
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none resize-none" />
+                {/* Description */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    placeholder="What makes this place special?"
+                    rows={3}
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none resize-none"
+                  />
+                </div>
+
+                {/* Image — upload or URL */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-2">Photo</label>
+
+                  {/* Mode toggle */}
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={() => { setImageMode("upload"); clearImage(); setForm({ ...form, imageUrl: "" }); }}
+                      className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition ${imageMode === "upload" ? "bg-sky-600 border-sky-600 text-white" : "border-slate-200 text-slate-500 hover:border-sky-300"}`}
+                    >
+                      <Image className="h-3 w-3" /> Upload photo
+                    </button>
+                    <button
+                      onClick={() => { setImageMode("url"); clearImage(); }}
+                      className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition ${imageMode === "url" ? "bg-sky-600 border-sky-600 text-white" : "border-slate-200 text-slate-500 hover:border-sky-300"}`}
+                    >
+                      <Link2 className="h-3 w-3" /> Paste URL
+                    </button>
                   </div>
 
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Image URL</label>
-                    <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                      placeholder="https://example.com/photo.jpg"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
-                    <p className="text-[10px] text-slate-400 mt-1">Paste a direct image link (Unsplash, Google Photos, etc.)</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Rating (0–5)</label>
-                    <input value={form.rating} onChange={(e) => setForm({ ...form, rating: e.target.value })}
-                      placeholder="4.8" type="number" min="0" max="5" step="0.1"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Review Count</label>
-                    <input value={form.review_count} onChange={(e) => setForm({ ...form, review_count: e.target.value })}
-                      placeholder="120" type="number" min="0"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
-                  </div>
-
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-600 mb-1">Insider Tip</label>
-                    <input value={form.tip} onChange={(e) => setForm({ ...form, tip: e.target.value })}
-                      placeholder="e.g. Go early morning to avoid crowds"
-                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
-                  </div>
-
-                  {user?.isAdmin && (
-                    <div className="col-span-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={form.is_featured}
-                          onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
-                          className="h-4 w-4 rounded accent-sky-600" />
-                        <span className="text-sm text-slate-700 font-medium">✨ Feature this gem on the Featured page</span>
-                      </label>
+                  {imageMode === "upload" ? (
+                    <>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFilePick}
+                      />
+                      {imagePreview ? (
+                        <div className="relative rounded-xl overflow-hidden border border-slate-100">
+                          <img src={imagePreview} alt="" className="w-full max-h-40 object-cover" />
+                          <button
+                            onClick={clearImage}
+                            className="absolute top-2 right-2 h-7 w-7 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full border-2 border-dashed border-slate-200 rounded-xl py-6 text-center hover:border-sky-300 transition"
+                        >
+                          <Image className="h-6 w-6 text-slate-300 mx-auto mb-1" />
+                          <p className="text-xs text-slate-400">Click to upload a photo</p>
+                          <p className="text-[10px] text-slate-300 mt-0.5">JPG, PNG, WEBP</p>
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div>
+                      <input
+                        value={form.imageUrl}
+                        onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                        placeholder="https://example.com/photo.jpg"
+                        className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Paste a direct image link (Unsplash, etc.)</p>
+                      {form.imageUrl && (
+                        <img src={form.imageUrl} alt="" className="mt-2 w-full max-h-32 object-cover rounded-xl border border-slate-100" onError={(e) => (e.currentTarget.style.display = "none")} />
+                      )}
                     </div>
                   )}
                 </div>
 
-                {!user?.isAdmin && (
+                {/* Rating + Review Count */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Rating (0–5)</label>
+                    <input
+                      value={form.rating}
+                      onChange={(e) => setForm({ ...form, rating: e.target.value })}
+                      placeholder="4.8"
+                      type="number" min="0" max="5" step="0.1"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Review Count</label>
+                    <input
+                      value={form.review_count}
+                      onChange={(e) => setForm({ ...form, review_count: e.target.value })}
+                      placeholder="120"
+                      type="number" min="0"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Tip */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Insider Tip</label>
+                  <input
+                    value={form.tip}
+                    onChange={(e) => setForm({ ...form, tip: e.target.value })}
+                    placeholder="e.g. Go early morning to avoid crowds"
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+
+                {/* ✨ Feature checkbox — ADMIN ONLY */}
+                {isAdmin && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.is_featured}
+                        onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
+                        className="h-4 w-4 rounded accent-amber-500"
+                      />
+                      <div>
+                        <p className="text-sm text-slate-800 font-medium">✨ Feature this gem</p>
+                        <p className="text-[10px] text-slate-500">Appears in "Featured by TCUnnect" — admin only</p>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {!isAdmin && (
                   <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-700">
                     📋 Your submission will be reviewed by our team before going live.
                   </div>
                 )}
 
-                <button onClick={handleSubmit}
+                <button
+                  onClick={handleSubmit}
                   disabled={!form.name.trim() || !form.location.trim() || submitting}
-                  className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2">
+                  className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2"
+                >
                   {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {user?.isAdmin ? "Add Gem Now" : "Submit for Review"}
+                  {isAdmin ? "Add Gem Now" : "Submit for Review"}
                 </button>
               </div>
             )}
@@ -287,14 +417,17 @@ export default function HiddenGems() {
             <h1 className="text-2xl font-bold text-slate-900">Hidden Gems</h1>
             <p className="text-slate-500 text-sm mt-1">Discover underrated destinations across the Philippines</p>
           </div>
-          {user?.isAdmin && (
-            <button onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition">
+          {isAdmin && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition"
+            >
               <Plus className="h-4 w-4" /> Add Gem
             </button>
           )}
         </div>
 
+        {/* Search */}
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
@@ -305,12 +438,16 @@ export default function HiddenGems() {
           />
         </div>
 
+        {/* Category pills */}
         <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
           {CATEGORIES.map((cat) => (
-            <button key={cat} onClick={() => setActiveCategory(cat)}
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
               className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-medium transition ${
                 activeCategory === cat ? "bg-sky-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:border-sky-300"
-              }`}>
+              }`}
+            >
               {cat}
             </button>
           ))}
@@ -322,14 +459,31 @@ export default function HiddenGems() {
           </div>
         )}
 
+        {/* Gem grid */}
         {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {filtered.map((gem) => (
-              <Link key={gem.id} to={`/gems/${gem.id}`} className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition">
-                <div className="relative h-44 overflow-hidden">
-                  <img src={gem.images?.[0] ?? ""} alt={gem.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                  <button onClick={(e) => toggleSave(gem.id, e)}
-                    className="absolute top-3 right-3 h-8 w-8 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white transition">
+              <Link
+                key={gem.id}
+                to={`/gems/${gem.id}`}
+                className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition"
+              >
+                <div className="relative h-44 overflow-hidden bg-slate-100">
+                  {gem.images?.[0] ? (
+                    <img
+                      src={gem.images[0]}
+                      alt={gem.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-5xl">
+                      {gem.emoji}
+                    </div>
+                  )}
+                  <button
+                    onClick={(e) => toggleSave(gem.id, e)}
+                    className="absolute top-3 right-3 h-8 w-8 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white transition"
+                  >
                     <Bookmark className={`h-4 w-4 ${saved.has(gem.id) ? "fill-sky-600 text-sky-600" : "text-slate-500"}`} />
                   </button>
                   <span className="absolute top-3 left-3 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-full">
@@ -354,20 +508,23 @@ export default function HiddenGems() {
                     </div>
                     <span className="text-xs text-slate-500 font-medium">{gem.budget_level}</span>
                   </div>
-                  {gem.tip && <p className="text-xs text-sky-600 mt-2 italic">💡 {gem.tip}</p>}
+                  {gem.tip && <p className="text-xs text-sky-600 mt-2 italic line-clamp-1">💡 {gem.tip}</p>}
                 </div>
               </Link>
             ))}
           </div>
         )}
 
+        {/* Empty states */}
         {!loading && gems.length === 0 && (
           <div className="text-center py-20">
             <div className="text-5xl mb-4">🗺️</div>
             <h3 className="font-semibold text-slate-700 mb-1">No gems yet</h3>
             <p className="text-slate-400 text-sm mb-5">Be the first to add a hidden gem!</p>
-            <button onClick={() => setShowModal(true)}
-              className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition">
+            <button
+              onClick={() => setShowModal(true)}
+              className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
+            >
               Add the First Gem
             </button>
           </div>
@@ -380,12 +537,15 @@ export default function HiddenGems() {
           </div>
         )}
 
+        {/* Submit banner */}
         <div className="mt-10 bg-gradient-to-r from-sky-50 to-emerald-50 border border-sky-100 rounded-2xl p-6 text-center">
           <div className="text-3xl mb-2">📍</div>
           <h3 className="font-bold text-slate-900 mb-1">Know a hidden gem?</h3>
           <p className="text-slate-500 text-sm mb-4">Share it with the TCUnnect community</p>
-          <button onClick={() => setShowModal(true)}
-            className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-6 py-2.5 rounded-full transition">
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-6 py-2.5 rounded-full transition"
+          >
             Submit a Gem
           </button>
         </div>
