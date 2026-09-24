@@ -1,27 +1,78 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
-import { MapPin, Search, Filter, Star, Bookmark } from "lucide-react";
+import { useAuthStore } from "../stores";
+import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check } from "lucide-react";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const CATEGORIES = ["All", "Beach", "Mountain", "Nature", "Heritage", "Cafe", "Waterfalls", "City", "Food"];
+const CATEGORY_EMOJIS: Record<string, string> = {
+  Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
+  Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
+};
 
-const GEMS = [
-  { id: "g1", name: "Kayangan Lake", location: "Coron, Palawan", category: "Nature", emoji: "🌿", image: "https://images.unsplash.com/photo-1758782551890-0f47a570859c?auto=format&fit=crop&w=600&q=80", rating: 4.9, reviews: 312, budget: "₱₱", tip: "Go early morning to avoid crowds" },
-  { id: "g2", name: "Balabac Islands", location: "Palawan", category: "Beach", emoji: "🏝", image: "https://images.unsplash.com/photo-1758782551916-1723a9cd00eb?auto=format&fit=crop&w=600&q=80", rating: 4.8, reviews: 187, budget: "₱₱₱", tip: "Bring your own supplies" },
-  { id: "g3", name: "Kalanggaman Island", location: "Leyte", category: "Beach", emoji: "🏖", image: "https://images.unsplash.com/photo-1462557804967-1b4876a07c17?auto=format&fit=crop&w=600&q=80", rating: 4.7, reviews: 241, budget: "₱₱", tip: "Best at sunset" },
-  { id: "g4", name: "Tinago Falls", location: "Iligan City, Lanao del Norte", category: "Waterfalls", emoji: "💦", image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=600&q=80", rating: 4.8, reviews: 156, budget: "₱", tip: "Wear water shoes for the trek" },
-  { id: "g5", name: "Paoay Church", location: "Ilocos Norte", category: "Heritage", emoji: "🏛", image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=600&q=80", rating: 4.6, reviews: 203, budget: "₱", tip: "UNESCO World Heritage Site" },
-  { id: "g6", name: "Batanes Rolling Hills", location: "Batan Island, Batanes", category: "Nature", emoji: "🌿", image: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=600&q=80", rating: 4.9, reviews: 128, budget: "₱₱₱", tip: "Best from May to September" },
-  { id: "nacpan", name: "Nacpan Beach", location: "El Nido, Palawan", category: "Beach", emoji: "🏖", image: "https://images.unsplash.com/photo-1602587921225-3cca658d31bb?auto=format&fit=crop&w=600&q=80", rating: 4.9, reviews: 389, budget: "₱₱", tip: "4km of pristine white sand" },
-  { id: "g8", name: "Mt. Apo Summit", location: "Davao City, Davao del Sur", category: "Mountain", emoji: "🏔", image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=600&q=80", rating: 4.7, reviews: 94, budget: "₱₱", tip: "Highest peak in PH — hire a guide!" },
-];
+interface Gem {
+  id: string;
+  name: string;
+  location: string;
+  category: string;
+  emoji: string;
+  images: string[];
+  rating: number;
+  review_count: number;
+  budget_level: string;
+  tip: string;
+  is_featured: boolean;
+}
+
+const EMPTY_FORM = {
+  name: "",
+  location: "",
+  category: "Beach",
+  description: "",
+  imageUrl: "",
+  budget_level: "₱₱",
+  rating: "",
+  review_count: "",
+  tip: "",
+  is_featured: false,
+};
 
 export default function HiddenGems() {
+  const { user } = useAuthStore();
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [saved, setSaved] = useState<Set<string>>(new Set());
+  const [gems, setGems] = useState<Gem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = GEMS.filter((g) => {
+  // Submit gem modal
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    fetchGems();
+  }, []);
+
+  async function fetchGems() {
+    setLoading(true);
+    if (!isSupabaseConfigured) { setLoading(false); return; }
+
+    const { data } = await supabase
+      .from("hidden_gems")
+      .select("id, name, location, category, emoji, images, rating, review_count, budget_level, tip, is_featured")
+      .eq("status", "approved")
+      .order("is_featured", { ascending: false })
+      .order("rating", { ascending: false });
+
+    setGems((data as Gem[]) ?? []);
+    setLoading(false);
+  }
+
+  const filtered = gems.filter((g) => {
     const matchesQuery = g.name.toLowerCase().includes(query.toLowerCase()) || g.location.toLowerCase().includes(query.toLowerCase());
     const matchesCat = activeCategory === "All" || g.category === activeCategory;
     return matchesQuery && matchesCat;
@@ -36,15 +87,214 @@ export default function HiddenGems() {
     });
   };
 
+  const handleSubmit = async () => {
+    if (!form.name.trim() || !form.location.trim()) return;
+    setSubmitting(true);
+    setSubmitError("");
+
+    const emoji = CATEGORY_EMOJIS[form.category] ?? "📍";
+    const isAdmin = user?.isAdmin === true;
+    const status = isAdmin ? "approved" : "pending";
+
+    try {
+      if (!isSupabaseConfigured) {
+        // Demo mode — just show success
+        setSubmitted(true);
+        setSubmitting(false);
+        return;
+      }
+
+      const { error } = await supabase.from("hidden_gems").insert({
+        name: form.name.trim(),
+        location: form.location.trim(),
+        category: form.category,
+        description: form.description.trim(),
+        images: form.imageUrl.trim() ? [form.imageUrl.trim()] : [],
+        budget_level: form.budget_level,
+        rating: form.rating ? parseFloat(form.rating) : 0,
+        review_count: form.review_count ? parseInt(form.review_count) : 0,
+        tip: form.tip.trim(),
+        emoji,
+        is_featured: form.is_featured,
+        status,
+        submitted_by: user?.id ?? null,
+      });
+
+      if (error) throw error;
+
+      setSubmitted(true);
+      if (isAdmin) fetchGems(); // refresh list immediately for admin
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to submit. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setSubmitted(false);
+    setForm(EMPTY_FORM);
+    setSubmitError("");
+  };
+
   return (
     <AppShell>
+      {/* ── Submit Gem Modal ──────────────────────────────────────── */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
+              <h2 className="font-bold text-slate-900">
+                {submitted ? "Gem Submitted! 🎉" : "Submit a Hidden Gem"}
+              </h2>
+              <button onClick={closeModal} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {submitted ? (
+              <div className="p-8 text-center">
+                <div className="h-16 w-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Check className="h-8 w-8 text-emerald-600" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-lg mb-2">
+                  {user?.isAdmin ? "Gem added successfully!" : "Thanks for sharing!"}
+                </h3>
+                <p className="text-slate-500 text-sm mb-6">
+                  {user?.isAdmin
+                    ? "Your gem is now live and visible to everyone."
+                    : "Your submission is pending review. We'll add it to the map soon!"}
+                </p>
+                <button onClick={closeModal}
+                  className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2.5 rounded-xl transition">
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="p-5 space-y-4">
+                {submitError && (
+                  <div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-600">
+                    {submitError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Gem Name *</label>
+                    <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="e.g. Tinago Falls"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Location *</label>
+                    <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
+                      placeholder="e.g. Iligan City, Lanao del Norte"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Category</label>
+                    <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none">
+                      {CATEGORIES.filter(c => c !== "All").map(c => (
+                        <option key={c} value={c}>{CATEGORY_EMOJIS[c]} {c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Budget</label>
+                    <select value={form.budget_level} onChange={(e) => setForm({ ...form, budget_level: e.target.value })}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none">
+                      <option value="₱">₱ Budget</option>
+                      <option value="₱₱">₱₱ Mid-range</option>
+                      <option value="₱₱₱">₱₱₱ Premium</option>
+                    </select>
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                    <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      placeholder="What makes this place special?"
+                      rows={3}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none resize-none" />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Image URL</label>
+                    <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                      placeholder="https://example.com/photo.jpg"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
+                    <p className="text-[10px] text-slate-400 mt-1">Paste a direct image link (Unsplash, Google Photos, etc.)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Rating (0–5)</label>
+                    <input value={form.rating} onChange={(e) => setForm({ ...form, rating: e.target.value })}
+                      placeholder="4.8" type="number" min="0" max="5" step="0.1"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Review Count</label>
+                    <input value={form.review_count} onChange={(e) => setForm({ ...form, review_count: e.target.value })}
+                      placeholder="120" type="number" min="0"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Insider Tip</label>
+                    <input value={form.tip} onChange={(e) => setForm({ ...form, tip: e.target.value })}
+                      placeholder="e.g. Go early morning to avoid crowds"
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none" />
+                  </div>
+
+                  {user?.isAdmin && (
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={form.is_featured}
+                          onChange={(e) => setForm({ ...form, is_featured: e.target.checked })}
+                          className="h-4 w-4 rounded accent-sky-600" />
+                        <span className="text-sm text-slate-700 font-medium">✨ Feature this gem on the Featured page</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {!user?.isAdmin && (
+                  <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-xs text-amber-700">
+                    📋 Your submission will be reviewed by our team before going live.
+                  </div>
+                )}
+
+                <button onClick={handleSubmit}
+                  disabled={!form.name.trim() || !form.location.trim() || submitting}
+                  className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2">
+                  {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {user?.isAdmin ? "Add Gem Now" : "Submit for Review"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Hidden Gems</h1>
-          <p className="text-slate-500 text-sm mt-1">Discover underrated destinations across the Philippines</p>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Hidden Gems</h1>
+            <p className="text-slate-500 text-sm mt-1">Discover underrated destinations across the Philippines</p>
+          </div>
+          {user?.isAdmin && (
+            <button onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition">
+              <Plus className="h-4 w-4" /> Add Gem
+            </button>
+          )}
         </div>
 
-        {/* Search */}
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
@@ -55,69 +305,87 @@ export default function HiddenGems() {
           />
         </div>
 
-        {/* Categories */}
         <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-hide">
           {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
+            <button key={cat} onClick={() => setActiveCategory(cat)}
               className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-medium transition ${
-                activeCategory === cat
-                  ? "bg-sky-600 text-white"
-                  : "bg-white border border-slate-200 text-slate-600 hover:border-sky-300"
-              }`}
-            >
+                activeCategory === cat ? "bg-sky-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:border-sky-300"
+              }`}>
               {cat}
             </button>
           ))}
         </div>
 
-        {/* Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filtered.map((gem) => (
-            <Link key={gem.id} to={`/gems/${gem.id}`} className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition">
-              <div className="relative h-44 overflow-hidden">
-                <img src={gem.image} alt={gem.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                <button onClick={(e) => toggleSave(gem.id, e)}
-                  className="absolute top-3 right-3 h-8 w-8 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white transition">
-                  <Bookmark className={`h-4 w-4 ${saved.has(gem.id) ? "fill-sky-600 text-sky-600" : "text-slate-500"}`} />
-                </button>
-                <span className="absolute top-3 left-3 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-full">
-                  {gem.emoji} {gem.category}
-                </span>
-              </div>
-              <div className="p-4">
-                <h3 className="font-semibold text-slate-900 text-sm mb-0.5">{gem.name}</h3>
-                <p className="text-xs text-slate-500 flex items-center gap-1 mb-2">
-                  <MapPin className="h-3 w-3" /> {gem.location}
-                </p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    <Star className="h-3.5 w-3.5 text-amber-400 fill-current" />
-                    <span className="text-xs font-medium text-slate-700">{gem.rating}</span>
-                    <span className="text-xs text-slate-400">({gem.reviews})</span>
-                  </div>
-                  <span className="text-xs text-slate-500 font-medium">{gem.budget}</span>
-                </div>
-                <p className="text-xs text-sky-600 mt-2 italic">💡 {gem.tip}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {loading && (
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-8 w-8 text-sky-500 animate-spin" />
+          </div>
+        )}
 
-        {filtered.length === 0 && (
+        {!loading && filtered.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {filtered.map((gem) => (
+              <Link key={gem.id} to={`/gems/${gem.id}`} className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition">
+                <div className="relative h-44 overflow-hidden">
+                  <img src={gem.images?.[0] ?? ""} alt={gem.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                  <button onClick={(e) => toggleSave(gem.id, e)}
+                    className="absolute top-3 right-3 h-8 w-8 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white transition">
+                    <Bookmark className={`h-4 w-4 ${saved.has(gem.id) ? "fill-sky-600 text-sky-600" : "text-slate-500"}`} />
+                  </button>
+                  <span className="absolute top-3 left-3 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-full">
+                    {gem.emoji} {gem.category}
+                  </span>
+                  {gem.is_featured && (
+                    <span className="absolute bottom-3 left-3 bg-amber-400 text-amber-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                      ✨ Featured
+                    </span>
+                  )}
+                </div>
+                <div className="p-4">
+                  <h3 className="font-semibold text-slate-900 text-sm mb-0.5">{gem.name}</h3>
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-2">
+                    <MapPin className="h-3 w-3" /> {gem.location}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Star className="h-3.5 w-3.5 text-amber-400 fill-current" />
+                      <span className="text-xs font-medium text-slate-700">{gem.rating || "—"}</span>
+                      <span className="text-xs text-slate-400">({gem.review_count || 0})</span>
+                    </div>
+                    <span className="text-xs text-slate-500 font-medium">{gem.budget_level}</span>
+                  </div>
+                  {gem.tip && <p className="text-xs text-sky-600 mt-2 italic">💡 {gem.tip}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {!loading && gems.length === 0 && (
+          <div className="text-center py-20">
+            <div className="text-5xl mb-4">🗺️</div>
+            <h3 className="font-semibold text-slate-700 mb-1">No gems yet</h3>
+            <p className="text-slate-400 text-sm mb-5">Be the first to add a hidden gem!</p>
+            <button onClick={() => setShowModal(true)}
+              className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition">
+              Add the First Gem
+            </button>
+          </div>
+        )}
+
+        {!loading && gems.length > 0 && filtered.length === 0 && (
           <div className="text-center py-16">
-            <div className="text-4xl mb-3">🗺️</div>
+            <div className="text-4xl mb-3">🔍</div>
             <p className="text-slate-500 text-sm">No gems found for "{query}"</p>
           </div>
         )}
 
-        {/* Submit CTA */}
         <div className="mt-10 bg-gradient-to-r from-sky-50 to-emerald-50 border border-sky-100 rounded-2xl p-6 text-center">
           <div className="text-3xl mb-2">📍</div>
           <h3 className="font-bold text-slate-900 mb-1">Know a hidden gem?</h3>
           <p className="text-slate-500 text-sm mb-4">Share it with the TCUnnect community</p>
-          <button className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-6 py-2.5 rounded-full transition">
+          <button onClick={() => setShowModal(true)}
+            className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-6 py-2.5 rounded-full transition">
             Submit a Gem
           </button>
         </div>
