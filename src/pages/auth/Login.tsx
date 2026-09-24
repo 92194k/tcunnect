@@ -22,7 +22,14 @@ export default function Login() {
       await login(form.email, form.password);
       navigate("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed.");
+      const msg = err instanceof Error ? err.message : "Login failed.";
+      if (msg.toLowerCase().includes("email not confirmed")) {
+        setError("Please confirm your email first. Check your inbox for the verification link.");
+      } else if (msg.toLowerCase().includes("invalid login credentials")) {
+        setError("Wrong email or password. Please try again.");
+      } else {
+        setError(msg);
+      }
     }
   };
 

@@ -135,6 +135,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
     if (error) { set({ isLoading: false }); throw new Error(error.message); }
     if (!data.user) { set({ isLoading: false }); return; }
+
+    // Email confirmation required — no session yet
+    if (!data.session) {
+      set({ isLoading: false });
+      throw new Error("__EMAIL_CONFIRM__");
+    }
+
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: fullName, created_at: new Date().toISOString() });

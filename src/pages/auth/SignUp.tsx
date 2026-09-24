@@ -19,6 +19,7 @@ export default function SignUp() {
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -42,9 +43,35 @@ export default function SignUp() {
       await signup(form.email, form.password, form.fullName);
       navigate("/onboarding");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign up failed.");
+      const msg = err instanceof Error ? err.message : "Sign up failed.";
+      if (msg === "__EMAIL_CONFIRM__") {
+        setEmailSent(true);
+      } else {
+        setError(msg);
+      }
     }
   };
+
+  if (emailSent) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md text-center">
+          <div className="text-6xl mb-6">📬</div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-3">Check your email</h1>
+          <p className="text-slate-500 text-sm mb-2">
+            We sent a confirmation link to
+          </p>
+          <p className="font-semibold text-sky-700 mb-6">{form.email}</p>
+          <p className="text-slate-400 text-xs mb-8">
+            Click the link in the email to activate your account, then come back here to log in.
+          </p>
+          <Link to="/login" className="inline-block rounded-full bg-sky-600 px-8 py-3 text-sm font-semibold text-white hover:bg-sky-700 transition">
+            Go to Log In
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
