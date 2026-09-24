@@ -76,7 +76,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       .from("profiles").select("*").eq("id", session.user.id).single();
     if (profile) {
       const user = profileToUser(profile);
-      set({ user, isLoggedIn: true, onboardingComplete: !!user.location, isLoading: false });
+      const onboardingComplete = (user.travelInterests?.length ?? 0) > 0;
+      set({ user, isLoggedIn: true, onboardingComplete, isLoading: false });
     } else {
       set({ isLoading: false });
     }
@@ -104,7 +105,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: "", created_at: new Date().toISOString() });
-    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: !!user.location });
+    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
   },
 
   loginWithGoogle: async () => {
@@ -146,7 +147,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: fullName, created_at: new Date().toISOString() });
-    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: false });
+    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
   },
 
   logout: async () => {
@@ -166,13 +167,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     // Map camelCase → snake_case for Supabase
     const row: Record<string, unknown> = {};
-    if (fields.fullName     !== undefined) row.full_name       = fields.fullName;
-    if (fields.bio          !== undefined) row.bio             = fields.bio;
-    if (fields.location     !== undefined) row.location        = fields.location;
-    if (fields.profilePhoto !== undefined) row.profile_photo   = fields.profilePhoto;
+    if (fields.fullName        !== undefined) row.full_name        = fields.fullName;
+    if (fields.bio             !== undefined) row.bio              = fields.bio;
+    if (fields.location        !== undefined) row.location         = fields.location;
     if (fields.travelInterests !== undefined) row.travel_interests = fields.travelInterests;
+    // Skip saving base64 data URLs — too large for a text column
+    if (fields.profilePhoto !== undefined && !fields.profilePhoto.startsWith("data:")) {
+      row.profile_photo = fields.profilePhoto;
+    }
 
-    await supabase.from("profiles").update(row).eq("id", user.id);
+    const { error } = await supabase.from("profiles").update(row).eq("id", user.id);
+    if (error) throw new Error(error.message);
   },
 }));
 

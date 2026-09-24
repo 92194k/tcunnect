@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import { useAuthStore } from "./stores";
 
 // Public pages
@@ -26,7 +27,8 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 
 // ─── Guard components ──────────────────────────────────────────
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, onboardingComplete } = useAuthStore();
+  const { isLoggedIn, onboardingComplete, isLoading } = useAuthStore();
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-sky-50"><div className="h-8 w-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin" /></div>;
   if (!isLoggedIn) return <Navigate to="/login" replace />;
   if (!onboardingComplete) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
@@ -39,13 +41,21 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 }
 
 function RedirectIfLoggedIn({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, onboardingComplete } = useAuthStore();
+  const { isLoggedIn, onboardingComplete, isLoading } = useAuthStore();
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-sky-50"><div className="h-8 w-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin" /></div>;
   if (isLoggedIn && onboardingComplete) return <Navigate to="/dashboard" replace />;
+  if (isLoggedIn && !onboardingComplete) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 }
 
 // ─── Routes ───────────────────────────────────────────────────
 export default function AppRoutes() {
+  const { loadSession } = useAuthStore();
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
+
   return (
     <Routes>
       {/* Public */}
