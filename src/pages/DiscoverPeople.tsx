@@ -1,49 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import TravelMap from "../components/TravelMap";
 import type { MapMarker } from "../components/TravelMap";
 import { useAuthStore, useMatchStore } from "../stores";
-import { MapPin, X, Heart, Sparkles, Map } from "lucide-react";
+import { MapPin, X, Heart, Sparkles, Map, Loader2 } from "lucide-react";
 import type { Match, User } from "../types";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
-// ── Demo travelers with coordinates ──────────────────────────────
-const TRAVELERS: (User & { lat: number; lng: number })[] = [
-  {
-    id: "u1", email: "", fullName: "Maria", age: 21,
-    bio: "Always looking for new places to explore 🌿",
-    location: "Quezon City", lat: 14.676, lng: 121.044,
-    profilePhoto: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=400&q=80",
-    travelInterests: ["Beach", "Food", "Nature"],
-    createdAt: "", isPremium: false, isVerified: true,
-  },
-  {
-    id: "u2", email: "", fullName: "Sam", age: 24,
-    bio: "Hiking lover & island hopper 🏔",
-    location: "Cebu City", lat: 10.317, lng: 123.891,
-    profilePhoto: "https://images.unsplash.com/photo-1605741455532-384a402cf959?auto=format&fit=crop&w=400&q=80",
-    travelInterests: ["Mountain", "Waterfalls", "Nature"],
-    createdAt: "", isPremium: false, isVerified: false,
-  },
-  {
-    id: "u3", email: "", fullName: "Ana", age: 23,
-    bio: "History nerd & food traveler 🍜",
-    location: "Davao City", lat: 7.073, lng: 125.613,
-    profilePhoto: "https://images.unsplash.com/photo-1650666908250-b0dcbf54e08b?auto=format&fit=crop&w=400&q=80",
-    travelInterests: ["Heritage", "Food", "City"],
-    createdAt: "", isPremium: true, isVerified: true,
-  },
-  {
-    id: "u4", email: "", fullName: "Jake", age: 26,
-    bio: "Adventure seeker & cliff diver 🌊",
-    location: "Makati", lat: 14.554, lng: 121.017,
-    profilePhoto: "https://images.unsplash.com/photo-1488161628813-04466f872be2?auto=format&fit=crop&w=400&q=80",
-    travelInterests: ["Beach", "Mountain", "Nature"],
-    createdAt: "", isPremium: false, isVerified: false,
-  },
-];
-
-// ── Static gem markers ────────────────────────────────────────────
+// ── Static gem markers for the map ───────────────────────────────
 const GEM_MARKERS: MapMarker[] = [
   { id: "feat1", lat: 11.967, lng: 121.924, type: "featured", label: "Boracay", sublabel: "White Beach, Aklan" },
   { id: "feat2", lat: 11.171, lng: 119.409, type: "featured", label: "El Nido", sublabel: "Palawan" },
@@ -59,7 +24,27 @@ const GEM_MARKERS: MapMarker[] = [
 const INTEREST_EMOJI: Record<string, string> = {
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Food: "🍜",
   Heritage: "🏛", Cafe: "☕", Waterfalls: "💦", City: "🌆",
+  "Beach & Island Hopping": "🏖", "Nature & Hiking": "🌿",
+  "Camping & Outdoors": "⛺", "City Exploring": "🌆",
+  "Food & Cafés": "🍜", Photography: "📷", "History & Culture": "🏛",
+  "Arts & Creative Places": "🎨", "Adventure & Thrills": "🪂",
+  "Scenic & Sunset Spots": "🌅", "Shopping & Local Markets": "🛍",
+  "Relaxation & Wellness": "🧘", Staycations: "🏨",
+  "Road Trips": "🚗", "Hidden Gems": "💎",
+  "Events & Festivals": "🎉", "Eco & Sustainable Travel": "♻️",
+  "Couple Getaways": "💑", "Group Trips": "👥", "Budget Travel": "💰",
 };
+
+const FILTER_CHIPS = [
+  { label: "Beach", emoji: "🏖" },
+  { label: "Mountain", emoji: "🏔" },
+  { label: "Nature", emoji: "🌿" },
+  { label: "Food", emoji: "🍜" },
+  { label: "Heritage", emoji: "🏛" },
+  { label: "Cafe", emoji: "☕" },
+  { label: "Waterfalls", emoji: "💦" },
+  { label: "City", emoji: "🌆" },
+];
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -70,7 +55,7 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function MatchModal({ match, onClose, onChat }: { match: User; onClose: () => void; onChat: () => void }) {
+function MatchModal({ match, onClose, onChat, myPhoto }: { match: User; onClose: () => void; onChat: () => void; myPhoto: string }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
@@ -79,7 +64,7 @@ function MatchModal({ match, onClose, onChat }: { match: User; onClose: () => vo
         <p className="text-slate-500 text-sm mb-6">You and {match.fullName} both liked each other</p>
         <div className="flex items-center justify-center gap-4 mb-6">
           <div className="h-20 w-20 rounded-full overflow-hidden border-4 border-white shadow-lg">
-            <img src="https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=200&q=80" alt="You" className="h-full w-full object-cover" />
+            <img src={myPhoto || "https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=200&q=80"} alt="You" className="h-full w-full object-cover" />
           </div>
           <Heart className="h-8 w-8 text-rose-500 fill-current animate-pulse" />
           <div className="h-20 w-20 rounded-full overflow-hidden border-4 border-white shadow-lg">
@@ -91,7 +76,7 @@ function MatchModal({ match, onClose, onChat }: { match: User; onClose: () => vo
           <div className="flex justify-center gap-2 flex-wrap">
             {match.travelInterests.slice(0, 3).map((i) => (
               <span key={i} className="bg-sky-50 text-sky-700 text-xs px-3 py-1 rounded-full font-medium">
-                {INTEREST_EMOJI[i]} {i}
+                {INTEREST_EMOJI[i] ?? "📍"} {i}
               </span>
             ))}
           </div>
@@ -112,18 +97,57 @@ export default function DiscoverPeople() {
   const { user } = useAuthStore();
   const { addMatch } = useMatchStore();
 
-  const [deck, setDeck] = useState(() => shuffle(TRAVELERS));
+  const [deck, setDeck] = useState<User[]>([]);
   const [index, setIndex] = useState(0);
-  const [liked, setLiked] = useState<Set<string>>(new Set());
   const [matchedUser, setMatchedUser] = useState<User | null>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchPeople() {
+      setLoading(true);
+      if (!isSupabaseConfigured) { setLoading(false); return; }
+
+      let query = supabase
+        .from("profiles")
+        .select("id, full_name, age, bio, location, profile_photo, travel_interests, is_premium, is_verified")
+        .neq("id", user?.id ?? "")
+        .not("travel_interests", "is", null)
+        .limit(20);
+
+      if (activeFilter) {
+        query = query.contains("travel_interests", [activeFilter]);
+      }
+
+      const { data } = await query;
+
+      const users: User[] = (data ?? []).map((p) => ({
+        id: p.id,
+        email: "",
+        fullName: p.full_name ?? "Traveler",
+        age: p.age ?? undefined,
+        bio: p.bio ?? "",
+        location: p.location ?? "Philippines",
+        profilePhoto: p.profile_photo ?? "",
+        travelInterests: p.travel_interests ?? [],
+        createdAt: "",
+        isPremium: p.is_premium ?? false,
+        isVerified: p.is_verified ?? false,
+      }));
+
+      setDeck(shuffle(users));
+      setIndex(0);
+      setLoading(false);
+    }
+    fetchPeople();
+  }, [activeFilter, user?.id]);
 
   const currentTraveler = deck[index] ?? null;
 
   const advance = () => {
     if (index + 1 >= deck.length) {
-      // Reshuffle and restart
-      setDeck(shuffle(TRAVELERS));
+      setDeck((d) => shuffle([...d]));
       setIndex(0);
     } else {
       setIndex((i) => i + 1);
@@ -134,8 +158,8 @@ export default function DiscoverPeople() {
 
   const handleLike = () => {
     if (!currentTraveler) return;
-    setLiked((prev) => new Set(prev).add(currentTraveler.id));
-    if (index === 0) {
+    const isMutual = Math.random() < 0.3;
+    if (isMutual) {
       const match: Match = {
         id: `match_${Date.now()}`,
         user1Id: user?.id ?? "",
@@ -151,32 +175,20 @@ export default function DiscoverPeople() {
     }
   };
 
-  // Build all map markers
-  const mapMarkers = useMemo<MapMarker[]>(() => {
-    const userMarkers: MapMarker[] = deck.map((t, i) => ({
-      id: `u-${t.id}`,
-      lat: t.lat,
-      lng: t.lng,
-      type: "user",
-      label: `${t.fullName}, ${t.age}`,
-      sublabel: t.location,
-      photo: t.profilePhoto,
-      active: i === index,
-    }));
-    return [...GEM_MARKERS, ...userMarkers];
-  }, [deck, index]);
+  const mapMarkers = useMemo<MapMarker[]>(() => GEM_MARKERS, []);
 
   return (
     <AppShell>
       {matchedUser && (
         <MatchModal
           match={matchedUser}
+          myPhoto={user?.profilePhoto ?? ""}
           onClose={() => { setMatchedUser(null); advance(); }}
           onChat={() => { setMatchedUser(null); navigate("/chat"); }}
         />
       )}
 
-      <div className="flex h-[calc(100vh-4rem)] lg:h-[calc(100vh-4rem)] overflow-hidden">
+      <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
 
         {/* ── Left: Profile Card ──────────────────────────────── */}
         <div className="w-full lg:w-[420px] xl:w-[460px] flex-shrink-0 overflow-y-auto px-4 py-5 lg:border-r lg:border-slate-100">
@@ -186,7 +198,6 @@ export default function DiscoverPeople() {
               <h1 className="text-xl font-bold text-slate-900">Find Your Travel People</h1>
               <p className="text-slate-500 text-xs mt-0.5">Meet Filipinos who share your interests</p>
             </div>
-            {/* Mobile map toggle */}
             <button
               onClick={() => setShowMapMobile((v) => !v)}
               className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-50 text-sky-700 text-xs font-semibold border border-sky-200"
@@ -197,9 +208,14 @@ export default function DiscoverPeople() {
 
           {/* Filter chips */}
           <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
-            {Object.entries(INTEREST_EMOJI).map(([label, emoji]) => (
+            {FILTER_CHIPS.map(({ label, emoji }) => (
               <button key={label}
-                className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-sky-400 hover:text-sky-700 transition">
+                onClick={() => setActiveFilter(activeFilter === label ? null : label)}
+                className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+                  activeFilter === label
+                    ? "border-sky-500 bg-sky-50 text-sky-700"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-sky-400 hover:text-sky-700"
+                }`}>
                 {emoji} {label}
               </button>
             ))}
@@ -212,12 +228,44 @@ export default function DiscoverPeople() {
             </div>
           )}
 
-          {currentTraveler && (
+          {/* Loading */}
+          {loading && (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-8 w-8 text-sky-500 animate-spin" />
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!loading && !currentTraveler && (
+            <div className="text-center py-16">
+              <div className="text-5xl mb-4">🌏</div>
+              <h3 className="font-semibold text-slate-700 mb-1">
+                {activeFilter ? `No travelers with "${activeFilter}" interest yet` : "No travelers found yet"}
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                {activeFilter ? "Try a different filter or check back later." : "Be the first to invite friends to TCUnnect!"}
+              </p>
+              {activeFilter && (
+                <button onClick={() => setActiveFilter(null)}
+                  className="text-sky-600 text-sm font-medium hover:underline">
+                  Clear filter
+                </button>
+              )}
+            </div>
+          )}
+
+          {!loading && currentTraveler && (
             <>
               {/* Card */}
               <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 overflow-hidden border border-slate-100">
                 <div className="relative h-80">
-                  <img src={currentTraveler.profilePhoto} alt={currentTraveler.fullName} className="w-full h-full object-cover" />
+                  {currentTraveler.profilePhoto ? (
+                    <img src={currentTraveler.profilePhoto} alt={currentTraveler.fullName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-sky-100 to-slate-200 flex items-center justify-center">
+                      <span className="text-6xl">👤</span>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent" />
                   {currentTraveler.isVerified && (
                     <span className="absolute top-3 right-3 bg-sky-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">✓ Verified</span>
@@ -226,7 +274,9 @@ export default function DiscoverPeople() {
                     <span className="absolute top-3 left-3 bg-amber-400 text-amber-950 text-[10px] font-bold px-2.5 py-1 rounded-full">👑 Premium</span>
                   )}
                   <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                    <h3 className="text-xl font-bold">{currentTraveler.fullName}, {currentTraveler.age}</h3>
+                    <h3 className="text-xl font-bold">
+                      {currentTraveler.fullName}{currentTraveler.age ? `, ${currentTraveler.age}` : ""}
+                    </h3>
                     <p className="flex items-center gap-1 text-white/80 text-xs mt-0.5">
                       <MapPin className="h-3 w-3" /> {currentTraveler.location}
                     </p>
@@ -234,11 +284,13 @@ export default function DiscoverPeople() {
                 </div>
 
                 <div className="p-4">
-                  <p className="text-slate-600 text-sm mb-3 italic">"{currentTraveler.bio}"</p>
+                  {currentTraveler.bio && (
+                    <p className="text-slate-600 text-sm mb-3 italic">"{currentTraveler.bio}"</p>
+                  )}
                   <div className="flex flex-wrap gap-1.5">
                     {currentTraveler.travelInterests.map((i) => (
                       <span key={i} className="bg-sky-50 text-sky-700 text-xs font-medium px-2.5 py-1 rounded-full">
-                        {INTEREST_EMOJI[i]} {i}
+                        {INTEREST_EMOJI[i] ?? "📍"} {i}
                       </span>
                     ))}
                   </div>
@@ -270,17 +322,15 @@ export default function DiscoverPeople() {
           )}
         </div>
 
-        {/* ── Right: 3D Satellite Map ─────────────────────────── */}
+        {/* ── Right: Map ─────────────────────────────────────── */}
         <div className="hidden lg:block flex-1 p-4">
           <div className="h-full rounded-2xl overflow-hidden border border-slate-200 shadow-xl shadow-slate-200/50">
             <TravelMap markers={mapMarkers} />
           </div>
-
-          {/* Map info bar */}
           <div className="flex items-center gap-4 mt-2 px-1">
             <p className="text-xs text-slate-400 flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-sky-500 inline-block" />
-              Active: <span className="font-semibold text-slate-600">{currentTraveler?.location}</span>
+              Active: <span className="font-semibold text-slate-600">{currentTraveler?.location ?? "Philippines"}</span>
             </p>
             <p className="text-xs text-slate-400 ml-auto">Satellite · Philippines</p>
           </div>
