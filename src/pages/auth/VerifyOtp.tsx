@@ -107,11 +107,16 @@ export default function VerifyOtp() {
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Invalid code.";
+      // Supabase returns "Token has expired or is invalid" for BOTH wrong
+      // codes AND genuinely expired ones — detect the combined phrase first.
+      const m = msg.toLowerCase();
       const friendly =
-        msg.toLowerCase().includes("expired")
-          ? "This code has expired. Please request a new one."
-          : msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("otp")
-          ? "Incorrect code. Please check and try again."
+        m.includes("expired or is invalid") || m.includes("invalid")
+          ? "Incorrect code — please double-check and try again."
+          : m.includes("expired")
+          ? "This code has expired. Please request a new one below."
+          : m.includes("rate") || m.includes("too many")
+          ? "Too many attempts. Please wait a moment then try again."
           : msg;
       setError(friendly);
       // Clear digits so the user can re-enter a fresh code cleanly
