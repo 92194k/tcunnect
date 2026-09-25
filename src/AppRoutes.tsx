@@ -12,6 +12,7 @@ import AuthCallback from "./pages/auth/AuthCallback";
 import SetPassword from "./pages/auth/SetPassword";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
+import VerifyOtp from "./pages/auth/VerifyOtp";
 
 // App pages
 import Dashboard from "./pages/Dashboard";
@@ -144,6 +145,7 @@ export default function AppRoutes() {
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-otp" element={<VerifyOtp />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/safety" element={<Safety />} />

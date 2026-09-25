@@ -73,11 +73,15 @@ export default function Profile() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  // ── Change password ─────────────────────────────────────────
+  // ── Change password (3-step OTP flow) ──────────────────────
   const [showChangePw, setShowChangePw] = useState(false);
-  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
-  const [showCurrent, setShowCurrent] = useState(false);
+  // step: 'send' | 'verify' | 'newpw'
+  const [pwStep, setPwStep] = useState<'send' | 'verify' | 'newpw'>('send');
+  const [pwOtp, setPwOtp] = useState("");
+  const [pwCountdown, setPwCountdown] = useState(0);
+  const [pwForm, setPwForm] = useState({ next: "", confirm: "" });
   const [showNext, setShowNext] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState("");
   const [pwSuccess, setPwSuccess] = useState(false);
@@ -222,24 +226,99 @@ export default function Profile() {
   const toggleInterest = (i: TravelInterest) =>
     setEditInterests((prev) => prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]);
 
-  // ── Change password handler ──────────────────────────────────
+  // ── Change password — 3-step OTP handlers ───────────────────
+  // Countdown effect
+  useEffect(() => {
+    if (pwCountdown <= 0) return;
+    const t = setInterval(() => setPwCountdown((c) => c - 1), 1000);
+    return () => clearInterval(t);
+  }, [pwCountdown]);
+
+  const resetPwFlow = () => {
+    setPwStep('send');
+    setPwOtp("");
+    setPwCountdown(0);
+    setPwForm({ next: "", confirm: "" });
+    setPwError("");
+    setPwSuccess(false);
+  };
+
+  // Step 1: Send OTP to the user's email
+  const handleSendPwOtp = async () => {
+    setPwError("");
+    setPwSaving(true);
+    try {
+      if (!isSupabaseConfigured) {
+        await new Promise((r) => setTimeout(r, 800));
+        setPwStep('verify');
+        setPwCountdown(60);
+        return;
+      }
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u?.email) throw new Error("Could not get your email address.");
+      const { error } = await supabase.auth.signInWithOtp({
+        email: u.email,
+        options: { shouldCreateUser: false },
+      });
+      if (error) throw new Error(error.message);
+      setPwStep('verify');
+      setPwCountdown(60);
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : "Failed to send verification code.");
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  // Step 2: Verify OTP
+  const handleVerifyPwOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError("");
+    if (!pwOtp || pwOtp.length < 6) return setPwError("Please enter the 6-digit code.");
+    setPwSaving(true);
+    try {
+      if (!isSupabaseConfigured) {
+        await new Promise((r) => setTimeout(r, 600));
+        setPwStep('newpw');
+        return;
+      }
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u?.email) throw new Error("Could not get your email address.");
+      const { error } = await supabase.auth.verifyOtp({
+        email: u.email,
+        token: pwOtp,
+        type: 'email',
+      });
+      if (error) throw new Error(error.message);
+      setPwStep('newpw');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Invalid code.";
+      setPwError(
+        msg.toLowerCase().includes("expired") ? "Code expired. Please resend." :
+        msg.toLowerCase().includes("invalid") ? "Incorrect code. Try again." : msg
+      );
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  // Step 3: Update password
   const handleChangePw = async (e: React.FormEvent) => {
     e.preventDefault();
     setPwError("");
     setPwSuccess(false);
     const { next, confirm } = pwForm;
-    if (!next || !confirm) return setPwError("Please fill in all fields.");
+    if (!next || !confirm) return setPwError("Please fill in both fields.");
     if (next.length < 8) return setPwError("Password must be at least 8 characters.");
     if (!/[A-Z]/.test(next)) return setPwError("Password must contain an uppercase letter.");
     if (!/[0-9]/.test(next)) return setPwError("Password must contain a number.");
     if (next !== confirm) return setPwError("Passwords do not match.");
-
     setPwSaving(true);
     try {
       const { error } = await supabase.auth.updateUser({ password: next });
       if (error) throw new Error(error.message);
       setPwSuccess(true);
-      setPwForm({ current: "", next: "", confirm: "" });
+      resetPwFlow();
       setTimeout(() => { setPwSuccess(false); setShowChangePw(false); }, 2500);
     } catch (err) {
       setPwError(err instanceof Error ? err.message : "Failed to update password.");
@@ -474,7 +553,7 @@ export default function Profile() {
         {isSupabaseConfigured && hasEmailIdentity && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4 overflow-hidden">
             <button
-              onClick={() => { setShowChangePw((v) => !v); setPwError(""); setPwSuccess(false); setPwForm({ current: "", next: "", confirm: "" }); }}
+              onClick={() => { setShowChangePw((v) => !v); resetPwFlow(); }}
               className="w-full flex items-center justify-between px-5 py-4 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
               <span className="flex items-center gap-2">
                 <Lock className="h-4 w-4 text-slate-400" />
@@ -490,59 +569,110 @@ export default function Profile() {
                     <Check className="h-4 w-4" /> Password updated successfully!
                   </div>
                 ) : (
-                  <form onSubmit={handleChangePw} className="mt-4 space-y-3">
+                  <div className="mt-4">
                     {pwError && (
-                      <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">{pwError}</div>
+                      <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">{pwError}</div>
                     )}
 
-                    {/* New password */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">New Password</label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                        <input type={showNext ? "text" : "password"} value={pwForm.next}
-                          onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })}
-                          placeholder="••••••••"
-                          className="w-full pl-9 pr-9 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none transition" />
-                        <button type="button" onClick={() => setShowNext(!showNext)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                          {showNext ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {/* Step 1: Send OTP */}
+                    {pwStep === 'send' && (
+                      <div className="text-center py-2">
+                        <div className="text-3xl mb-3">🔒</div>
+                        <p className="text-sm text-slate-600 mb-4">
+                          For your security, we'll send a verification code to your email before changing your password.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleSendPwOtp}
+                          disabled={pwSaving}
+                          className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm">
+                          {pwSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</> : "Send Verification Code"}
                         </button>
                       </div>
-                      {pwForm.next && (
-                        <ul className="mt-1.5 space-y-0.5 pl-1">
-                          <PasswordRule ok={pwRules.length} label="At least 8 characters" />
-                          <PasswordRule ok={pwRules.upper} label="One uppercase letter" />
-                          <PasswordRule ok={pwRules.number} label="One number" />
-                        </ul>
-                      )}
-                    </div>
+                    )}
 
-                    {/* Confirm password */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Confirm New Password</label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                        <input type={showCurrent ? "text" : "password"} value={pwForm.confirm}
-                          onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
-                          placeholder="••••••••"
-                          className="w-full pl-9 pr-9 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none transition" />
-                        <button type="button" onClick={() => setShowCurrent(!showCurrent)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                          {showCurrent ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {/* Step 2: Verify OTP */}
+                    {pwStep === 'verify' && (
+                      <form onSubmit={handleVerifyPwOtp} className="space-y-3">
+                        <p className="text-xs text-slate-500 text-center mb-2">Enter the 6-digit code sent to your email.</p>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Verification Code</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={pwOtp}
+                            onChange={(e) => setPwOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                            placeholder="000000"
+                            className="w-full py-2.5 px-4 text-center text-xl font-bold tracking-widest border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition"
+                          />
+                        </div>
+                        <button type="submit" disabled={pwSaving || pwOtp.length < 6}
+                          className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm">
+                          {pwSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Verifying…</> : "Verify Code"}
                         </button>
-                      </div>
-                      {pwForm.confirm && pwForm.next !== pwForm.confirm && (
-                        <p className="mt-1 text-xs text-red-500">Passwords don't match</p>
-                      )}
-                    </div>
+                        <div className="text-center">
+                          {pwCountdown > 0 ? (
+                            <p className="text-xs text-slate-400">Resend in <span className="font-semibold text-slate-600 tabular-nums">{pwCountdown}s</span></p>
+                          ) : (
+                            <button type="button" onClick={handleSendPwOtp} disabled={pwSaving}
+                              className="text-xs text-sky-600 hover:text-sky-700 font-medium transition disabled:opacity-60">
+                              Resend code
+                            </button>
+                          )}
+                        </div>
+                      </form>
+                    )}
 
-                    <button type="submit" disabled={pwSaving}
-                      className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm">
-                      {pwSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Update Password
-                    </button>
-                  </form>
+                    {/* Step 3: New password */}
+                    {pwStep === 'newpw' && (
+                      <form onSubmit={handleChangePw} className="space-y-3">
+                        <p className="text-xs text-slate-500 text-center mb-2">✅ Identity verified. Set your new password.</p>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">New Password</label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                            <input type={showNext ? "text" : "password"} value={pwForm.next}
+                              onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })}
+                              placeholder="••••••••"
+                              className="w-full pl-9 pr-9 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none transition" />
+                            <button type="button" onClick={() => setShowNext(!showNext)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                              {showNext ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                          {pwForm.next && (
+                            <ul className="mt-1.5 space-y-0.5 pl-1">
+                              <PasswordRule ok={pwRules.length} label="At least 8 characters" />
+                              <PasswordRule ok={pwRules.upper} label="One uppercase letter" />
+                              <PasswordRule ok={pwRules.number} label="One number" />
+                            </ul>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Confirm New Password</label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                            <input type={showCurrent ? "text" : "password"} value={pwForm.confirm}
+                              onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
+                              placeholder="••••••••"
+                              className="w-full pl-9 pr-9 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none transition" />
+                            <button type="button" onClick={() => setShowCurrent(!showCurrent)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                              {showCurrent ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                          {pwForm.confirm && pwForm.next !== pwForm.confirm && (
+                            <p className="mt-1 text-xs text-red-500">Passwords don't match</p>
+                          )}
+                        </div>
+                        <button type="submit" disabled={pwSaving}
+                          className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm">
+                          {pwSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Updating…</> : "Update Password"}
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 )}
               </div>
             )}
