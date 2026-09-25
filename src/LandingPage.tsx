@@ -2,7 +2,7 @@ import { useState, useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 const images = {
-  hero: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85",
+  hero: "/hero-philippines.jpg",
   nacpan:
     "https://images.unsplash.com/photo-1602587921225-3cca658d31bb?auto=format&fit=crop&w=1400&q=85",
   lagoon:
