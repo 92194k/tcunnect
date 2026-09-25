@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
-import { MapPin, Star, Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { MapPin, Star, Sparkles, ArrowRight, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
 const CATEGORY_EMOJIS: Record<string, string> = {
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
@@ -42,6 +42,12 @@ const CATEGORY_META: Record<string, { subtitle: string }> = {
 export default function Featured() {
   const [gems, setGems] = useState<FeaturedGem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [heroIndex, setHeroIndex] = useState(0);
+
+  const heroGems = gems.filter((g) => g); // all featured gems cycle in hero
+  const hero = heroGems[heroIndex] ?? gems[0];
+  const prevHero = () => setHeroIndex((i) => (i - 1 + heroGems.length) % heroGems.length);
+  const nextHero = () => setHeroIndex((i) => (i + 1) % heroGems.length);
 
   useEffect(() => {
     async function fetchFeatured() {
@@ -61,7 +67,6 @@ export default function Featured() {
     fetchFeatured();
   }, []);
 
-  const hero = gems[0];
   const byCategory = gems.slice(1).reduce<Record<string, FeaturedGem[]>>((acc, gem) => {
     if (!acc[gem.category]) acc[gem.category] = [];
     acc[gem.category].push(gem);
@@ -92,15 +97,65 @@ export default function Featured() {
 
         {!loading && hero && (
           <>
-            {/* Hero */}
-            <div className="relative rounded-2xl overflow-hidden h-56 lg:h-72">
-              <img src={hero.images?.[0] ?? ""} alt={hero.name} className="w-full h-full object-cover" />
+            {/* Hero Carousel */}
+            <div className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group">
+              {/* Image */}
+              <img
+                key={hero.id}
+                src={hero.images?.[0] ?? ""}
+                alt={hero.name}
+                className="w-full h-full object-cover transition-opacity duration-500"
+              />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+
+              {/* Badge */}
               <div className="absolute top-4 left-4">
                 <span className="bg-amber-400 text-amber-950 text-xs font-extrabold px-3 py-1.5 rounded-full">
                   ✨ FEATURED BY TCUNNECT
                 </span>
               </div>
+
+              {/* Prev arrow */}
+              {heroGems.length > 1 && (
+                <button
+                  onClick={prevHero}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/25 hover:bg-black/45 text-white flex items-center justify-center transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  aria-label="Previous"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Next arrow */}
+              {heroGems.length > 1 && (
+                <button
+                  onClick={nextHero}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/25 hover:bg-black/45 text-white flex items-center justify-center transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  aria-label="Next"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Dot indicators */}
+              {heroGems.length > 1 && (
+                <div className="absolute top-4 right-4 flex items-center gap-1.5">
+                  {heroGems.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setHeroIndex(i)}
+                      className={`rounded-full transition-all ${
+                        i === heroIndex
+                          ? "w-4 h-1.5 bg-white"
+                          : "w-1.5 h-1.5 bg-white/50 hover:bg-white/75"
+                      }`}
+                      aria-label={`Slide ${i + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Info */}
               <div className="absolute bottom-5 left-5 text-white">
                 <h2 className="text-2xl font-bold">{hero.name}</h2>
                 <p className="flex items-center gap-1 text-white/80 text-sm mt-1">
@@ -112,8 +167,10 @@ export default function Featured() {
                   <span className="text-white/60 text-xs">({hero.review_count} reviews)</span>
                 </div>
               </div>
-              <Link to={`/gems/${hero.id}`}
-                className="absolute bottom-5 right-5 bg-white text-slate-900 text-xs font-semibold px-4 py-2 rounded-full hover:bg-sky-50 transition flex items-center gap-1">
+              <Link
+                to={`/gems/${hero.id}`}
+                className="absolute bottom-5 right-5 bg-white text-slate-900 text-xs font-semibold px-4 py-2 rounded-full hover:bg-sky-50 transition flex items-center gap-1"
+              >
                 Explore <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
