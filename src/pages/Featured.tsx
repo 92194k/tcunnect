@@ -117,7 +117,7 @@ export default function Featured() {
                 alt={hero.name}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none" />
 
               {/* Badge */}
               <div className="absolute top-4 left-4">
@@ -149,7 +149,7 @@ export default function Featured() {
                 <button
                   onClick={prev}
                   aria-label="Previous"
-                  className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-colors"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -160,7 +160,7 @@ export default function Featured() {
                 <button
                   onClick={next}
                   aria-label="Next"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-10 h-8 w-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
