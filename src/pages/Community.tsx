@@ -224,37 +224,96 @@ function PostCard({
                   </div>
                 </div>
 
-                {/* Nested replies */}
+                {/* Nested replies — each one has its own Reply button */}
                 {comment.replies && comment.replies.length > 0 && (
                   <div className="ml-9 space-y-2">
                     {comment.replies.map((reply) => (
-                      <div key={reply.id} className="flex gap-2">
-                        <CornerDownRight className="h-3.5 w-3.5 text-slate-300 shrink-0 mt-1" />
-                        <div className="flex-1">
-                          <div className="bg-white rounded-xl px-3 py-2 border border-slate-100">
-                            <p className="text-[10px] font-semibold text-slate-500 mb-0.5">
-                              Anonymous
-                            </p>
-                            <p className="text-xs text-slate-700 leading-relaxed">
-                              {reply.content}
-                            </p>
+                      <div key={reply.id}>
+                        <div className="flex gap-2">
+                          <CornerDownRight className="h-3.5 w-3.5 text-slate-300 shrink-0 mt-1" />
+                          <div className="flex-1">
+                            <div className="bg-white rounded-xl px-3 py-2 border border-slate-100">
+                              <p className="text-[10px] font-semibold text-slate-500 mb-0.5">
+                                Anonymous
+                              </p>
+                              <p className="text-xs text-slate-700 leading-relaxed">
+                                {reply.content}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 ml-2">
+                              <span className="text-[10px] text-slate-400">
+                                {timeAgo(reply.created_at)}
+                              </span>
+                              {/* Reply button on each nested reply */}
+                              <button
+                                onClick={() => {
+                                  setReplyingTo(`${comment.id}::${reply.id}`);
+                                  setReplyText("");
+                                }}
+                                className="text-[10px] text-sky-500 hover:text-sky-600 font-medium"
+                              >
+                                Reply
+                              </button>
+                            </div>
                           </div>
-                          <span className="text-[10px] text-slate-400 ml-2">
-                            {timeAgo(reply.created_at)}
-                          </span>
                         </div>
+
+                        {/* Inline reply input beneath this specific reply */}
+                        {replyingTo === `${comment.id}::${reply.id}` && (
+                          <div className="mt-2 ml-5 flex gap-2">
+                            <textarea
+                              autoFocus
+                              value={replyText}
+                              onChange={(e) => setReplyText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault();
+                                  submitComment(comment.id, replyText);
+                                }
+                              }}
+                              placeholder="Write a reply..."
+                              rows={2}
+                              className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none resize-none bg-white"
+                            />
+                            <div className="flex flex-col gap-1">
+                              <button
+                                onClick={() => submitComment(comment.id, replyText)}
+                                disabled={!replyText.trim() || submittingComment}
+                                className="h-8 w-8 rounded-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white flex items-center justify-center transition"
+                              >
+                                {submittingComment ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => { setReplyingTo(null); setReplyText(""); }}
+                                className="h-8 w-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Inline reply input */}
+                {/* Inline reply input for top-level comment */}
                 {replyingTo === comment.id && (
                   <div className="ml-9 flex gap-2">
                     <textarea
                       autoFocus
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          submitComment(comment.id, replyText);
+                        }
+                      }}
                       placeholder="Write a reply..."
                       rows={2}
                       className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none resize-none bg-white"
@@ -272,10 +331,7 @@ function PostCard({
                         )}
                       </button>
                       <button
-                        onClick={() => {
-                          setReplyingTo(null);
-                          setReplyText("");
-                        }}
+                        onClick={() => { setReplyingTo(null); setReplyText(""); }}
                         className="h-8 w-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition"
                       >
                         <X className="h-3 w-3" />
@@ -286,8 +342,8 @@ function PostCard({
               </div>
             ))}
 
-          {/* New top-level comment */}
-          {replyingTo === null && (
+          {/* New top-level comment — shown when not replying to a specific top-level comment */}
+          {(replyingTo === null || replyingTo.includes("::")) && (
             <div className="flex gap-2 pt-1">
               <div className="h-7 w-7 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 overflow-hidden">
                 {user?.profilePhoto ? (
