@@ -1,0 +1,160 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Lock, Eye, EyeOff, Loader2, Compass, Check, X } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { useAuthStore } from "../../stores";
+
+function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <li className={`flex items-center gap-1.5 text-xs ${ok ? "text-emerald-600" : "text-slate-400"}`}>
+      {ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+      {label}
+    </li>
+  );
+}
+
+export default function SetPassword() {
+  const navigate = useNavigate();
+  const { loadSession } = useAuthStore();
+  const [form, setForm] = useState({ password: "", confirm: "" });
+  const [showPw, setShowPw] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const pw = form.password;
+  const rules = {
+    length: pw.length >= 8,
+    upper: /[A-Z]/.test(pw),
+    number: /[0-9]/.test(pw),
+  };
+  const pwStrong = Object.values(rules).every(Boolean);
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!form.password || !form.confirm) return setError("Please fill in both fields.");
+    if (!pwStrong) return setError("Please meet all password requirements.");
+    if (form.password !== form.confirm) return setError("Passwords do not match.");
+
+    setIsLoading(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password: form.password });
+      if (updateError) throw new Error(updateError.message);
+
+      // Reload session so the store picks up the updated user
+      await loadSession();
+
+      // Check if onboarding is needed
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) { navigate("/login", { replace: true }); return; }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("travel_interests")
+        .eq("id", userId)
+        .single();
+
+      const hasOnboarded = ((profile?.travel_interests as string[] | null)?.length ?? 0) > 0;
+      navigate(hasOnboarded ? "/dashboard" : "/onboarding", { replace: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to set password.";
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2">
+            <span className="h-11 w-11 bg-sky-600 rounded-xl flex items-center justify-center text-white shadow-md">
+              <Compass className="h-6 w-6" />
+            </span>
+            <span className="text-2xl font-bold text-slate-900">TC<span className="text-sky-600">U</span>nnect</span>
+          </div>
+          <p className="text-slate-500 text-sm mt-2">Travel. Connect. Unwind.</p>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
+          <div className="flex items-center justify-center mb-4">
+            <div className="h-12 w-12 bg-sky-100 rounded-full flex items-center justify-center">
+              <Lock className="h-6 w-6 text-sky-600" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-1 text-center">Create a password</h1>
+          <p className="text-slate-500 text-sm mb-7 text-center">
+            Set a password so you can log in to your TCUnnect account with email too.
+          </p>
+
+          {error && (
+            <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">New Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  name="password" type={showPw ? "text" : "password"} value={form.password} onChange={onChange}
+                  placeholder="••••••••"
+                  className="w-full pl-9 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition"
+                />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {form.password && (
+                <ul className="mt-2 space-y-1 pl-1">
+                  <PasswordRule ok={rules.length} label="At least 8 characters" />
+                  <PasswordRule ok={rules.upper} label="One uppercase letter" />
+                  <PasswordRule ok={rules.number} label="One number" />
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  name="confirm" type={showConfirm ? "text" : "password"} value={form.confirm} onChange={onChange}
+                  placeholder="••••••••"
+                  className="w-full pl-9 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition"
+                />
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {form.confirm && form.password !== form.confirm && (
+                <p className="mt-1 text-xs text-red-500">Passwords don't match</p>
+              )}
+            </div>
+
+            <button type="submit" disabled={isLoading}
+              className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm mt-2">
+              {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Setting password...</> : "Set Password & Continue"}
+            </button>
+          </form>
+
+          <p className="text-center text-xs text-slate-400 mt-6">
+            You can always log in with Google — this just adds email login as an option.
+          </p>
+        </div>
+      </div>
+    </main>
+  );
+}

@@ -9,6 +9,7 @@ import Login from "./pages/auth/Login";
 import SignUp from "./pages/auth/SignUp";
 import Onboarding from "./pages/auth/Onboarding";
 import AuthCallback from "./pages/auth/AuthCallback";
+import SetPassword from "./pages/auth/SetPassword";
 
 // App pages
 import Dashboard from "./pages/Dashboard";
@@ -90,9 +91,17 @@ export default function AppRoutes() {
           await loadSession();
 
           // Only auto-navigate if we're still on a "public-only" page
-          const path = window.location.pathname;
+          const currentPath = window.location.pathname;
           const publicPaths = ["/", "/login", "/signup", "/auth/callback"];
-          if (publicPaths.includes(path)) {
+          if (publicPaths.includes(currentPath)) {
+            // Check if Google-only user (no password set)
+            const identities = session.user.identities ?? [];
+            const hasEmailIdentity = identities.some((id: { provider: string }) => id.provider === "email");
+            const hasGoogleIdentity = identities.some((id: { provider: string }) => id.provider === "google");
+            if (hasGoogleIdentity && !hasEmailIdentity) {
+              navigate("/set-password", { replace: true });
+              return;
+            }
             const { data: profile } = await supabase
               .from("profiles")
               .select("travel_interests")
@@ -130,6 +139,7 @@ export default function AppRoutes() {
       />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/set-password" element={<SetPassword />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/safety" element={<Safety />} />

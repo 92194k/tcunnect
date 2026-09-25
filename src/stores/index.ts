@@ -145,6 +145,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw new Error("__EMAIL_CONFIRM__");
     }
 
+    // Upsert profile so it exists even if the DB trigger didn't fire
+    await supabase.from("profiles").upsert({
+      id: data.user.id,
+      email,
+      full_name: fullName,
+      created_at: new Date().toISOString(),
+    }, { onConflict: "id" });
+
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: fullName, created_at: new Date().toISOString() });

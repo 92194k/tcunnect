@@ -6,9 +6,9 @@ import { useAuthStore } from "../../stores";
 
 /**
  * /auth/callback
- * Supabase redirects here after Google OAuth (when the callback URL is
- * properly configured in Supabase Dashboard → Auth → URL Configuration).
- * Exchanges the code for a session, then routes to dashboard or onboarding.
+ * Supabase redirects here after Google OAuth.
+ * - If the user signed in via Google only (no password set), redirect to /set-password.
+ * - Otherwise route to dashboard or onboarding based on profile.
  */
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -17,9 +17,22 @@ export default function AuthCallback() {
   useEffect(() => {
     let handled = false;
 
-    async function finish(userId: string) {
+    async function finish(userId: string, identities: { provider: string }[]) {
       if (handled) return;
       handled = true;
+
+      // If user has only a Google identity (no email/password identity), send to set-password
+      const hasEmailIdentity = identities.some(
+        (id) => id.provider === "email"
+      );
+      const hasGoogleIdentity = identities.some(
+        (id) => id.provider === "google"
+      );
+
+      if (hasGoogleIdentity && !hasEmailIdentity) {
+        navigate("/set-password", { replace: true });
+        return;
+      }
 
       await loadSession();
 
@@ -33,20 +46,21 @@ export default function AuthCallback() {
       navigate(hasOnboarded ? "/dashboard" : "/onboarding", { replace: true });
     }
 
-    // First check: session may already be ready (Supabase exchanges code on load)
+    // First check: session may already be ready
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) finish(session.user.id);
+      if (session?.user) {
+        finish(session.user.id, (session.user.identities ?? []) as { provider: string }[]);
+      }
     });
 
     // Second check: listen for the exchange completing asynchronously
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
         subscription.unsubscribe();
-        finish(session.user.id);
+        finish(session.user.id, (session.user.identities ?? []) as { provider: string }[]);
         return;
       }
       if (event === "INITIAL_SESSION" && !session && !handled) {
-        // No code in URL at all — shouldn't happen, fall back
         subscription.unsubscribe();
         navigate("/login", { replace: true });
       }
