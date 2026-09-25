@@ -48,8 +48,10 @@ export default function SignUp() {
         return;
       } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("user already")) {
         setError("An account with this email already exists. Please log in instead.");
+      } else if (msg.toLowerCase().includes("504") || msg.toLowerCase().includes("smtp") || msg.toLowerCase().includes("timeout") || msg.toLowerCase().includes("email")) {
+        setError("Account created but we couldn't send your verification email right now. Please try signing up again in a moment, or contact support.");
       } else {
-        setError(msg);
+        setError(msg || "Sign up failed. Please try again.");
       }
     }
   };
