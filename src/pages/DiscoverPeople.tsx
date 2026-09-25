@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
@@ -197,9 +197,6 @@ function MatchModal({
   );
 }
 
-// ── Match phase type ──────────────────────────────────────────────
-type MatchPhase = "idle" | "animating" | "modal";
-
 // ── Main Page ─────────────────────────────────────────────────────
 export default function DiscoverPeople() {
   const navigate = useNavigate();
@@ -213,20 +210,18 @@ export default function DiscoverPeople() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
 
-  // ── Match state machine ───────────────────────────────────────────
-  // pendingMatch: holds the matched traveler + match ID throughout the animation → modal flow
-  const [pendingMatch, setPendingMatch] = useState<{ traveler: User; matchId: string } | null>(null);
-  const [matchPhase, setMatchPhase] = useState<MatchPhase>("idle");
+  // ── Match state — three independent variables ─────────────────────
+  // mutualMatchData: locked in when a mutual match is found; cleared only by user action
+  const [mutualMatchData, setMutualMatchData] = useState<{ traveler: User; matchId: string } | null>(null);
+  // showConnectionAnim: true during the 2.5 s map line animation
+  const [showConnectionAnim, setShowConnectionAnim] = useState(false);
+  // showMatchModal: true after animation finishes
+  const [showMatchModal, setShowMatchModal] = useState(false);
+  // Timer lives in a ref so React effect cleanup never accidentally kills it
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // When phase transitions to "animating", auto-advance to "modal" after 2 s
-  useEffect(() => {
-    if (matchPhase !== "animating") return;
-    const timer = setTimeout(() => setMatchPhase("modal"), 2000);
-    return () => clearTimeout(timer);
-  }, [matchPhase]);
-
-  const matchAnimation = matchPhase === "animating";
-  const showModal = matchPhase === "modal" && pendingMatch !== null;
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (animTimerRef.current) clearTimeout(animTimerRef.current); }, []);
 
   // ── Fetch profiles ───────────────────────────────────────────────
   useEffect(() => {
@@ -266,9 +261,11 @@ export default function DiscoverPeople() {
     setLoading(false);
   }
 
-  // During a match sequence, freeze the displayed traveler so the card/map don't jump
-  const currentTraveler: User | null =
-    (pendingMatch && matchPhase !== "idle") ? pendingMatch.traveler : (deck[index] ?? null);
+  // Freeze the displayed traveler during a match sequence so the card/map don't jump
+  const inMatchSequence = mutualMatchData !== null;
+  const currentTraveler: User | null = inMatchSequence
+    ? mutualMatchData.traveler
+    : (deck[index] ?? null);
 
   const advance = () => {
     setIndex((i) => {
@@ -279,33 +276,48 @@ export default function DiscoverPeople() {
   };
 
   // ── Start match sequence ─────────────────────────────────────────
-  function startMatch(traveler: User, matchId: string) {
-    const match: Match = {
+  function startMatchSequence(traveler: User, matchId: string) {
+    // Save match to Zustand store immediately (makes it available to chat)
+    addMatch({
       id: matchId,
       user1Id: user?.id ?? "",
       user2Id: traveler.id,
       user: traveler,
       createdAt: new Date().toISOString(),
       status: "active",
-    };
-    addMatch(match);
-    setPendingMatch({ traveler, matchId });
-    setMatchPhase("animating"); // triggers the useEffect timer → "modal"
+    } as Match);
+
+    // Lock in match data
+    setMutualMatchData({ traveler, matchId });
+    // Show the connection animation on the map
+    setShowConnectionAnim(true);
+    setShowMatchModal(false);
+
+    // After 2.5 s: hide animation, show modal
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    animTimerRef.current = setTimeout(() => {
+      setShowConnectionAnim(false);
+      setShowMatchModal(true);
+    }, 2500);
   }
 
-  // ── Dismiss match (Keep Exploring) ───────────────────────────────
-  function dismissMatch() {
-    setPendingMatch(null);
-    setMatchPhase("idle");
+  // ── Dismiss modal (Keep Exploring) ───────────────────────────────
+  function dismissModal() {
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    setShowConnectionAnim(false);
+    setShowMatchModal(false);
+    setMutualMatchData(null);
     advance();
   }
 
   // ── Navigate to chat ─────────────────────────────────────────────
   function goToChat() {
-    if (!pendingMatch) return;
-    const { traveler, matchId } = pendingMatch;
-    setPendingMatch(null);
-    setMatchPhase("idle");
+    if (!mutualMatchData) return;
+    const { traveler, matchId } = mutualMatchData;
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    setShowConnectionAnim(false);
+    setShowMatchModal(false);
+    setMutualMatchData(null);
     navigate(`/chat/${matchId}`, {
       state: {
         systemMessage: `You and ${traveler.fullName} liked each other! You can now start chatting. 🎉`,
@@ -315,11 +327,11 @@ export default function DiscoverPeople() {
 
   // ── Like handler ──────────────────────────────────────────────────
   const handleLike = async () => {
-    if (!currentTraveler || liking || matchPhase !== "idle") return;
+    if (!currentTraveler || liking || inMatchSequence) return;
 
     // Demo mode (no Supabase) — always simulate a match
     if (!isSupabaseConfigured) {
-      startMatch(currentTraveler, `demo_${Date.now()}`);
+      startMatchSequence(currentTraveler, `demo_${Date.now()}`);
       return;
     }
 
@@ -361,7 +373,7 @@ export default function DiscoverPeople() {
 
       if (matchRow?.id) {
         // Mutual match found — start the animation → modal sequence
-        startMatch(currentTraveler, matchRow.id);
+        startMatchSequence(currentTraveler, matchRow.id);
       } else {
         // No match yet — just advance to the next traveler
         advance();
@@ -375,7 +387,7 @@ export default function DiscoverPeople() {
   };
 
   const handlePass = () => {
-    if (matchPhase !== "idle") return;
+    if (inMatchSequence) return;
     advance();
   };
 
@@ -394,14 +406,14 @@ export default function DiscoverPeople() {
           label: currentTraveler.fullName,
           sublabel: currentTraveler.location,
           photo: currentTraveler.profilePhoto || undefined,
-          // Don't set active during match animation — fitBounds handles the view
-          active: !matchAnimation,
+          // Don't auto-pan during animation — fitBounds handles the view
+          active: !showConnectionAnim,
         });
       }
     }
 
-    // During match animation, also pin the logged-in user's location
-    if (matchAnimation && user?.location) {
+    // During connection animation, also show the logged-in user's location
+    if (showConnectionAnim && user?.location) {
       const myCoords = geocodeLocation(user.location);
       if (myCoords) {
         markers.push({
@@ -418,11 +430,11 @@ export default function DiscoverPeople() {
     }
 
     return markers;
-  }, [currentTraveler, matchAnimation, user]);
+  }, [currentTraveler, showConnectionAnim, user]);
 
-  // ── Build match line (only during animation) ──────────────────────
+  // ── Build match line (only during connection animation) ───────────
   const matchLine = useMemo(() => {
-    if (!matchAnimation || !currentTraveler || !user?.location) return undefined;
+    if (!showConnectionAnim || !currentTraveler || !user?.location) return undefined;
     const theirCoords = geocodeLocation(currentTraveler.location);
     const myCoords = geocodeLocation(user.location);
     if (!theirCoords || !myCoords) return undefined;
@@ -432,17 +444,17 @@ export default function DiscoverPeople() {
       toLat: theirCoords[0],
       toLng: theirCoords[1],
     };
-  }, [matchAnimation, currentTraveler, user]);
+  }, [showConnectionAnim, currentTraveler, user]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
     <AppShell>
-      {/* Match Modal — rendered above everything, always visible when showModal is true */}
-      {showModal && pendingMatch && (
+      {/* Match Modal — portal into document.body so it sits above Leaflet stacking contexts */}
+      {showMatchModal && mutualMatchData && (
         <MatchModal
-          traveler={pendingMatch.traveler}
+          traveler={mutualMatchData.traveler}
           myPhoto={user?.profilePhoto ?? ""}
-          onClose={dismissMatch}
+          onClose={dismissModal}
           onChat={goToChat}
         />
       )}
@@ -522,7 +534,7 @@ export default function DiscoverPeople() {
             <>
               {/* Traveler card */}
               <div className={`bg-white rounded-3xl shadow-xl overflow-hidden border transition-all duration-300 ${
-                matchAnimation ? "border-rose-300 shadow-rose-100/80" : "border-slate-100 shadow-slate-200/60"
+                showConnectionAnim ? "border-rose-300 shadow-rose-100/80" : "border-slate-100 shadow-slate-200/60"
               }`}>
                 <div className="relative h-80">
                   {currentTraveler.profilePhoto ? (
@@ -550,7 +562,7 @@ export default function DiscoverPeople() {
                   )}
 
                   {/* Match animation overlay on card */}
-                  {matchAnimation && (
+                  {showConnectionAnim && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                       <div className="bg-rose-500 text-white font-bold text-xl px-8 py-4 rounded-2xl shadow-xl animate-bounce">
                         ❤️ It's a Match!
@@ -587,14 +599,14 @@ export default function DiscoverPeople() {
               <div className="flex items-center justify-center gap-6 mt-5">
                 <button
                   onClick={handlePass}
-                  disabled={liking || matchPhase !== "idle"}
+                  disabled={liking || inMatchSequence}
                   className="h-14 w-14 bg-white rounded-full shadow-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 transition-all hover:scale-110 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <X className="h-6 w-6" />
                 </button>
                 <button
                   onClick={handleLike}
-                  disabled={liking || matchPhase !== "idle"}
+                  disabled={liking || inMatchSequence}
                   className="h-14 w-14 bg-rose-500 hover:bg-rose-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-full shadow-lg shadow-rose-200 flex items-center justify-center text-white transition-all hover:scale-110"
                 >
                   {liking ? (
