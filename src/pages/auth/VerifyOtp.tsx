@@ -11,7 +11,7 @@ export default function VerifyOtp() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email") ?? "";
 
-  const [digits, setDigits] = useState(["", "", "", "", "", ""]);
+  const [digits, setDigits] = useState(["", "", "", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -36,15 +36,15 @@ export default function VerifyOtp() {
   }, [email, navigate]);
 
   const focusNext = (index: number) => {
-    if (index < 5) inputRefs.current[index + 1]?.focus();
+    if (index < 7) inputRefs.current[index + 1]?.focus();
   };
 
   const handleDigitChange = (index: number, value: string) => {
     if (value.length > 1) {
-      const pasted = value.replace(/\D/g, "").slice(0, 6);
-      if (pasted.length === 6) {
+      const pasted = value.replace(/\D/g, "").slice(0, 8);
+      if (pasted.length === 8) {
         setDigits(pasted.split(""));
-        inputRefs.current[5]?.focus();
+        inputRefs.current[7]?.focus();
         return;
       }
       return;
@@ -66,7 +66,7 @@ export default function VerifyOtp() {
 
   // Core verify logic — defined with current otpCode always in scope
   const handleVerify = async (code = otpCode) => {
-    if (code.length < 6) return setError("Please enter the full 6-digit code.");
+    if (code.length < 8) return setError("Please enter the full 8-digit code.");
     if (isVerifying) return; // Prevent concurrent calls
     setError("");
     setIsVerifying(true);
@@ -120,7 +120,7 @@ export default function VerifyOtp() {
           : msg;
       setError(friendly);
       // Clear digits so the user can re-enter a fresh code cleanly
-      setDigits(["", "", "", "", "", ""]);
+      setDigits(["", "", "", "", "", "", "", ""]);
       autoSubmitFiredRef.current = false; // Allow auto-submit on next fill
       setTimeout(() => inputRefs.current[0]?.focus(), 0);
     } finally {
@@ -132,10 +132,10 @@ export default function VerifyOtp() {
   // Uses a ref guard — NOT isVerifying in deps — to prevent the infinite loop
   // where setIsVerifying(false) in finally would re-trigger this effect.
   useEffect(() => {
-    if (otpCode.length === 6 && !autoSubmitFiredRef.current) {
+    if (otpCode.length === 8 && !autoSubmitFiredRef.current) {
       autoSubmitFiredRef.current = true;
       handleVerify(otpCode);
-    } else if (otpCode.length < 6) {
+    } else if (otpCode.length < 8) {
       // User is still typing / cleared a digit — reset the guard
       autoSubmitFiredRef.current = false;
     }
@@ -162,7 +162,7 @@ export default function VerifyOtp() {
 
       setResendSuccess(true);
       setCountdown(RESEND_COUNTDOWN);
-      setDigits(["", "", "", "", "", ""]);
+      setDigits(["", "", "", "", "", "", "", ""]);
       setTimeout(() => inputRefs.current[0]?.focus(), 0);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to resend code.";
@@ -245,7 +245,7 @@ export default function VerifyOtp() {
               autoSubmitFiredRef.current = true; // Prevent double-fire from auto-submit
               handleVerify(otpCode);
             }}
-            disabled={isVerifying || otpCode.length < 6}
+            disabled={isVerifying || otpCode.length < 8}
             className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
           >
             {isVerifying ? (
