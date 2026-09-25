@@ -4,66 +4,55 @@ import { Compass } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../stores";
 
-// Handles Google OAuth redirect — loads session then routes to dashboard or onboarding
+/**
+ * /auth/callback
+ * Supabase redirects here after Google OAuth (when the callback URL is
+ * properly configured in Supabase Dashboard → Auth → URL Configuration).
+ * Exchanges the code for a session, then routes to dashboard or onboarding.
+ */
 export default function AuthCallback() {
   const navigate = useNavigate();
   const { loadSession } = useAuthStore();
 
   useEffect(() => {
-    let done = false;
+    let handled = false;
 
-    async function handleSession(session: { user: { id: string } }) {
-      if (done) return;
-      done = true;
+    async function finish(userId: string) {
+      if (handled) return;
+      handled = true;
 
-      // Fetch profile to check if onboarding was already completed
+      await loadSession();
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("travel_interests")
-        .eq("id", session.user.id)
+        .eq("id", userId)
         .single();
 
-      const hasInterests = (profile?.travel_interests as string[] | null)?.length ?? 0;
-
-      // Sync full auth state into the store
-      await loadSession();
-
-      navigate(hasInterests > 0 ? "/dashboard" : "/onboarding", { replace: true });
+      const hasOnboarded = ((profile?.travel_interests as string[] | null)?.length ?? 0) > 0;
+      navigate(hasOnboarded ? "/dashboard" : "/onboarding", { replace: true });
     }
 
-    // 1. Check immediately — Supabase may have already exchanged the code
+    // First check: session may already be ready (Supabase exchanges code on load)
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) handleSession(session);
+      if (session?.user) finish(session.user.id);
     });
 
-    // 2. Also listen for auth state changes (covers slower code exchanges)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
-          subscription.unsubscribe();
-          await handleSession(session);
-          return;
-        }
-        // No session on INITIAL_SESSION = no code in URL, go back to login
-        if (event === "INITIAL_SESSION" && !session && !done) {
-          subscription.unsubscribe();
-          navigate("/login", { replace: true });
-        }
+    // Second check: listen for the exchange completing asynchronously
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
+        subscription.unsubscribe();
+        finish(session.user.id);
+        return;
       }
-    );
-
-    // Safety fallback: 10 seconds max
-    const timeout = setTimeout(() => {
-      if (!done) {
+      if (event === "INITIAL_SESSION" && !session && !handled) {
+        // No code in URL at all — shouldn't happen, fall back
         subscription.unsubscribe();
         navigate("/login", { replace: true });
       }
-    }, 10000);
+    });
 
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timeout);
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   return (

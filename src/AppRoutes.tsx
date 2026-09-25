@@ -1,6 +1,7 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useAuthStore } from "./stores";
+import { supabase, isSupabaseConfigured } from "./lib/supabase";
 
 // Public pages
 import LandingPage from "./LandingPage";
@@ -32,6 +33,19 @@ import Terms from "./pages/legal/Terms";
 import Safety from "./pages/legal/Safety";
 import HelpCenter from "./pages/legal/HelpCenter";
 
+// ─── Root: redirects logged-in users away from landing ─────────
+function RootPage() {
+  const { isLoggedIn, onboardingComplete, isLoading } = useAuthStore();
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-sky-50">
+      <div className="h-8 w-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+  if (isLoggedIn && onboardingComplete) return <Navigate to="/dashboard" replace />;
+  if (isLoggedIn && !onboardingComplete) return <Navigate to="/onboarding" replace />;
+  return <LandingPage />;
+}
+
 // ─── Guard components ──────────────────────────────────────────
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, onboardingComplete, isLoading } = useAuthStore();
@@ -58,15 +72,46 @@ function RedirectIfLoggedIn({ children }: { children: React.ReactNode }) {
 // ─── Routes ───────────────────────────────────────────────────
 export default function AppRoutes() {
   const { loadSession } = useAuthStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
+    // Initial session load
     loadSession();
-  }, [loadSession]);
+
+    if (!isSupabaseConfigured) return;
+
+    // Global auth listener — handles OAuth redirects landing on ANY page
+    // (e.g. when Supabase redirects back to "/" instead of "/auth/callback"
+    // because the callback URL wasn't added to the Supabase allowed list)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          // Re-load the full profile into the store
+          await loadSession();
+
+          // Only auto-navigate if we're still on a "public-only" page
+          const path = window.location.pathname;
+          const publicPaths = ["/", "/login", "/signup", "/auth/callback"];
+          if (publicPaths.includes(path)) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("travel_interests")
+              .eq("id", session.user.id)
+              .single();
+            const hasInterests = ((profile?.travel_interests as string[] | null)?.length ?? 0) > 0;
+            navigate(hasInterests ? "/dashboard" : "/onboarding", { replace: true });
+          }
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <Routes>
-      {/* Public */}
-      <Route path="/" element={<LandingPage />} />
+      {/* Public — RootPage redirects logged-in users to dashboard/onboarding */}
+      <Route path="/" element={<RootPage />} />
       <Route
         path="/login"
         element={
