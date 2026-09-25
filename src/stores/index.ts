@@ -110,10 +110,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   loginWithGoogle: async () => {
     if (!isSupabaseConfigured) return;
+    // Use VITE_SITE_URL if set (set this in Vercel env vars to your production URL).
+    // Falls back to window.location.origin so local dev still works.
+    const siteUrl = import.meta.env.VITE_SITE_URL?.replace(/\/$/, "") ?? window.location.origin;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      // Redirect to /auth/callback — let the router decide dashboard vs onboarding
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${siteUrl}/auth/callback` },
     });
   },
 
@@ -144,14 +146,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: false });
       throw new Error("__EMAIL_CONFIRM__");
     }
-
-    // Upsert profile so it exists even if the DB trigger didn't fire
-    await supabase.from("profiles").upsert({
-      id: data.user.id,
-      email,
-      full_name: fullName,
-      created_at: new Date().toISOString(),
-    }, { onConflict: "id" });
 
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
