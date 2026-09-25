@@ -148,6 +148,183 @@ const travelers = [
   { name: "Ana", city: "Cebu City", tags: ["Culture", "Diving"], image: images.traveler3, color: "bg-sky-500" },
 ];
 
+
+const FEATURED_DESTINATIONS = [
+  {
+    name: "Siquijor",
+    location: "Siquijor Province, Visayas",
+    description: "A mystical island wrapped in folklore and fireflies, with powder-white beaches and healing traditions that feel untouched by time.",
+    image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1400&q=85",
+    tags: ["🏖 Beach", "🌿 Nature", "💎 Hidden Gem"],
+    bestFor: ["Solo", "Duo"],
+  },
+  {
+    name: "Camiguin",
+    location: "Camiguin, Northern Mindanao",
+    description: "The island born of fire — seven volcanoes, a sunken cemetery, hot springs, and waterfalls packed into one small paradise.",
+    image: "https://images.unsplash.com/photo-1547036967-23d11aacaee0?auto=format&fit=crop&w=1400&q=85",
+    tags: ["🌿 Nature", "🏔 Mountain", "💦 Waterfalls"],
+    bestFor: ["Solo", "Group"],
+  },
+  {
+    name: "Batanes",
+    location: "Batanes Province, Luzon",
+    description: "Rolling green hills, stone houses, dramatic cliffs, and wind-swept coves at the northernmost tip of the Philippines.",
+    image: "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1400&q=85",
+    tags: ["🏛 Heritage", "🌿 Nature", "📷 Photography"],
+    bestFor: ["Solo", "Duo"],
+  },
+  {
+    name: "Bukidnon",
+    location: "Bukidnon, Mindanao",
+    description: "A cool highland plateau with sprawling pineapple farms, misty mountains, and some of the Philippines' most serene landscapes.",
+    image: "https://images.unsplash.com/photo-1465056836041-7f43ac27dcb5?auto=format&fit=crop&w=1400&q=85",
+    tags: ["🌿 Nature", "🏔 Mountain", "⛺ Camping"],
+    bestFor: ["Group", "Family"],
+  },
+  {
+    name: "Romblon",
+    location: "Romblon Province, Mimaropa",
+    description: "The marble capital of the Philippines — crystal-clear waters, pristine reefs, and beaches so quiet you'll feel like you found a secret.",
+    image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=85",
+    tags: ["🏖 Beach", "💎 Hidden Gem", "🌿 Nature"],
+    bestFor: ["Solo", "Duo"],
+  },
+];
+
+function FeaturedCarousel() {
+  const [current, setCurrent] = useState(0);
+  const [visible, setVisible] = useState(true);
+  const [paused, setPaused] = useState(false);
+  const total = FEATURED_DESTINATIONS.length;
+
+  const goTo = useCallback((idx: number) => {
+    setVisible(false);
+    setTimeout(() => {
+      setCurrent((idx + total) % total);
+      setVisible(true);
+    }, 320);
+  }, [total]);
+
+  const next = useCallback(() => goTo(current + 1), [current, goTo]);
+  const prev = useCallback(() => goTo(current - 1), [current, goTo]);
+
+  useEffect(() => {
+    if (paused) return;
+    const id = setInterval(next, 5000);
+    return () => clearInterval(id);
+  }, [paused, next]);
+
+  const dest = FEATURED_DESTINATIONS[current];
+
+  return (
+    <div
+      className="relative overflow-hidden rounded-[30px] shadow-[0_22px_70px_rgba(15,45,65,0.13)]"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Image layer */}
+      <div className="relative h-[480px] lg:h-[560px]">
+        <img
+          key={current}
+          src={dest.image}
+          alt={dest.name}
+          className="absolute inset-0 h-full w-full object-cover"
+          style={{
+            opacity: visible ? 1 : 0,
+            transform: visible ? "scale(1)" : "scale(1.03)",
+            transition: "opacity 0.4s ease, transform 0.4s ease",
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent" />
+
+        {/* Badge */}
+        <div className="absolute left-6 top-6">
+          <span className="rounded-full bg-amber-300 px-4 py-2 text-[10px] font-extrabold tracking-[0.16em] text-amber-950 shadow-sm">
+            ✨ FEATURED BY TCUNNECT
+          </span>
+        </div>
+
+        {/* Prev / Next */}
+        <button
+          onClick={prev}
+          className="absolute left-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
+          aria-label="Previous"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <button
+          onClick={next}
+          className="absolute right-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
+          aria-label="Next"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+
+        {/* Content overlay */}
+        <div
+          className="absolute bottom-0 left-0 right-0 p-8 lg:p-12"
+          style={{
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(12px)",
+            transition: "opacity 0.35s ease 0.05s, transform 0.35s ease 0.05s",
+          }}
+        >
+          <div className="max-w-2xl">
+            <h3 className="text-4xl font-bold text-white tracking-tight lg:text-5xl">{dest.name}</h3>
+            <p className="mt-2 flex items-center gap-2 text-sm font-medium text-white/70">
+              <svg className="h-4 w-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+              {dest.location}
+            </p>
+            <p className="mt-4 text-base leading-7 text-white/85 max-w-lg">{dest.description}</p>
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              {dest.tags.map((tag) => (
+                <span key={tag} className="rounded-full bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-1 text-xs font-semibold text-white">
+                  {tag}
+                </span>
+              ))}
+              <span className="ml-2 text-xs text-white/50">Best for:</span>
+              {dest.bestFor.map((b) => (
+                <span key={b} className="rounded-full bg-sky-500/30 border border-sky-400/40 px-3 py-1 text-xs font-semibold text-sky-200">
+                  {b}
+                </span>
+              ))}
+            </div>
+            <div className="mt-7">
+              <a
+                href="/signup"
+                className="inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-bold text-slate-900 shadow-lg transition hover:gap-3 hover:bg-sky-50"
+              >
+                Explore This Gem
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Dot indicators */}
+      <div className="absolute bottom-6 right-8 flex items-center gap-1.5">
+        {FEATURED_DESTINATIONS.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            aria-label={`Go to slide ${i + 1}`}
+            className="transition-all duration-300"
+            style={{
+              width: i === current ? "24px" : "8px",
+              height: "8px",
+              borderRadius: "9999px",
+              background: i === current ? "white" : "rgba(255,255,255,0.35)",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ScrollArrow() {
   const [atBottom, setAtBottom] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -257,42 +434,16 @@ export default function App() {
 
       <section className="section-pad bg-[#fffdf8]" id="gems">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
-          <div className="mb-10 max-w-2xl">
-            <div className="eyebrow text-amber-700"><Icon name="sparkle" className="h-4 w-4" /> Featured Gem by TCUnnect</div>
+          <div className="mb-8">
+            <div className="eyebrow text-amber-700">
+              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                <path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3ZM5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16Z" />
+              </svg>
+              Featured Gem by TCUnnect
+            </div>
             <h2 className="section-title mt-4">Discover somewhere worth getting lost in.</h2>
           </div>
-          <article className="grid overflow-hidden rounded-[30px] border border-amber-100 bg-white shadow-[0_22px_70px_rgba(15,45,65,0.10)] lg:grid-cols-[1.45fr_1fr]">
-            <div className="relative min-h-[380px] overflow-hidden lg:min-h-[550px]">
-              <img className="h-full w-full object-cover transition duration-700 hover:scale-[1.02]" src={images.hero} alt="Scenic beach destination in the Philippines" />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/35 via-transparent to-transparent" />
-              <span className="absolute left-6 top-6 rounded-full bg-amber-300 px-4 py-2 text-[10px] font-extrabold tracking-[0.16em] text-amber-950 shadow-sm">
-                FEATURED BY TCUNNECT
-              </span>
-            </div>
-            <div className="flex flex-col justify-center p-8 sm:p-12 lg:p-14">
-              <span className="mb-5 h-1.5 w-12 rounded-full bg-amber-300" />
-              <h3 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">The Philippines Awaits</h3>
-              <p className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-500">
-                <Icon name="location" className="h-4 w-4 text-rose-400" /> 7,641 islands to explore
-              </p>
-              <p className="mt-7 text-[16px] leading-8 text-slate-600">
-                From pristine beaches to misty mountain trails — the Philippines is full of places waiting to be discovered. Sign up and let the community guide you.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-2">
-                <span className="tag bg-emerald-50 text-emerald-700">🏖 Beach</span>
-                <span className="tag bg-sky-50 text-sky-700">🌿 Nature</span>
-                <span className="tag bg-slate-100 text-slate-600">💎 Hidden Gems</span>
-              </div>
-              <div className="mt-10">
-                <a className="inline-flex items-center gap-2 rounded-full bg-sky-600 px-6 py-3.5 text-sm font-bold text-white transition hover:gap-3 hover:bg-sky-700" href="/signup">
-                  Start Exploring <Icon name="arrow" className="h-4 w-4" />
-                </a>
-              </div>
-              <p className="mt-8 border-t border-slate-100 pt-6 text-xs leading-5 text-slate-400">
-                Community-curated gems handpicked by Filipino explorers just like you.
-              </p>
-            </div>
-          </article>
+          <FeaturedCarousel />
         </div>
       </section>
 
