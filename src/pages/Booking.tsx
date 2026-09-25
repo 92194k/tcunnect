@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore, useBookingStore } from "../stores";
@@ -13,12 +13,6 @@ const TRIP_TYPES: { type: TripType; label: string; desc: string; emoji: string }
   { type: "family", label: "Family", desc: "Fun for the whole family", emoji: "👨‍👩‍👧‍👦" },
 ];
 
-const GEM_NAMES: Record<string, string> = {
-  g1: "Kayangan Lake", g2: "Balabac Islands", g3: "Kalanggaman Island",
-  g4: "Tinago Falls", g5: "Paoay Church", g6: "Batanes Rolling Hills",
-  nacpan: "Nacpan Beach", g8: "Mt. Apo Summit",
-};
-
 export default function Booking() {
   const { gemId } = useParams<{ gemId: string }>();
   const navigate = useNavigate();
@@ -32,8 +26,19 @@ export default function Booking() {
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [gemName, setGemName] = useState("Hidden Gem");
 
-  const gemName = GEM_NAMES[gemId ?? ""] ?? "Hidden Gem";
+  useEffect(() => {
+    if (!gemId || !isSupabaseConfigured) return;
+    supabase
+      .from("hidden_gems")
+      .select("name")
+      .eq("id", gemId)
+      .single()
+      .then(({ data }) => {
+        if (data?.name) setGemName(data.name);
+      });
+  }, [gemId]);
 
   const handleConfirm = async () => {
     if (!user || !gemId) return;

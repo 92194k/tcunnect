@@ -135,35 +135,11 @@ function ArrowLink({ children, href, light = false }: { children: ReactNode; hre
   );
 }
 
-const gems = [
-  {
-    name: "Kayangan Lake",
-    location: "Coron, Palawan",
-    category: "Nature",
-    icon: "🌿",
-    image: images.lagoon,
-  },
-  {
-    name: "Balabac Islands",
-    location: "Palawan",
-    category: "Island",
-    icon: "🏝",
-    image: images.islands,
-  },
-  {
-    name: "Kalanggaman",
-    location: "Leyte",
-    category: "Beach",
-    icon: "🏖",
-    image: images.boat,
-  },
-  {
-    name: "Cauayan Cove",
-    location: "El Nido",
-    category: "Escape",
-    icon: "☀",
-    image: images.resort,
-  },
+const gemCategories = [
+  { category: "Beach & Islands", icon: "🏖", image: images.lagoon, desc: "Crystal-clear waters and white sand shores" },
+  { category: "Nature & Hiking", icon: "🌿", image: images.islands, desc: "Lush mountains and untouched wilderness" },
+  { category: "Hidden Gems", icon: "💎", image: images.boat, desc: "Off-the-beaten-path local discoveries" },
+  { category: "Scenic Escapes", icon: "🌅", image: images.resort, desc: "Breathtaking views and peaceful retreats" },
 ];
 
 const travelers = [
@@ -287,7 +263,7 @@ export default function App() {
           </div>
           <article className="grid overflow-hidden rounded-[30px] border border-amber-100 bg-white shadow-[0_22px_70px_rgba(15,45,65,0.10)] lg:grid-cols-[1.45fr_1fr]">
             <div className="relative min-h-[380px] overflow-hidden lg:min-h-[550px]">
-              <img className="h-full w-full object-cover transition duration-700 hover:scale-[1.02]" src={images.nacpan} alt="Tropical white-sand beach in El Nido, Palawan" />
+              <img className="h-full w-full object-cover transition duration-700 hover:scale-[1.02]" src={images.hero} alt="Scenic beach destination in the Philippines" />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/35 via-transparent to-transparent" />
               <span className="absolute left-6 top-6 rounded-full bg-amber-300 px-4 py-2 text-[10px] font-extrabold tracking-[0.16em] text-amber-950 shadow-sm">
                 FEATURED BY TCUNNECT
@@ -295,25 +271,25 @@ export default function App() {
             </div>
             <div className="flex flex-col justify-center p-8 sm:p-12 lg:p-14">
               <span className="mb-5 h-1.5 w-12 rounded-full bg-amber-300" />
-              <h3 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Nacpan Beach</h3>
+              <h3 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">The Philippines Awaits</h3>
               <p className="mt-3 flex items-center gap-2 text-sm font-medium text-slate-500">
-                <Icon name="location" className="h-4 w-4 text-rose-400" /> El Nido, Palawan
+                <Icon name="location" className="h-4 w-4 text-rose-400" /> 7,641 islands to explore
               </p>
               <p className="mt-7 text-[16px] leading-8 text-slate-600">
-                White sand, clear water, and a quieter escape from the usual tourist spots. This is the kind of place that makes you stay a little longer.
+                From pristine beaches to misty mountain trails — the Philippines is full of places waiting to be discovered. Sign up and let the community guide you.
               </p>
               <div className="mt-8 flex flex-wrap gap-2">
                 <span className="tag bg-emerald-50 text-emerald-700">🏖 Beach</span>
-                <span className="tag bg-sky-50 text-sky-700">₱₱ · Mid-range</span>
-                <span className="tag bg-slate-100 text-slate-600">Quiet escape</span>
+                <span className="tag bg-sky-50 text-sky-700">🌿 Nature</span>
+                <span className="tag bg-slate-100 text-slate-600">💎 Hidden Gems</span>
               </div>
               <div className="mt-10">
-                <a className="inline-flex items-center gap-2 rounded-full bg-sky-600 px-6 py-3.5 text-sm font-bold text-white transition hover:gap-3 hover:bg-sky-700" href="#discover">
-                  Explore Gem <Icon name="arrow" className="h-4 w-4" />
+                <a className="inline-flex items-center gap-2 rounded-full bg-sky-600 px-6 py-3.5 text-sm font-bold text-white transition hover:gap-3 hover:bg-sky-700" href="/signup">
+                  Start Exploring <Icon name="arrow" className="h-4 w-4" />
                 </a>
               </div>
               <p className="mt-8 border-t border-slate-100 pt-6 text-xs leading-5 text-slate-400">
-                Handpicked by our community team for its local charm and laid-back beauty.
+                Community-curated gems handpicked by Filipino explorers just like you.
               </p>
             </div>
           </article>
@@ -366,18 +342,17 @@ export default function App() {
             <ArrowLink href="#discover">Explore All Gems</ArrowLink>
           </div>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {gems.map((gem) => (
-              <a className="group overflow-hidden rounded-3xl bg-white shadow-[0_10px_35px_rgba(15,45,65,0.07)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,45,65,0.12)]" href="#discover" key={gem.name}>
+            {gemCategories.map((cat) => (
+              <a className="group overflow-hidden rounded-3xl bg-white shadow-[0_10px_35px_rgba(15,45,65,0.07)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,45,65,0.12)]" href="/signup" key={cat.category}>
                 <div className="h-56 overflow-hidden">
-                  <img className="h-full w-full object-cover transition duration-500 group-hover:scale-105" src={gem.image} alt={`${gem.name}, ${gem.location}`} />
+                  <img className="h-full w-full object-cover transition duration-500 group-hover:scale-105" src={cat.image} alt={cat.category} />
                 </div>
                 <div className="p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="font-bold text-slate-900">{gem.name}</h3>
-                      <p className="mt-1 text-xs text-slate-500">{gem.location}</p>
+                      <h3 className="font-bold text-slate-900">{cat.icon} {cat.category}</h3>
+                      <p className="mt-1 text-xs text-slate-500">{cat.desc}</p>
                     </div>
-                    <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-semibold text-sky-700">{gem.icon} {gem.category}</span>
                   </div>
                 </div>
               </a>
