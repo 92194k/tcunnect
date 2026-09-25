@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import TravelMap from "../components/TravelMap";
@@ -131,7 +132,7 @@ function MatchModal({
   onChat: () => void;
   myPhoto: string;
 }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 p-4">
       <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-fadeIn">
         <div className="text-4xl mb-3">🎉</div>
@@ -191,7 +192,8 @@ function MatchModal({
           Keep Exploring
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
