@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import AppShell from "../components/AppShell";
-import { useNotificationStore } from "../stores";
+import { useNotificationStore, useAuthStore } from "../stores";
 import { Bell, Heart, MessageCircle, Star, MapPin, Check } from "lucide-react";
-import type { NotificationType } from "../types";
+import type { NotificationType, Notification } from "../types";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const ICON_MAP: Record<NotificationType, React.ReactNode> = {
   match: <Heart className="h-4 w-4 text-rose-500 fill-current" />,
@@ -23,14 +25,6 @@ const BG_MAP: Record<NotificationType, string> = {
   system: "bg-slate-50",
 };
 
-const DEMO_NOTIFS = [
-  { id: "n1", type: "match" as NotificationType, title: "New Match! 🎉", body: "You and Maria both liked each other", read: false, createdAt: new Date(Date.now() - 600000).toISOString() },
-  { id: "n2", type: "message" as NotificationType, title: "New Message", body: "Maria: Hey! Are you free next weekend?", read: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
-  { id: "n3", type: "booking_confirmed" as NotificationType, title: "Booking Confirmed ✅", body: "Your trip to Nacpan Beach on Dec 15 is confirmed!", read: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
-  { id: "n4", type: "gem_approved" as NotificationType, title: "Gem Approved 🌟", body: "Your submission 'Tinago Falls' was approved by admins", read: true, createdAt: new Date(Date.now() - 172800000).toISOString() },
-  { id: "n5", type: "system" as NotificationType, title: "Welcome to TCUnnect!", body: "Start discovering fellow Filipino travelers near you", read: true, createdAt: new Date(Date.now() - 604800000).toISOString() },
-];
-
 const formatTime = (ts: string) => {
   const diff = Date.now() - new Date(ts).getTime();
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
@@ -39,9 +33,31 @@ const formatTime = (ts: string) => {
 };
 
 export default function Notifications() {
-  const { notifications, markAllRead } = useNotificationStore();
-  const allNotifs = [...DEMO_NOTIFS, ...notifications];
-  const unread = allNotifs.filter((n) => !n.read).length;
+  const { user } = useAuthStore();
+  const { notifications, setNotifications, markAllRead } = useNotificationStore();
+  const unread = notifications.filter((n) => !n.read).length;
+
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured) return;
+    supabase
+      .from("notifications")
+      .select("id, type, title, body, read, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        if (!data) return;
+        const mapped: Notification[] = data.map((r) => ({
+          id: r.id,
+          type: r.type as NotificationType,
+          title: r.title,
+          body: r.body,
+          read: r.read,
+          createdAt: r.created_at,
+        }));
+        setNotifications(mapped);
+      });
+  }, [user, setNotifications]);
 
   return (
     <AppShell>
@@ -59,14 +75,15 @@ export default function Notifications() {
           )}
         </div>
 
-        {allNotifs.length === 0 ? (
+        {notifications.length === 0 ? (
           <div className="text-center py-20">
             <Bell className="h-10 w-10 text-slate-200 mx-auto mb-3" />
-            <p className="text-slate-500 text-sm">No notifications yet</p>
+            <p className="text-slate-500 text-sm font-medium">No notifications yet</p>
+            <p className="text-slate-400 text-xs mt-1">You will see matches, messages, and booking updates here</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {allNotifs.map((notif) => (
+            {notifications.map((notif) => (
               <div key={notif.id}
                 className={`flex items-start gap-3 p-4 rounded-2xl border transition ${
                   notif.read ? "bg-white border-slate-100" : "bg-sky-50/50 border-sky-100"
