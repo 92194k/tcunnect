@@ -85,11 +85,30 @@ export default function AppRoutes() {
     if (!isSupabaseConfigured) return;
 
     // Global auth listener — handles OAuth redirects landing on ANY page
-    // (e.g. when Supabase redirects back to "/" instead of "/auth/callback"
-    // because the callback URL wasn't added to the Supabase allowed list)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // PASSWORD_RECOVERY must be intercepted BEFORE SIGNED_IN handling.
+        // When a reset link is clicked, Supabase fires PASSWORD_RECOVERY (then
+        // SIGNED_IN). We must NOT treat that as a normal login — flag it via
+        // sessionStorage and route to /reset-password immediately.
+        if (event === "PASSWORD_RECOVERY") {
+          sessionStorage.setItem("_tcunnect_pw_recovery", "1");
+          if (window.location.pathname !== "/reset-password") {
+            navigate("/reset-password", { replace: true });
+          }
+          return; // Do NOT call loadSession() or navigate to dashboard
+        }
+
         if (event === "SIGNED_IN" && session?.user) {
+          // If we're in the middle of a password recovery flow, let
+          // ResetPassword.tsx handle everything — do not touch auth store here.
+          if (
+            window.location.pathname === "/reset-password" ||
+            sessionStorage.getItem("_tcunnect_pw_recovery") === "1"
+          ) {
+            return;
+          }
+
           // Re-load the full profile into the store
           await loadSession();
 

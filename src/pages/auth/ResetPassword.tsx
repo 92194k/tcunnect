@@ -20,34 +20,54 @@ export default function ResetPassword() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [done, setDone] = useState(false);
-  // null = checking, true = recovery session ready, false = expired/invalid
+  // null = still verifying, true = recovery session confirmed, false = expired/invalid
   const [recoveryReady, setRecoveryReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      // Demo mode — just show the form
       setRecoveryReady(true);
       return;
     }
 
-    // Supabase PKCE: the email link lands with ?code= in the URL.
-    // The client SDK auto-exchanges it and fires PASSWORD_RECOVERY.
-    // We listen for that event — it's the only safe signal that this
-    // is a genuine recovery session (not an ordinary login).
+    // Fast path: the global listener in AppRoutes already caught PASSWORD_RECOVERY
+    // and set this flag before routing here. Show form immediately.
+    if (sessionStorage.getItem("_tcunnect_pw_recovery") === "1") {
+      setRecoveryReady(true);
+      return;
+    }
+
+    // Slow path: user landed directly on /reset-password (e.g. deep-link or refresh).
+    // Listen for the PASSWORD_RECOVERY event that fires when Supabase auto-exchanges
+    // the ?code= param in the URL.
+    let settled = false;
+    const settle = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (value) sessionStorage.setItem("_tcunnect_pw_recovery", "1");
+      setRecoveryReady(value);
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
-        setRecoveryReady(true);
+        settle(true);
       }
     });
 
-    // Timeout: if no PASSWORD_RECOVERY fires in 6 s, the link is stale/invalid
-    const timeout = setTimeout(() => {
-      setRecoveryReady((prev) => (prev === null ? false : prev));
-    }, 6000);
+    // 10-second timeout — if no recovery event fires, the link is stale/invalid
+    const timeoutId = setTimeout(() => settle(false), 10000);
 
     return () => {
       subscription.unsubscribe();
-      clearTimeout(timeout);
+      clearTimeout(timeoutId);
+    };
+  }, []);
+
+  // Clean up recovery flag when leaving this page
+  useEffect(() => {
+    return () => {
+      // Only remove on unmount so the flag survives hot-reloads during dev
+      // but is gone once the user leaves /reset-password for good
+      sessionStorage.removeItem("_tcunnect_pw_recovery");
     };
   }, []);
 
@@ -74,19 +94,23 @@ export default function ResetPassword() {
       const { error: updateError } = await supabase.auth.updateUser({ password: form.password });
       if (updateError) throw new Error(updateError.message);
 
-      // Sign out after reset so the user is NOT auto-logged into the dashboard
-      await supabase.auth.signOut();
+      // Sign out locally so the recovery session doesn't persist as a normal session
+      await supabase.auth.signOut({ scope: "local" });
+
+      // Clear recovery flag — we're done
+      sessionStorage.removeItem("_tcunnect_pw_recovery");
 
       setDone(true);
-      setTimeout(() => navigate("/login", { replace: true }), 2500);
+      // Navigate immediately — no setTimeout
+      navigate("/login", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reset password.");
+      setError(err instanceof Error ? err.message : "Failed to reset password. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Waiting for auth state check
+  // ── Verifying recovery link ──────────────────────────────────
   if (recoveryReady === null) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center">
@@ -98,7 +122,7 @@ export default function ResetPassword() {
     );
   }
 
-  // Expired / invalid token
+  // ── Expired / invalid link ───────────────────────────────────
   if (recoveryReady === false) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4">
@@ -106,7 +130,7 @@ export default function ResetPassword() {
           <div className="text-5xl mb-4">⏱️</div>
           <h1 className="text-xl font-bold text-slate-900 mb-2">Reset link expired</h1>
           <p className="text-slate-500 text-sm mb-6">
-            Password reset links expire after 1 hour. Request a new one.
+            Password reset links expire after 1 hour. Request a new one below.
           </p>
           <button
             onClick={() => navigate("/forgot-password")}
@@ -119,7 +143,7 @@ export default function ResetPassword() {
     );
   }
 
-  // Success screen
+  // ── Success (brief — navigate fires immediately after updateUser) ──
   if (done) {
     return (
       <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4">
@@ -132,6 +156,7 @@ export default function ResetPassword() {
     );
   }
 
+  // ── Password form ────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
