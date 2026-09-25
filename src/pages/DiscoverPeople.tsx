@@ -279,6 +279,7 @@ export default function DiscoverPeople() {
 
   // ── Start match sequence ─────────────────────────────────────────
   function startMatchSequence(traveler: User, matchId: string) {
+    console.log("[Match] ▶ startMatchSequence — traveler:", traveler.fullName, "matchId:", matchId);
     if (animTimerRef.current) {
       clearTimeout(animTimerRef.current);
       animTimerRef.current = null;
@@ -302,8 +303,10 @@ export default function DiscoverPeople() {
     setShowConnectionAnim(true);
     setShowMatchModal(false);
 
+    console.log("[Match] States set — showConnectionLine:true, showConnectionAnim:true, showMatchModal:false");
     // After 2.5 s: end card animation, open modal — line stays on
     animTimerRef.current = setTimeout(() => {
+      console.log("[Match] Timer fired — showConnectionAnim:false, showMatchModal:true");
       setShowConnectionAnim(false);
       setShowMatchModal(true);
     }, 2500);
@@ -343,36 +346,48 @@ export default function DiscoverPeople() {
 
   // ── Like handler ──────────────────────────────────────────────────
   const handleLike = async () => {
-    if (!currentTraveler || liking || inMatchSequence) return;
+    if (!currentTraveler || !user || liking || inMatchSequence) return;
+
+    console.log("[Like] ▶ START — myId:", user.id, "theirId:", currentTraveler.id);
 
     // Demo mode (no Supabase) — always simulate a match
     if (!isSupabaseConfigured) {
+      console.log("[Like] Demo mode — simulating match");
       startMatchSequence(currentTraveler, `demo_${Date.now()}`);
       return;
     }
 
     setLiking(true);
     try {
-      // 1. Save the like
+      // 1. Insert the like.
+      //    ignoreDuplicates: true → generates ON CONFLICT DO NOTHING (no UPDATE needed)
+      //    This is critical: the `likes` table has INSERT but NO UPDATE RLS policy.
+      //    Without ignoreDuplicates, upsert generates ON CONFLICT DO UPDATE → RLS violation
+      //    on re-tests → likeError fires → advance() → match sequence never starts.
+      console.log("[Like] Step 1 — inserting like (ignoreDuplicates: true)");
       const { error: likeError } = await supabase
         .from("likes")
         .upsert(
-          { user_id: user!.id, liked_user_id: currentTraveler.id },
-          { onConflict: "user_id,liked_user_id" }
+          { user_id: user.id, liked_user_id: currentTraveler.id },
+          { onConflict: "user_id,liked_user_id", ignoreDuplicates: true }
         );
 
       if (likeError) {
-        console.error("Like insert error:", likeError);
+        console.error("[Like] ✗ Insert failed — code:", likeError.code,
+          "| message:", likeError.message, "| details:", likeError.details,
+          "| hint:", likeError.hint, "| full:", likeError);
         advance();
         return;
       }
+      console.log("[Like] Step 1 ✓ — like inserted (or already existed, ignored)");
 
-      // 2. Check if a mutual match was auto-created by the DB trigger.
-      //    The trigger stores (least(A,B), greatest(A,B)), so compute the same ordering.
-      const myId = user!.id;
+      // 2. Check if the DB trigger created a mutual match.
+      //    The trigger uses least()/greatest() on UUIDs (lexicographic), so mirror that here.
+      const myId = user.id;
       const theirId = currentTraveler.id;
       const minId = myId < theirId ? myId : theirId;
       const maxId = myId < theirId ? theirId : myId;
+      console.log("[Like] Step 2 — querying match (user1_id:", minId, "user2_id:", maxId, ")");
 
       const { data: matchRow, error: matchError } = await supabase
         .from("matches")
@@ -382,20 +397,22 @@ export default function DiscoverPeople() {
         .maybeSingle();
 
       if (matchError) {
-        console.error("Match query error:", matchError);
+        console.error("[Like] ✗ Match query failed — code:", matchError.code,
+          "| message:", matchError.message, "| details:", matchError.details,
+          "| hint:", matchError.hint, "| full:", matchError);
         advance();
         return;
       }
 
       if (matchRow?.id) {
-        // Mutual match found — start the animation → modal sequence
+        console.log("[Like] Step 2 ✓ — MUTUAL MATCH found! matchId:", matchRow.id);
         startMatchSequence(currentTraveler, matchRow.id);
       } else {
-        // No match yet — just advance to the next traveler
+        console.log("[Like] Step 2 — no mutual match yet (they haven't liked back). Advancing.");
         advance();
       }
     } catch (err) {
-      console.error("handleLike unexpected error:", err);
+      console.error("[Like] ✗ Unexpected exception:", err);
       advance();
     } finally {
       setLiking(false);
