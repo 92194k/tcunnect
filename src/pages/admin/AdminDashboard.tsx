@@ -867,14 +867,57 @@ function ReportsTab() {
 // ─── Settings Tab ─────────────────────────────────────────────────
 const SETTINGS_KEY = "tcunnect_payment_settings";
 
+// Reusable QR upload zone
+function QRUploadZone({
+  label, preview, uploading, onPick, onClear,
+}: {
+  label: string; preview: string | null; uploading: boolean;
+  onPick: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onClear: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-xs font-semibold text-slate-600">{label} QR Code</label>
+        {preview && (
+          <button onClick={onClear} className="text-[10px] text-rose-400 hover:text-rose-600 font-medium">Remove</button>
+        )}
+      </div>
+      <div
+        onClick={() => ref.current?.click()}
+        className={`relative rounded-xl border-2 border-dashed transition cursor-pointer overflow-hidden
+          ${preview ? "border-slate-200 bg-white" : "border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50/20"}`}
+      >
+        {preview ? (
+          <div className="flex flex-col items-center gap-2 p-3">
+            <img src={preview} alt={`${label} QR`} className="max-h-36 object-contain rounded-lg" />
+            <span className="text-xs text-slate-400 font-medium">Click to replace</span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1.5 py-6">
+            {uploading
+              ? <Loader2 className="h-7 w-7 text-slate-300 animate-spin" />
+              : <QrCode className="h-7 w-7 text-slate-300" />}
+            <p className="text-xs text-slate-400">Click to upload {label} QR</p>
+            <p className="text-[10px] text-slate-300">PNG, JPG, or WEBP</p>
+          </div>
+        )}
+      </div>
+      <input ref={ref} type="file" accept="image/*" onChange={onPick} className="hidden" />
+    </div>
+  );
+}
+
 function SettingsTab() {
-  const [gcash, setGcash]       = useState("");
-  const [maya, setMaya]         = useState("");
-  const [accName, setAccName]   = useState("");
-  const [qrPreview, setQrPreview] = useState<string | null>(null);
-  const [saved, setSaved]       = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [gcash, setGcash]           = useState("");
+  const [maya, setMaya]             = useState("");
+  const [accName, setAccName]       = useState("");
+  const [gcashQR, setGcashQR]       = useState<string | null>(null);
+  const [mayaQR, setMayaQR]         = useState<string | null>(null);
+  const [uploadingGcash, setUploadingGcash] = useState(false);
+  const [uploadingMaya, setUploadingMaya]   = useState(false);
+  const [saved, setSaved]           = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -885,32 +928,35 @@ function SettingsTab() {
         setGcash(s.gcash ?? "");
         setMaya(s.maya ?? "");
         setAccName(s.accName ?? "");
-        setQrPreview(s.qrPreview ?? null);
+        setGcashQR(s.gcashQR ?? null);
+        setMayaQR(s.mayaQR ?? null);
       }
     } catch {}
   }, []);
 
   const handleSave = () => {
-    const data = { gcash, maya, accName, qrPreview };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(data));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ gcash, maya, accName, gcashQR, mayaQR }));
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const handleQR = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const makeQRHandler = (
+    setter: (v: string | null) => void,
+    setBusy: (v: boolean) => void,
+  ) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
+    setBusy(true);
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setQrPreview(ev.target?.result as string ?? null);
-      setUploading(false);
-    };
+    reader.onload = (ev) => { setter(ev.target?.result as string ?? null); setBusy(false); };
     reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
+  const hasPreview = gcash || maya || gcashQR || mayaQR;
+
   return (
-    <div className="space-y-4 max-w-lg">
+    <div className="space-y-4 max-w-2xl">
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
         <h3 className="font-semibold text-slate-800 mb-1">Platform Settings</h3>
         <p className="text-xs text-slate-400 mb-4">Core platform features managed via Supabase environment config.</p>
@@ -923,76 +969,101 @@ function SettingsTab() {
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
         <h3 className="font-semibold text-slate-800 mb-1">Payment Settings</h3>
-        <p className="text-xs text-slate-400 mb-4">
-          Configure your GCash / Maya numbers shown to users when they pay. Saved locally on this device.
+        <p className="text-xs text-slate-400 mb-5">
+          Numbers and QR codes shown to users when they pay. Saved locally on this browser.
         </p>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Account Name</label>
-            <input value={accName} onChange={e => setAccName(e.target.value)} placeholder="TCUnnect Official"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">GCash Number</label>
-            <input value={gcash} onChange={e => setGcash(e.target.value)} placeholder="09XX-XXX-XXXX"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Maya Number</label>
-            <input value={maya} onChange={e => setMaya(e.target.value)} placeholder="09XX-XXX-XXXX"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" />
-          </div>
+
+        {/* Account name */}
+        <div className="mb-5">
+          <label className="text-xs text-slate-500 mb-1 block">Account Name</label>
+          <input value={accName} onChange={e => setAccName(e.target.value)} placeholder="TCUnnect Official"
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 outline-none" />
         </div>
 
-        {/* GCash QR Code upload */}
-        <div className="mt-4">
-          <label className="text-xs text-slate-500 mb-2 block font-medium">GCash QR Code</label>
-          <p className="text-xs text-slate-400 mb-3">
-            Upload your GCash QR code. Users will see this when paying — they can scan it directly from the screen.
-          </p>
-          <div
-            onClick={() => fileRef.current?.click()}
-            className="relative rounded-xl border-2 border-dashed border-slate-200 hover:border-sky-300 transition cursor-pointer overflow-hidden bg-slate-50 hover:bg-sky-50/30"
-          >
-            {qrPreview ? (
-              <div className="flex flex-col items-center gap-2 p-4">
-                <img src={qrPreview} alt="GCash QR Code" className="max-h-48 object-contain rounded-lg" />
-                <span className="text-xs text-sky-600 font-medium">Click to change QR code</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 py-8">
-                {uploading
-                  ? <Loader2 className="h-8 w-8 text-slate-300 animate-spin" />
-                  : <QrCode className="h-8 w-8 text-slate-300" />}
-                <p className="text-xs text-slate-400">Click to upload QR code image</p>
-                <p className="text-[10px] text-slate-300">PNG, JPG, or WEBP</p>
-              </div>
-            )}
+        {/* GCash + Maya side by side */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* GCash column */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+              <span className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-[10px] text-white font-bold">G</span>
+              </span>
+              <span className="text-sm font-semibold text-slate-700">GCash</span>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">GCash Number</label>
+              <input value={gcash} onChange={e => setGcash(e.target.value)} placeholder="09XX-XXX-XXXX"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
+            <QRUploadZone
+              label="GCash"
+              preview={gcashQR} uploading={uploadingGcash}
+              onPick={makeQRHandler(setGcashQR, setUploadingGcash)}
+              onClear={() => setGcashQR(null)}
+            />
           </div>
-          <input ref={fileRef} type="file" accept="image/*" onChange={handleQR} className="hidden" />
+
+          {/* Maya column */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+              <span className="h-5 w-5 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
+                <span className="text-[10px] text-white font-bold">M</span>
+              </span>
+              <span className="text-sm font-semibold text-slate-700">Maya</span>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 mb-1 block">Maya Number</label>
+              <input value={maya} onChange={e => setMaya(e.target.value)} placeholder="09XX-XXX-XXXX"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+            </div>
+            <QRUploadZone
+              label="Maya"
+              preview={mayaQR} uploading={uploadingMaya}
+              onPick={makeQRHandler(setMayaQR, setUploadingMaya)}
+              onClear={() => setMayaQR(null)}
+            />
+          </div>
         </div>
 
         <button onClick={handleSave}
-          className={`mt-4 flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition ${
+          className={`mt-5 flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition ${
             saved ? "bg-emerald-600 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"
           }`}>
           {saved ? <><CheckCircle2 className="h-4 w-4" /> Saved!</> : "Save Payment Details"}
         </button>
       </div>
 
-      {/* Preview card */}
-      {(gcash || maya || qrPreview) && (
+      {/* Live preview */}
+      {hasPreview && (
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-3 text-sm">Preview — What users will see</h3>
-          <div className="bg-gradient-to-br from-sky-50 to-blue-50 rounded-xl p-4 border border-sky-100">
-            {qrPreview && (
-              <div className="flex justify-center mb-3">
-                <img src={qrPreview} alt="QR" className="h-32 w-32 object-contain rounded-lg border border-white shadow" />
+          <div className="grid grid-cols-2 gap-4">
+            {(gcash || gcashQR) && (
+              <div className="bg-gradient-to-br from-blue-50 to-sky-50 rounded-xl p-4 border border-blue-100 flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="h-4 w-4 rounded-full bg-blue-600 flex items-center justify-center">
+                    <span className="text-[8px] text-white font-bold">G</span>
+                  </span>
+                  <span className="text-xs font-bold text-blue-700">GCash</span>
+                </div>
+                {gcashQR && <img src={gcashQR} alt="GCash QR" className="h-28 w-28 object-contain rounded-lg border border-white shadow" />}
+                <p className="text-xs font-semibold text-slate-800 text-center">{accName || "TCUnnect Official"}</p>
+                {gcash && <p className="text-xs text-slate-600 text-center">{gcash}</p>}
               </div>
             )}
-            <p className="text-sm font-semibold text-slate-800 text-center">{accName || "TCUnnect Official"}</p>
-            {gcash && <p className="text-xs text-slate-600 text-center mt-1">GCash: <span className="font-medium">{gcash}</span></p>}
-            {maya  && <p className="text-xs text-slate-600 text-center">Maya: <span className="font-medium">{maya}</span></p>}
+            {(maya || mayaQR) && (
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-100 flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="h-4 w-4 rounded-full bg-emerald-600 flex items-center justify-center">
+                    <span className="text-[8px] text-white font-bold">M</span>
+                  </span>
+                  <span className="text-xs font-bold text-emerald-700">Maya</span>
+                </div>
+                {mayaQR && <img src={mayaQR} alt="Maya QR" className="h-28 w-28 object-contain rounded-lg border border-white shadow" />}
+                <p className="text-xs font-semibold text-slate-800 text-center">{accName || "TCUnnect Official"}</p>
+                {maya && <p className="text-xs text-slate-600 text-center">{maya}</p>}
+              </div>
+            )}
           </div>
         </div>
       )}
