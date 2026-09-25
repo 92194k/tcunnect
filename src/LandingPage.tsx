@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { Link } from "react-router-dom";
 import { supabase, isSupabaseConfigured } from "./lib/supabase";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface FeaturedGem {
   id: string;
   name: string;
@@ -11,6 +13,34 @@ interface FeaturedGem {
   description: string;
   budget_level: string;
 }
+
+type IconName =
+  | "arrow"
+  | "chevron"
+  | "compass"
+  | "heart"
+  | "location"
+  | "menu"
+  | "message"
+  | "people"
+  | "search"
+  | "send"
+  | "sparkle";
+
+// ─── Static data ──────────────────────────────────────────────────────────────
+
+const images = {
+  hero: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85",
+  nacpan: "https://images.unsplash.com/photo-1602587921225-3cca658d31bb?auto=format&fit=crop&w=1400&q=85",
+  lagoon: "https://images.unsplash.com/photo-1758782551890-0f47a570859c?auto=format&fit=crop&w=900&q=80",
+  islands: "https://images.unsplash.com/photo-1758782551916-1723a9cd00eb?auto=format&fit=crop&w=900&q=80",
+  boat: "https://images.unsplash.com/photo-1462557804967-1b4876a07c17?auto=format&fit=crop&w=900&q=80",
+  resort: "https://images.unsplash.com/photo-1605538108568-7f0d77a214c1?auto=format&fit=crop&w=900&q=80",
+  traveler1: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=700&q=80",
+  traveler2: "https://images.unsplash.com/photo-1605741455532-384a402cf959?auto=format&fit=crop&w=700&q=80",
+  traveler3: "https://images.unsplash.com/photo-1650666908250-b0dcbf54e08b?auto=format&fit=crop&w=700&q=80",
+  friends: "https://images.unsplash.com/photo-1772203120950-a02082958489?auto=format&fit=crop&w=1200&q=80",
+};
 
 const CATEGORY_EMOJIS: Record<string, string> = {
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
@@ -35,6 +65,67 @@ const BEST_FOR: Record<string, string[]> = {
   "City Exploring": ["Solo", "Duo"],
   default: ["Solo", "Duo"],
 };
+
+const gemCategories = [
+  { category: "Beach & Islands", icon: "🏖", image: images.lagoon, desc: "Crystal-clear waters and white sand shores" },
+  { category: "Nature & Hiking", icon: "🌿", image: images.islands, desc: "Lush mountains and untouched wilderness" },
+  { category: "Hidden Gems", icon: "💎", image: images.boat, desc: "Off-the-beaten-path local discoveries" },
+  { category: "Scenic Escapes", icon: "🌅", image: images.resort, desc: "Breathtaking views and peaceful retreats" },
+];
+
+const travelers = [
+  { name: "Mika", city: "Makati", tags: ["Beach trips", "Food"], image: images.traveler1, color: "bg-rose-400" },
+  { name: "Sam", city: "Quezon City", tags: ["Hiking", "Islands"], image: images.traveler2, color: "bg-amber-400" },
+  { name: "Ana", city: "Cebu City", tags: ["Culture", "Diving"], image: images.traveler3, color: "bg-sky-500" },
+];
+
+// ─── Reusable components (Icon must come FIRST so FeaturedCarousel can use it) ─
+
+function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
+  const paths: Record<IconName, ReactNode> = {
+    arrow: (<><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></>),
+    chevron: <path d="m9 18 6-6-6-6" />,
+    compass: (<><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9 4.9-2.1Z" /></>),
+    heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" />,
+    location: (<><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>),
+    menu: (<><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /></>),
+    message: (<><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></>),
+    people: (<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>),
+    search: (<><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>),
+    send: (<><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></>),
+    sparkle: <path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3ZM5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16Z" />,
+  };
+  return (
+    <svg aria-hidden="true" className={className} fill="none" stroke="currentColor"
+      strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+      {paths[name]}
+    </svg>
+  );
+}
+
+function Logo({ light = false }: { light?: boolean }) {
+  return (
+    <a className="group flex items-center gap-2" href="#top" aria-label="TCUnnect home">
+      <span className={`grid h-9 w-9 place-items-center rounded-xl ${light ? "bg-white text-sky-700" : "bg-sky-600 text-white"}`}>
+        <Icon name="compass" className="h-[21px] w-[21px]" />
+      </span>
+      <span className={`text-xl font-bold tracking-tight ${light ? "text-white" : "text-slate-900"}`}>
+        TC<span className={light ? "text-sky-200" : "text-sky-600"}>U</span>nnect
+      </span>
+    </a>
+  );
+}
+
+function ArrowLink({ children, href, light = false }: { children: ReactNode; href: string; light?: boolean }) {
+  return (
+    <a className={`inline-flex items-center gap-2 text-sm font-semibold transition-all hover:gap-3 ${light ? "text-white" : "text-sky-700 hover:text-sky-800"}`} href={href}>
+      {children}
+      <Icon name="arrow" className="h-4 w-4" />
+    </a>
+  );
+}
+
+// ─── Featured Carousel (defined after Icon so Icon is in scope) ───────────────
 
 function FeaturedCarousel() {
   const [gems, setGems] = useState<FeaturedGem[]>([]);
@@ -61,7 +152,7 @@ function FeaturedCarousel() {
   const prev = useCallback(() => setCurrent((c) => (c - 1 + total) % total), [total]);
   const next = useCallback(() => setCurrent((c) => (c + 1) % total), [total]);
 
-  // Auto-advance every 5 s
+  // Auto-advance every 5s, reset on manual nav
   useEffect(() => {
     if (total < 2) return;
     timerRef.current = setTimeout(next, 5000);
@@ -76,23 +167,19 @@ function FeaturedCarousel() {
     );
   }
 
-  // Fallback if no featured gems yet
+  // Fallback when no featured gems exist yet
   if (gems.length === 0) {
     return (
       <div className="relative min-h-[420px] rounded-[30px] overflow-hidden lg:min-h-[520px]">
-        <img
-          src="https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85"
-          alt="The Philippines"
-          className="w-full h-full object-cover absolute inset-0"
-        />
+        <img src={images.hero} alt="The Philippines" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/30 to-transparent pointer-events-none" />
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent pointer-events-none" />
         <div className="absolute bottom-0 left-0 p-8 sm:p-12 max-w-xl">
           <span className="inline-block mb-3 rounded-full bg-amber-400 px-4 py-1.5 text-[10px] font-extrabold tracking-[0.16em] text-amber-950">FEATURED BY TCUNNECT</span>
           <h3 className="text-3xl font-bold text-white sm:text-4xl leading-tight">The Philippines Awaits</h3>
-          <p className="mt-3 text-sm text-white/75 leading-relaxed line-clamp-3">From pristine beaches to misty mountain trails — the Philippines is full of places waiting to be discovered.</p>
+          <p className="mt-3 text-sm text-white/75 leading-relaxed">From pristine beaches to misty mountain trails — the Philippines is full of places waiting to be discovered.</p>
           <a href="/signup" className="mt-6 inline-flex items-center gap-2 rounded-full bg-white text-slate-900 font-bold px-6 py-3 text-sm transition hover:bg-amber-300">
-            Explore This Gem <Icon name="chevron" className="h-4 w-4" />
+            Start Exploring <Icon name="arrow" className="h-4 w-4" />
           </a>
         </div>
       </div>
@@ -108,19 +195,12 @@ function FeaturedCarousel() {
     <div className="relative min-h-[420px] rounded-[30px] overflow-hidden select-none lg:min-h-[520px]">
       {/* Slide image */}
       {heroImg ? (
-        <img
-          key={gem.id}
-          src={heroImg}
-          alt={gem.name}
-          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
-        />
+        <img key={gem.id} src={heroImg} alt={gem.name} className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500" />
       ) : (
-        <div className="absolute inset-0 bg-slate-700 flex items-center justify-center text-7xl">
-          {emoji}
-        </div>
+        <div className="absolute inset-0 bg-slate-700 flex items-center justify-center text-7xl">{emoji}</div>
       )}
 
-      {/* Gradient overlays — pointer-events-none so they NEVER block clicks */}
+      {/* Gradients — pointer-events-none so arrows are NEVER blocked */}
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/30 to-transparent pointer-events-none" />
       <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent pointer-events-none" />
 
@@ -129,25 +209,29 @@ function FeaturedCarousel() {
         FEATURED BY TCUNNECT
       </span>
 
-      {/* Prev arrow — z-10 so it sits above gradients */}
+      {/* Prev arrow — z-10, always above gradients */}
       <button
         onClick={prev}
         aria-label="Previous gem"
         className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
       >
-        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m15 18-6-6 6-6" /></svg>
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m15 18-6-6 6-6" />
+        </svg>
       </button>
 
-      {/* Next arrow — z-10 so it sits above gradients */}
+      {/* Next arrow — z-10, always above gradients */}
       <button
         onClick={next}
         aria-label="Next gem"
         className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
       >
-        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m9 18 6-6-6-6" /></svg>
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m9 18 6-6-6-6" />
+        </svg>
       </button>
 
-      {/* Content */}
+      {/* Gem info */}
       <div className="absolute bottom-0 left-0 p-8 sm:p-12 max-w-xl z-10">
         <h3 className="text-3xl font-bold text-white sm:text-4xl leading-tight">{gem.name}</h3>
         <p className="mt-2 flex items-center gap-1.5 text-sm text-white/70">
@@ -158,18 +242,15 @@ function FeaturedCarousel() {
         )}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-medium text-white">{emoji} {gem.category}</span>
-          {gem.budget_level && <span className="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-medium text-white">{gem.budget_level}</span>}
-          {bestFor.length > 0 && (
-            <span className="text-xs text-white/50">Best for:</span>
+          {gem.budget_level && (
+            <span className="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-medium text-white">{gem.budget_level}</span>
           )}
+          {bestFor.length > 0 && <span className="text-xs text-white/50">Best for:</span>}
           {bestFor.map((b) => (
             <span key={b} className="rounded-full bg-sky-500/70 backdrop-blur-sm px-3 py-1 text-xs font-semibold text-white">{b}</span>
           ))}
         </div>
-        <Link
-          to={`/gems/${gem.id}`}
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-white text-slate-900 font-bold px-6 py-3 text-sm transition hover:bg-amber-300"
-        >
+        <Link to={`/gems/${gem.id}`} className="mt-6 inline-flex items-center gap-2 rounded-full bg-white text-slate-900 font-bold px-6 py-3 text-sm transition hover:bg-amber-300">
           Explore This Gem <Icon name="chevron" className="h-4 w-4" />
         </Link>
       </div>
@@ -181,7 +262,7 @@ function FeaturedCarousel() {
             <button
               key={i}
               onClick={() => setCurrent(i)}
-              aria-label={`Slide ${i + 1}`}
+              aria-label={`Go to slide ${i + 1}`}
               className={`h-2 rounded-full transition-all ${i === current ? "w-6 bg-white" : "w-2 bg-white/40 hover:bg-white/70"}`}
             />
           ))}
@@ -191,152 +272,7 @@ function FeaturedCarousel() {
   );
 }
 
-const images = {
-  hero: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85",
-  nacpan:
-    "https://images.unsplash.com/photo-1602587921225-3cca658d31bb?auto=format&fit=crop&w=1400&q=85",
-  lagoon:
-    "https://images.unsplash.com/photo-1758782551890-0f47a570859c?auto=format&fit=crop&w=900&q=80",
-  islands:
-    "https://images.unsplash.com/photo-1758782551916-1723a9cd00eb?auto=format&fit=crop&w=900&q=80",
-  boat: "https://images.unsplash.com/photo-1462557804967-1b4876a07c17?auto=format&fit=crop&w=900&q=80",
-  resort:
-    "https://images.unsplash.com/photo-1605538108568-7f0d77a214c1?auto=format&fit=crop&w=900&q=80",
-  traveler1:
-    "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=700&q=80",
-  traveler2:
-    "https://images.unsplash.com/photo-1605741455532-384a402cf959?auto=format&fit=crop&w=700&q=80",
-  traveler3:
-    "https://images.unsplash.com/photo-1650666908250-b0dcbf54e08b?auto=format&fit=crop&w=700&q=80",
-  friends:
-    "https://images.unsplash.com/photo-1772203120950-a02082958489?auto=format&fit=crop&w=1200&q=80",
-};
-
-type IconName =
-  | "arrow"
-  | "chevron"
-  | "compass"
-  | "heart"
-  | "location"
-  | "menu"
-  | "message"
-  | "people"
-  | "search"
-  | "send"
-  | "sparkle";
-
-function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
-  const paths: Record<IconName, ReactNode> = {
-    arrow: (
-      <>
-        <path d="M5 12h14" />
-        <path d="m13 6 6 6-6 6" />
-      </>
-    ),
-    chevron: <path d="m9 18 6-6-6-6" />,
-    compass: (
-      <>
-        <circle cx="12" cy="12" r="9" />
-        <path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9 4.9-2.1Z" />
-      </>
-    ),
-    heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z" />,
-    location: (
-      <>
-        <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
-        <circle cx="12" cy="10" r="2.5" />
-      </>
-    ),
-    menu: (
-      <>
-        <path d="M4 7h16" />
-        <path d="M4 12h16" />
-        <path d="M4 17h16" />
-      </>
-    ),
-    message: (
-      <>
-        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" />
-        <path d="M8 10h.01M12 10h.01M16 10h.01" />
-      </>
-    ),
-    people: (
-      <>
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-      </>
-    ),
-    search: (
-      <>
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-4-4" />
-      </>
-    ),
-    send: (
-      <>
-        <path d="m22 2-7 20-4-9-9-4Z" />
-        <path d="M22 2 11 13" />
-      </>
-    ),
-    sparkle: <path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3ZM5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16Z" />,
-  };
-
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-    >
-      {paths[name]}
-    </svg>
-  );
-}
-
-function Logo({ light = false }: { light?: boolean }) {
-  return (
-    <a className="group flex items-center gap-2" href="#top" aria-label="TCUnnect home">
-      <span className={`grid h-9 w-9 place-items-center rounded-xl ${light ? "bg-white text-sky-700" : "bg-sky-600 text-white"}`}>
-        <Icon name="compass" className="h-[21px] w-[21px]" />
-      </span>
-      <span className={`text-xl font-bold tracking-tight ${light ? "text-white" : "text-slate-900"}`}>
-        TC<span className={light ? "text-sky-200" : "text-sky-600"}>U</span>nnect
-      </span>
-    </a>
-  );
-}
-
-function ArrowLink({ children, href, light = false }: { children: ReactNode; href: string; light?: boolean }) {
-  return (
-    <a
-      className={`inline-flex items-center gap-2 text-sm font-semibold transition-all hover:gap-3 ${
-        light ? "text-white" : "text-sky-700 hover:text-sky-800"
-      }`}
-      href={href}
-    >
-      {children}
-      <Icon name="arrow" className="h-4 w-4" />
-    </a>
-  );
-}
-
-const gemCategories = [
-  { category: "Beach & Islands", icon: "🏖", image: images.lagoon, desc: "Crystal-clear waters and white sand shores" },
-  { category: "Nature & Hiking", icon: "🌿", image: images.islands, desc: "Lush mountains and untouched wilderness" },
-  { category: "Hidden Gems", icon: "💎", image: images.boat, desc: "Off-the-beaten-path local discoveries" },
-  { category: "Scenic Escapes", icon: "🌅", image: images.resort, desc: "Breathtaking views and peaceful retreats" },
-];
-
-const travelers = [
-  { name: "Mika", city: "Makati", tags: ["Beach trips", "Food"], image: images.traveler1, color: "bg-rose-400" },
-  { name: "Sam", city: "Quezon City", tags: ["Hiking", "Islands"], image: images.traveler2, color: "bg-amber-400" },
-  { name: "Ana", city: "Cebu City", tags: ["Culture", "Diving"], image: images.traveler3, color: "bg-sky-500" },
-];
+// ─── Scroll arrow ─────────────────────────────────────────────────────────────
 
 function ScrollArrow() {
   const [atBottom, setAtBottom] = useState(false);
@@ -369,6 +305,8 @@ function ScrollArrow() {
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -384,9 +322,7 @@ export default function App() {
           </div>
           <div className="hidden items-center gap-5 sm:flex">
             <a className="text-sm font-semibold text-slate-700 hover:text-sky-700" href="/login">Log In</a>
-            <a className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700" href="/signup">
-              Get Started
-            </a>
+            <a className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700" href="/signup">Get Started</a>
           </div>
           <button
             className="rounded-lg p-2 text-slate-700 sm:hidden"
@@ -412,6 +348,7 @@ export default function App() {
         )}
       </header>
 
+      {/* Hero */}
       <section className="relative min-h-[780px] pt-[76px] lg:min-h-[850px]">
         <img className="absolute inset-0 h-full w-full object-cover" src={images.hero} alt="Turquoise lagoons and limestone islands in Palawan" />
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950/75 via-slate-900/42 to-sky-900/5" />
@@ -445,6 +382,7 @@ export default function App() {
         </div>
       </section>
 
+      {/* Featured Carousel */}
       <section className="section-pad bg-[#fffdf8]" id="gems">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <div className="mb-10 max-w-2xl">
@@ -455,14 +393,13 @@ export default function App() {
         </div>
       </section>
 
+      {/* Travelers */}
       <section className="section-pad bg-sky-50/70" id="travelers">
         <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
           <div>
             <div className="eyebrow text-rose-500"><Icon name="people" className="h-4 w-4" /> Meet Fellow Travelers</div>
             <h2 className="section-title mt-4">Your next adventure might start with a new connection.</h2>
-            <p className="section-copy">
-              Discover people who share your travel interests, match anonymously, then chat when the feeling is mutual.
-            </p>
+            <p className="section-copy">Discover people who share your travel interests, match anonymously, then chat when the feeling is mutual.</p>
             <div className="mt-8"><ArrowLink href="#community">Meet Travelers</ArrowLink></div>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
@@ -490,12 +427,13 @@ export default function App() {
         </div>
       </section>
 
+      {/* Gem categories */}
       <section className="section-pad" id="discover">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
             <div className="max-w-xl">
               <div className="eyebrow text-sky-700"><Icon name="compass" className="h-4 w-4" /> Hidden Gems</div>
-              <h2 className="section-title mt-4">There’s more to discover.</h2>
+              <h2 className="section-title mt-4">There's more to discover.</h2>
               <p className="section-copy">Find quiet shores, misty mountains, and local favorites across the Philippines.</p>
             </div>
             <ArrowLink href="#discover">Explore All Gems</ArrowLink>
@@ -507,12 +445,8 @@ export default function App() {
                   <img className="h-full w-full object-cover transition duration-500 group-hover:scale-105" src={cat.image} alt={cat.category} />
                 </div>
                 <div className="p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="font-bold text-slate-900">{cat.icon} {cat.category}</h3>
-                      <p className="mt-1 text-xs text-slate-500">{cat.desc}</p>
-                    </div>
-                  </div>
+                  <h3 className="font-bold text-slate-900">{cat.icon} {cat.category}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{cat.desc}</p>
                 </div>
               </a>
             ))}
@@ -520,6 +454,7 @@ export default function App() {
         </div>
       </section>
 
+      {/* Community / Chat */}
       <section className="section-pad" id="community">
         <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 lg:grid-cols-2 lg:px-8">
           <div className="order-2 lg:order-1">
@@ -541,18 +476,18 @@ export default function App() {
                   <div className="flex gap-2.5">
                     <img className="h-7 w-7 rounded-full object-cover" src={images.traveler2} alt="" />
                     <div className="max-w-[75%] rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-xs leading-5 text-slate-600 shadow-sm">
-                      I’ve been wanting to see Siquijor! Free on the long weekend?
+                      I've been wanting to see Siquijor! Free on the long weekend?
                     </div>
                   </div>
                   <div className="flex justify-end">
                     <div className="max-w-[75%] rounded-2xl rounded-tr-sm bg-sky-600 px-4 py-3 text-xs leading-5 text-white">
-                      Yes! Let’s do the waterfalls and catch sunset at Paliton Beach.
+                      Yes! Let's do the waterfalls and catch sunset at Paliton Beach.
                     </div>
                   </div>
                   <div className="flex gap-2.5">
                     <img className="h-7 w-7 rounded-full object-cover" src={images.traveler2} alt="" />
                     <div className="max-w-[75%] rounded-2xl rounded-tl-sm bg-white px-4 py-3 text-xs leading-5 text-slate-600 shadow-sm">
-                      Perfect. I’ll start a shared trip plan!
+                      Perfect. I'll start a shared trip plan!
                     </div>
                   </div>
                 </div>
@@ -566,9 +501,7 @@ export default function App() {
           <div className="order-1 lg:order-2">
             <div className="eyebrow text-sky-700"><Icon name="message" className="h-4 w-4" /> Connect & Chat</div>
             <h2 className="section-title mt-4">Match. Chat. Plan. Go.</h2>
-            <p className="section-copy">
-              Break the ice, compare bucket lists, and turn a new connection into a real adventure—all in one easy conversation.
-            </p>
+            <p className="section-copy">Break the ice, compare bucket lists, and turn a new connection into a real adventure—all in one easy conversation.</p>
             <ul className="mt-8 space-y-4 text-sm font-medium text-slate-600">
               {["Private chats after a mutual match", "Share places and build trip plans", "Travel with people you genuinely click with"].map((item) => (
                 <li className="flex items-center gap-3" key={item}><span className="grid h-6 w-6 place-items-center rounded-full bg-emerald-100 text-xs text-emerald-700">✓</span>{item}</li>
@@ -578,6 +511,7 @@ export default function App() {
         </div>
       </section>
 
+      {/* Trip types */}
       <section className="section-pad bg-[#fffaf4]">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
@@ -602,6 +536,7 @@ export default function App() {
         </div>
       </section>
 
+      {/* CTA */}
       <section className="px-5 py-12 sm:py-20 lg:px-8" id="join">
         <div className="relative mx-auto min-h-[460px] max-w-7xl overflow-hidden rounded-[34px] bg-sky-800">
           <img className="absolute inset-0 h-full w-full object-cover opacity-35" src={images.friends} alt="Friends enjoying a walk on a tropical beach" />
@@ -617,6 +552,7 @@ export default function App() {
         </div>
       </section>
 
+      {/* Footer */}
       <footer className="bg-slate-950 px-5 py-14 text-white lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-10">
           <div className="flex flex-col justify-between gap-8 border-b border-white/10 pb-10 sm:flex-row sm:items-center">
@@ -639,6 +575,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+
       <ScrollArrow />
     </main>
   );
