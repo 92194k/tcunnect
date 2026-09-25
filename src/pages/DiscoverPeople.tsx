@@ -143,7 +143,7 @@ function MatchModal({
   match, onClose, onChat, myPhoto,
 }: { match: User; onClose: () => void; onChat: () => void; myPhoto: string }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
         <div className="text-4xl mb-4">✨</div>
         <h2 className="text-2xl font-bold text-slate-900 mb-1">It's a Match!</h2>
