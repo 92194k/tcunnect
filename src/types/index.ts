@@ -2,15 +2,8 @@
 // TCUnnect · Type Definitions
 // ─────────────────────────────────────────────────────────────
 
-export type TravelInterest =
-  | "Beach"
-  | "Mountain"
-  | "Nature"
-  | "Food"
-  | "Heritage"
-  | "Cafe"
-  | "Waterfalls"
-  | "City";
+// Preset interests + any custom string the user creates
+export type TravelInterest = string;
 
 export interface User {
   id: string;

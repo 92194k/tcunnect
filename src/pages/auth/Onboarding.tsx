@@ -1,22 +1,34 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores";
-import { Compass, MapPin, ArrowRight, ArrowLeft, Check, Camera, Search } from "lucide-react";
+import { Compass, MapPin, ArrowRight, ArrowLeft, Check, Camera, Search, Plus, X } from "lucide-react";
 import type { TravelInterest } from "../../types";
 import {
   REGIONS, PROVINCES, CITIES,
   type Region, type Province, type City,
 } from "../../data/philippinesLocations";
 
-const INTERESTS: { label: TravelInterest; emoji: string }[] = [
-  { label: "Beach",      emoji: "🏖" },
-  { label: "Mountain",   emoji: "🏔" },
-  { label: "Nature",     emoji: "🌿" },
-  { label: "Food",       emoji: "🍜" },
-  { label: "Heritage",   emoji: "🏛" },
-  { label: "Cafe",       emoji: "☕" },
-  { label: "Waterfalls", emoji: "💦" },
-  { label: "City",       emoji: "🌆" },
+const PRESET_INTERESTS: { label: string; emoji: string }[] = [
+  { label: "Beach & Island Hopping",   emoji: "🏖" },
+  { label: "Nature & Hiking",          emoji: "🌿" },
+  { label: "Camping & Outdoors",       emoji: "⛺" },
+  { label: "City Exploring",           emoji: "🌆" },
+  { label: "Food & Cafés",             emoji: "🍜" },
+  { label: "Photography",              emoji: "📷" },
+  { label: "History & Culture",        emoji: "🏛" },
+  { label: "Arts & Creative Places",   emoji: "🎨" },
+  { label: "Adventure & Thrills",      emoji: "🪂" },
+  { label: "Scenic & Sunset Spots",    emoji: "🌅" },
+  { label: "Shopping & Local Markets", emoji: "🛍" },
+  { label: "Relaxation & Wellness",    emoji: "🧘" },
+  { label: "Staycations",              emoji: "🏨" },
+  { label: "Road Trips",               emoji: "🚗" },
+  { label: "Hidden Gems",              emoji: "💎" },
+  { label: "Events & Festivals",       emoji: "🎉" },
+  { label: "Eco & Sustainable Travel", emoji: "♻️" },
+  { label: "Couple Getaways",          emoji: "💑" },
+  { label: "Group Trips",              emoji: "👥" },
+  { label: "Budget Travel",            emoji: "💰" },
 ];
 
 const TOTAL_STEPS = 5;
@@ -102,6 +114,9 @@ export default function Onboarding() {
   const [city, setCity]         = useState<City | null>(null);
 
   const [interests, setInterests] = useState<TravelInterest[]>(user?.travelInterests ?? []);
+  const [customInterests, setCustomInterests] = useState<string[]>([]);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customInput, setCustomInput] = useState("");
   const [saving, setSaving] = useState(false);
 
   const provinces = region  ? PROVINCES.filter((p) => p.regionId === region.id)  : [];
@@ -115,14 +130,37 @@ export default function Onboarding() {
     reader.readAsDataURL(file);
   }, []);
 
-  const toggleInterest = (i: TravelInterest) =>
-    setInterests((prev) => prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i]);
+  const toggleInterest = (label: string) =>
+    setInterests((prev) =>
+      prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]
+    );
+
+  const addCustomInterest = () => {
+    const trimmed = customInput.trim();
+    if (!trimmed) return;
+    const normalized = trimmed.toLowerCase();
+    const allLabels = [...PRESET_INTERESTS.map((p) => p.label), ...customInterests].map((l) => l.toLowerCase());
+    if (allLabels.includes(normalized)) {
+      setCustomInput("");
+      setShowCustomInput(false);
+      return;
+    }
+    setCustomInterests((prev) => [...prev, trimmed]);
+    setInterests((prev) => [...prev, trimmed]);
+    setCustomInput("");
+    setShowCustomInput(false);
+  };
+
+  const removeCustomInterest = (label: string) => {
+    setCustomInterests((prev) => prev.filter((c) => c !== label));
+    setInterests((prev) => prev.filter((i) => i !== label));
+  };
 
   const locationString = [city?.name, province?.name, region?.name]
     .filter(Boolean).join(", ");
 
   const finish = async () => {
-    if (!user || interests.length === 0) return;
+    if (!user || interests.length < 3) return;
     setSaving(true);
     setSaveError("");
     try {
@@ -337,28 +375,111 @@ export default function Onboarding() {
               )}
 
               <h2 className="text-xl font-bold text-slate-900 mb-1">Travel Interests</h2>
-              <p className="text-slate-500 text-sm mb-5">Select all that apply — helps us find your match</p>
+              <p className="text-slate-500 text-sm mb-1">Pick at least 3 that match your style</p>
+              <p className="text-xs text-slate-400 mb-5">
+                {interests.length < 3
+                  ? <span className="text-amber-600 font-medium">{interests.length}/3 selected — pick {3 - interests.length} more</span>
+                  : <span className="text-emerald-600 font-medium">✓ {interests.length} selected</span>
+                }
+              </p>
 
+              {/* Preset interests grid */}
               <div className="grid grid-cols-2 gap-2">
-                {INTERESTS.map(({ label, emoji }) => {
+                {PRESET_INTERESTS.map(({ label, emoji }) => {
                   const selected = interests.includes(label);
                   return (
                     <button key={label} type="button" onClick={() => toggleInterest(label)}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all ${
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all text-left ${
                         selected
                           ? "bg-sky-600 border-sky-600 text-white shadow-sm"
                           : "bg-white border-slate-200 text-slate-700 hover:border-sky-300 hover:bg-sky-50"
                       }`}>
-                      <span>{emoji}</span>{label}
-                      {selected && <Check className="h-3.5 w-3.5 ml-auto" />}
+                      <span className="shrink-0">{emoji}</span>
+                      <span className="leading-tight">{label}</span>
+                      {selected && <Check className="h-3.5 w-3.5 ml-auto shrink-0" />}
                     </button>
                   );
                 })}
               </div>
 
-              {interests.length === 0 && (
-                <p className="text-xs text-amber-600 mt-3">Pick at least one interest to continue</p>
+              {/* Custom interests */}
+              {customInterests.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Your custom interests</p>
+                  <div className="flex flex-wrap gap-2">
+                    {customInterests.map((label) => {
+                      const selected = interests.includes(label);
+                      return (
+                        <div key={label} className={`flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-full border text-sm font-medium transition-all ${
+                          selected
+                            ? "bg-sky-600 border-sky-600 text-white"
+                            : "bg-white border-slate-200 text-slate-700"
+                        }`}>
+                          <button type="button" onClick={() => toggleInterest(label)} className="flex items-center gap-1.5">
+                            ✏️ <span>{label}</span>
+                            {selected && <Check className="h-3 w-3" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeCustomInterest(label)}
+                            className={`h-5 w-5 rounded-full flex items-center justify-center transition ${
+                              selected ? "bg-sky-500 hover:bg-sky-400" : "bg-slate-100 hover:bg-red-100 hover:text-red-600"
+                            }`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
+
+              {/* Add custom interest */}
+              <div className="mt-4">
+                {!showCustomInput ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomInput(true)}
+                    className="flex items-center gap-2 text-sm text-sky-600 hover:text-sky-700 font-semibold transition"
+                  >
+                    <Plus className="h-4 w-4" /> Add your own interest
+                  </button>
+                ) : (
+                  <div className="bg-sky-50 border border-sky-200 rounded-xl p-3">
+                    <p className="text-xs font-semibold text-sky-700 mb-2">What are you interested in?</p>
+                    <input
+                      autoFocus
+                      value={customInput}
+                      onChange={(e) => setCustomInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); addCustomInterest(); }
+                        if (e.key === "Escape") { setShowCustomInput(false); setCustomInput(""); }
+                      }}
+                      placeholder="e.g. Motorcycle trips"
+                      maxLength={40}
+                      className="w-full px-3 py-2 text-sm border border-sky-200 rounded-lg focus:ring-2 focus:ring-sky-500 outline-none bg-white"
+                    />
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={addCustomInterest}
+                        disabled={!customInput.trim()}
+                        className="flex-1 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white text-sm font-semibold py-1.5 rounded-lg transition"
+                      >
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowCustomInput(false); setCustomInput(""); }}
+                        className="flex-1 border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-medium py-1.5 rounded-lg transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {saveError && (
                 <p className="text-xs text-red-600 mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>
@@ -371,7 +492,7 @@ export default function Onboarding() {
                 </button>
                 <button
                   onClick={finish}
-                  disabled={interests.length === 0 || saving}
+                  disabled={interests.length < 3 || saving}
                   className="flex-1 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2">
                   {saving ? "Saving..." : "Start Exploring 🎉"}
                 </button>
