@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import TravelMap from "../components/TravelMap";
@@ -89,12 +89,9 @@ const PH_GEOCODE: Record<string, [number, number]> = {
 
 function geocodeLocation(location: string): [number, number] | null {
   if (!location) return null;
-  // Try exact match
   if (PH_GEOCODE[location]) return PH_GEOCODE[location];
-  // Try each comma-separated part
   for (const part of location.split(/,/).map((s) => s.trim())) {
     if (PH_GEOCODE[part]) return PH_GEOCODE[part];
-    // Case-insensitive
     const key = Object.keys(PH_GEOCODE).find(
       (k) => k.toLowerCase() === part.toLowerCase()
     );
@@ -183,7 +180,7 @@ function MatchModal({
           onClick={onChat}
           className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 rounded-xl transition mb-3"
         >
-          Start Chatting 💬
+          Send a Message 💬
         </button>
         <button
           onClick={onClose}
@@ -206,10 +203,19 @@ export default function DiscoverPeople() {
   const [index, setIndex] = useState(0);
   const [matchedUser, setMatchedUser] = useState<User | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
+  // matchAnimation: true while the animated line plays on the map before the modal appears
+  const [matchAnimation, setMatchAnimation] = useState(false);
+  // Capture the traveler being matched so the map doesn't shift during animation
+  const [animatingTraveler, setAnimatingTraveler] = useState<User | null>(null);
+  const matchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [showMapMobile, setShowMapMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (matchTimerRef.current) clearTimeout(matchTimerRef.current); }, []);
 
   // ── Fetch profiles ───────────────────────────────────────────────
   useEffect(() => {
@@ -246,9 +252,10 @@ export default function DiscoverPeople() {
     setLoading(false);
   }
 
-  const currentTraveler = deck[index] ?? null;
+  const currentTraveler = animatingTraveler ?? (deck[index] ?? null);
 
   const advance = () => {
+    setAnimatingTraveler(null);
     setIndex((i) => {
       const next = i + 1;
       if (next >= deck.length) { setDeck((d) => shuffle([...d])); return 0; }
@@ -257,6 +264,19 @@ export default function DiscoverPeople() {
   };
 
   const handlePass = () => advance();
+
+  // ── Trigger match sequence ────────────────────────────────────────
+  function triggerMatch(traveler: User, match: Match) {
+    addMatch(match);
+    setAnimatingTraveler(traveler);
+    setMatchAnimation(true);
+    // After 2s, hide the line and show the modal
+    matchTimerRef.current = setTimeout(() => {
+      setMatchAnimation(false);
+      setMatchedUser(traveler);
+      setMatchId(match.id);
+    }, 2000);
+  }
 
   const handleLike = async () => {
     if (!currentTraveler || liking) return;
@@ -271,22 +291,18 @@ export default function DiscoverPeople() {
         createdAt: new Date().toISOString(),
         status: "active",
       };
-      addMatch(match);
-      setMatchedUser(currentTraveler);
-      setMatchId(match.id);
+      triggerMatch(currentTraveler, match);
       return;
     }
 
     // ── Supabase mode ─────────────────────────────────────────────
     setLiking(true);
     try {
-      // 1. Insert like (ignore if already liked)
       await supabase.from("likes").upsert(
         { user_id: user!.id, liked_user_id: currentTraveler.id },
         { onConflict: "user_id,liked_user_id" }
       );
 
-      // 2. Check if a mutual match was created by the DB trigger
       const { data: matchRow } = await supabase
         .from("matches")
         .select("id")
@@ -294,7 +310,6 @@ export default function DiscoverPeople() {
         .maybeSingle();
 
       if (matchRow) {
-        // It's a match!
         const match: Match = {
           id: matchRow.id,
           user1Id: user!.id,
@@ -303,14 +318,12 @@ export default function DiscoverPeople() {
           createdAt: new Date().toISOString(),
           status: "active",
         };
-        addMatch(match);
-        setMatchedUser(currentTraveler);
-        setMatchId(matchRow.id);
+        triggerMatch(currentTraveler, match);
       } else {
         advance();
       }
     } catch {
-      // If likes table not available, fall back to always-match for testing
+      // Fallback: show match for testing
       const match: Match = {
         id: `match_${Date.now()}`,
         user1Id: user?.id ?? "",
@@ -319,30 +332,65 @@ export default function DiscoverPeople() {
         createdAt: new Date().toISOString(),
         status: "active",
       };
-      addMatch(match);
-      setMatchedUser(currentTraveler);
-      setMatchId(match.id);
+      triggerMatch(currentTraveler, match);
     } finally {
       setLiking(false);
     }
   };
 
-  // ── Build map marker from current traveler only ───────────────
+  // ── Map markers: current traveler + my pin during match ──────────
   const mapMarkers = useMemo<MapMarker[]>(() => {
-    if (!currentTraveler) return [];
-    const coords = geocodeLocation(currentTraveler.location);
-    if (!coords) return [];
-    return [{
-      id: `user_${currentTraveler.id}`,
-      lat: coords[0],
-      lng: coords[1],
-      type: "user",
-      label: currentTraveler.fullName,
-      sublabel: currentTraveler.location,
-      photo: currentTraveler.profilePhoto || undefined,
-      active: true,
-    }];
-  }, [currentTraveler]);
+    const markers: MapMarker[] = [];
+
+    if (currentTraveler) {
+      const coords = geocodeLocation(currentTraveler.location);
+      if (coords) {
+        markers.push({
+          id: `user_${currentTraveler.id}`,
+          lat: coords[0],
+          lng: coords[1],
+          type: "user",
+          label: currentTraveler.fullName,
+          sublabel: currentTraveler.location,
+          photo: currentTraveler.profilePhoto || undefined,
+          active: !matchAnimation, // don't pan to them during animation (fitBounds handles it)
+        });
+      }
+    }
+
+    // Show my own pin during the match animation
+    if (matchAnimation && user?.location) {
+      const myCoords = geocodeLocation(user.location);
+      if (myCoords) {
+        markers.push({
+          id: `me_${user.id}`,
+          lat: myCoords[0],
+          lng: myCoords[1],
+          type: "user",
+          label: `${user.fullName} (You)`,
+          sublabel: user.location,
+          photo: user.profilePhoto || undefined,
+          active: false,
+        });
+      }
+    }
+
+    return markers;
+  }, [currentTraveler, matchAnimation, user]);
+
+  // ── Match line for map (only during animation) ────────────────────
+  const matchLine = useMemo(() => {
+    if (!matchAnimation || !currentTraveler || !user?.location) return undefined;
+    const theirCoords = geocodeLocation(currentTraveler.location);
+    const myCoords = geocodeLocation(user.location);
+    if (!theirCoords || !myCoords) return undefined;
+    return {
+      fromLat: myCoords[0],
+      fromLng: myCoords[1],
+      toLat: theirCoords[0],
+      toLng: theirCoords[1],
+    };
+  }, [matchAnimation, currentTraveler, user]);
 
   return (
     <AppShell>
@@ -353,7 +401,9 @@ export default function DiscoverPeople() {
           onClose={() => { setMatchedUser(null); setMatchId(null); advance(); }}
           onChat={() => {
             setMatchedUser(null);
-            navigate(matchId ? `/chat/${matchId}` : "/chat");
+            navigate(matchId ? `/chat/${matchId}` : "/chat", {
+              state: { systemMessage: `You and ${matchedUser.fullName} liked each other! You can now start chatting. 🎉` },
+            });
           }}
         />
       )}
@@ -396,7 +446,7 @@ export default function DiscoverPeople() {
           {/* Mobile map panel */}
           {showMapMobile && (
             <div className="lg:hidden h-56 mb-4 rounded-2xl overflow-hidden border border-slate-200 shadow">
-              <TravelMap markers={mapMarkers} />
+              <TravelMap markers={mapMarkers} matchLine={matchLine} />
             </div>
           )}
 
@@ -428,7 +478,7 @@ export default function DiscoverPeople() {
           {!loading && currentTraveler && (
             <>
               {/* Card */}
-              <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/60 overflow-hidden border border-slate-100">
+              <div className={`bg-white rounded-3xl shadow-xl shadow-slate-200/60 overflow-hidden border transition-all duration-300 ${matchAnimation ? "border-rose-200 shadow-rose-100/60" : "border-slate-100"}`}>
                 <div className="relative h-80">
                   {currentTraveler.profilePhoto ? (
                     <img src={currentTraveler.profilePhoto} alt={currentTraveler.fullName} className="w-full h-full object-cover" />
@@ -443,6 +493,13 @@ export default function DiscoverPeople() {
                   )}
                   {currentTraveler.isPremium && (
                     <span className="absolute top-3 left-3 bg-amber-400 text-amber-950 text-[10px] font-bold px-2.5 py-1 rounded-full">👑 Premium</span>
+                  )}
+                  {matchAnimation && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="bg-rose-500/90 text-white font-bold text-lg px-6 py-3 rounded-2xl shadow-lg animate-bounce">
+                        ❤️ It's a Match!
+                      </div>
+                    </div>
                   )}
                   <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
                     <h3 className="text-xl font-bold">
@@ -472,14 +529,14 @@ export default function DiscoverPeople() {
               <div className="flex items-center justify-center gap-6 mt-5">
                 <button
                   onClick={handlePass}
-                  disabled={liking}
+                  disabled={liking || matchAnimation}
                   className="h-14 w-14 bg-white rounded-full shadow-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:border-rose-200 transition-all hover:scale-110 disabled:opacity-50"
                 >
                   <X className="h-6 w-6" />
                 </button>
                 <button
                   onClick={handleLike}
-                  disabled={liking}
+                  disabled={liking || matchAnimation}
                   className="h-14 w-14 bg-rose-500 hover:bg-rose-600 disabled:opacity-60 rounded-full shadow-lg shadow-rose-200 flex items-center justify-center text-white transition-all hover:scale-110"
                 >
                   {liking ? (
@@ -509,7 +566,7 @@ export default function DiscoverPeople() {
         {/* ── Right: Map ──────────────────────────────────── */}
         <div className="hidden lg:block flex-1 p-4">
           <div className="h-full rounded-2xl overflow-hidden border border-slate-200 shadow-xl shadow-slate-200/50">
-            <TravelMap markers={mapMarkers} />
+            <TravelMap markers={mapMarkers} matchLine={matchLine} />
           </div>
           <div className="flex items-center gap-4 mt-2 px-1">
             <p className="text-xs text-slate-400 flex items-center gap-1">

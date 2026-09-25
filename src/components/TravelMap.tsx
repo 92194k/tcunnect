@@ -14,6 +14,7 @@ export interface MapMarker {
 interface TravelMapProps {
   markers: MapMarker[];
   center?: [number, number];
+  matchLine?: { fromLat: number; fromLng: number; toLat: number; toLng: number };
 }
 
 declare global {
@@ -47,6 +48,26 @@ function loadLeaflet(cb: () => void) {
   document.head.appendChild(script);
 }
 
+function injectMatchLineCSS() {
+  if (document.getElementById("match-line-css")) return;
+  const s = document.createElement("style");
+  s.id = "match-line-css";
+  s.textContent = `
+    .match-line {
+      stroke-dasharray: 12 6;
+      animation: matchLineDash 0.45s linear infinite;
+      stroke: #f43f5e;
+      stroke-width: 4;
+      opacity: 0.9;
+      filter: drop-shadow(0 0 4px rgba(244,63,94,0.6));
+    }
+    @keyframes matchLineDash {
+      to { stroke-dashoffset: -18; }
+    }
+  `;
+  document.head.appendChild(s);
+}
+
 function makeIcon(type: "user" | "featured" | "gem", active = false) {
   const cfg = {
     user:     { bg: active ? "#0284c7" : "#0ea5e9", emoji: "👤", size: active ? 44 : 36 },
@@ -77,16 +98,17 @@ function makeIcon(type: "user" | "featured" | "gem", active = false) {
   });
 }
 
-export default function TravelMap({ markers, center }: TravelMapProps) {
+export default function TravelMap({ markers, center, matchLine }: TravelMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<ReturnType<typeof window.L.map> | null>(null);
   const markersRef = useRef<Map<string, ReturnType<typeof window.L.marker>>>(new Map());
-  // Track which marker types are currently shown for the legend
-  const markerTypesRef = useRef<Set<string>>(new Set());
+  const matchLineRef = useRef<ReturnType<typeof window.L.polyline> | null>(null);
 
+  // ── Init map ────────────────────────────────────────────────────
   useEffect(() => {
     loadLeaflet(() => {
       if (!containerRef.current || mapRef.current) return;
+      injectMatchLineCSS();
       const L = window.L;
 
       const map = L.map(containerRef.current, {
@@ -112,22 +134,22 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
     });
 
     return () => {
+      matchLineRef.current?.remove();
+      matchLineRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
       markersRef.current.clear();
     };
   }, []);
 
-  // Update markers whenever they change
+  // ── Update markers whenever they change ──────────────────────────
   useEffect(() => {
     if (!mapRef.current || !window._leafletLoaded) return;
     const L = window.L;
     const map = mapRef.current;
     const existing = new Set(markersRef.current.keys());
-    const types = new Set<string>();
 
     markers.forEach((m) => {
-      types.add(m.type);
       existing.delete(m.id);
       const icon = makeIcon(m.type, m.active);
 
@@ -155,33 +177,71 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
           .bindPopup(popup, { maxWidth: 200 });
         markersRef.current.set(m.id, mk);
       }
+
+      // Auto-open popup for the active marker
+      if (m.active) {
+        const mk = markersRef.current.get(m.id)!;
+        // Small delay lets the pan animation finish first
+        setTimeout(() => mk.openPopup(), 700);
+      }
     });
 
-    // Remove markers no longer in list
+    // Remove stale markers
     existing.forEach((id) => {
       markersRef.current.get(id)?.remove();
       markersRef.current.delete(id);
     });
 
-    markerTypesRef.current = types;
-
-    // Smoothly pan to the active user marker (panTo avoids tile-blur from flyTo zoom)
-    const active = markers.find((m) => m.active && m.type === "user");
-    if (active) {
-      const currentZoom = map.getZoom();
-      if (currentZoom < 8) {
-        // Only zoom in if we're currently zoomed out too far
-        map.setView([active.lat, active.lng], 9, { animate: true, duration: 0.8 });
-      } else {
-        map.panTo([active.lat, active.lng], { animate: true, duration: 0.6 });
+    // Navigation: when matchLine is active we use fitBounds (handled in matchLine effect)
+    // Otherwise pan/zoom to the active user marker as before
+    if (!matchLine) {
+      const active = markers.find((m) => m.active && m.type === "user");
+      if (active) {
+        const currentZoom = map.getZoom();
+        if (currentZoom < 8) {
+          map.setView([active.lat, active.lng], 9, { animate: true, duration: 0.8 });
+        } else {
+          map.panTo([active.lat, active.lng], { animate: true, duration: 0.6 });
+        }
+      } else if (markers.length === 0) {
+        map.setView([12.0, 122.5], 6, { animate: true, duration: 0.8 });
       }
-    } else if (markers.length === 0) {
-      // No markers — reset to Philippines overview
-      map.setView([12.0, 122.5], 6, { animate: true, duration: 0.8 });
     }
-  }, [markers]);
+  }, [markers, matchLine]);
 
-  // Types currently on the map (derived from last marker update)
+  // ── Match line animation ─────────────────────────────────────────
+  useEffect(() => {
+    if (!mapRef.current || !window._leafletLoaded) return;
+    const L = window.L;
+    const map = mapRef.current;
+
+    if (matchLine) {
+      const coords: [[number, number], [number, number]] = [
+        [matchLine.fromLat, matchLine.fromLng],
+        [matchLine.toLat, matchLine.toLng],
+      ];
+
+      if (matchLineRef.current) {
+        matchLineRef.current.setLatLngs(coords);
+      } else {
+        matchLineRef.current = L.polyline(coords, {
+          className: "match-line",
+          color: "#f43f5e",
+          weight: 4,
+        }).addTo(map);
+      }
+
+      // Fit both ends in view with padding
+      map.fitBounds(coords, { padding: [70, 70], animate: true, duration: 0.9 });
+    } else {
+      if (matchLineRef.current) {
+        matchLineRef.current.remove();
+        matchLineRef.current = null;
+      }
+    }
+  }, [matchLine]);
+
+  // Derived legend flags
   const hasUser     = markers.some((m) => m.type === "user");
   const hasFeatured = markers.some((m) => m.type === "featured");
   const hasGem      = markers.some((m) => m.type === "gem");
@@ -190,7 +250,7 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
     <div className="relative w-full h-full rounded-2xl overflow-hidden">
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Dynamic legend — only shows types that are present */}
+      {/* Dynamic legend */}
       {(hasUser || hasFeatured || hasGem) && (
         <div className="absolute top-3 left-3 z-[400] bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg border border-white/60 text-xs font-medium space-y-1.5">
           {hasUser && (
@@ -211,6 +271,13 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
               <span className="text-slate-700">Hidden Gem</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Match line pulse indicator */}
+      {matchLine && (
+        <div className="absolute top-3 right-3 z-[400] bg-rose-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg animate-pulse">
+          ❤️ It's a Match!
         </div>
       )}
     </div>
