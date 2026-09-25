@@ -10,6 +10,8 @@ import SignUp from "./pages/auth/SignUp";
 import Onboarding from "./pages/auth/Onboarding";
 import AuthCallback from "./pages/auth/AuthCallback";
 import SetPassword from "./pages/auth/SetPassword";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
 
 // App pages
 import Dashboard from "./pages/Dashboard";
@@ -140,6 +142,8 @@ export default function AppRoutes() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/set-password" element={<SetPassword />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/safety" element={<Safety />} />
