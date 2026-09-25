@@ -28,7 +28,16 @@ export default function ForgotPassword() {
       if (resetError) throw new Error(resetError.message);
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("too many") || msg.toLowerCase().includes("email rate")) {
+        setError("Too many reset emails sent. Supabase limits this to a few per hour — please wait a few minutes before trying again, or check your spam folder.");
+      } else if (msg.toLowerCase().includes("not found") || msg.toLowerCase().includes("no user")) {
+        // Don't reveal if email exists — just show success to prevent enumeration
+        setSent(true);
+        return;
+      } else {
+        setError(msg || "Something went wrong. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }

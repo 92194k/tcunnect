@@ -88,11 +88,13 @@ export default function Profile() {
 
   // ── Detect if user has an email/password identity ───────────
   const [hasEmailIdentity, setHasEmailIdentity] = useState(false);
+  const [hasGoogleIdentity, setHasGoogleIdentity] = useState(false);
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     supabase.auth.getUser().then(({ data: { user: u } }) => {
       const identities = u?.identities ?? [];
       setHasEmailIdentity(identities.some((id) => id.provider === "email"));
+      setHasGoogleIdentity(identities.some((id) => id.provider === "google"));
     });
   }, []);
 
@@ -549,15 +551,15 @@ export default function Profile() {
           </div>
         )}
 
-        {/* ── Change Password ────────────────────────────────── */}
-        {isSupabaseConfigured && hasEmailIdentity && (
+        {/* ── Change / Set Password ──────────────────────────── */}
+        {isSupabaseConfigured && (hasEmailIdentity || hasGoogleIdentity) && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 mb-4 overflow-hidden">
             <button
               onClick={() => { setShowChangePw((v) => !v); resetPwFlow(); }}
               className="w-full flex items-center justify-between px-5 py-4 text-sm font-medium text-slate-700 hover:bg-slate-50 transition">
               <span className="flex items-center gap-2">
                 <Lock className="h-4 w-4 text-slate-400" />
-                Change Password
+                {hasEmailIdentity ? "Change Password" : "Set Password"}
               </span>
               <span className={`text-slate-400 transition-transform duration-200 ${showChangePw ? "rotate-180" : ""}`}>▾</span>
             </button>
@@ -574,20 +576,36 @@ export default function Profile() {
                       <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs">{pwError}</div>
                     )}
 
-                    {/* Step 1: Send OTP */}
+                    {/* Step 1: Send OTP (email users) or direct (Google-only) */}
                     {pwStep === 'send' && (
                       <div className="text-center py-2">
                         <div className="text-3xl mb-3">🔒</div>
-                        <p className="text-sm text-slate-600 mb-4">
-                          For your security, we'll send a verification code to your email before changing your password.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={handleSendPwOtp}
-                          disabled={pwSaving}
-                          className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm">
-                          {pwSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</> : "Send Verification Code"}
-                        </button>
+                        {hasEmailIdentity ? (
+                          <>
+                            <p className="text-sm text-slate-600 mb-4">
+                              For your security, we'll send a verification code to your email before changing your password.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleSendPwOtp}
+                              disabled={pwSaving}
+                              className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-sm">
+                              {pwSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</> : "Send Verification Code"}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm text-slate-600 mb-4">
+                              You signed in with Google. You can set a password to also log in with your email.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setPwStep('newpw')}
+                              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2.5 rounded-xl transition text-sm">
+                              Set a Password
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -627,7 +645,7 @@ export default function Profile() {
                     {/* Step 3: New password */}
                     {pwStep === 'newpw' && (
                       <form onSubmit={handleChangePw} className="space-y-3">
-                        <p className="text-xs text-slate-500 text-center mb-2">✅ Identity verified. Set your new password.</p>
+                        <p className="text-xs text-slate-500 text-center mb-2">{hasEmailIdentity ? "✅ Identity verified. Set your new password." : "Set a password to log in with your email too."}</p>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">New Password</label>
                           <div className="relative">
