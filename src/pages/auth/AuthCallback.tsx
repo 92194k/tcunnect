@@ -7,8 +7,9 @@ import { useAuthStore } from "../../stores";
 /**
  * /auth/callback
  * Supabase redirects here after Google OAuth.
- * - If the user signed in via Google only (no password set), redirect to /set-password.
- * - Otherwise route to dashboard or onboarding based on profile.
+ * Exchanges the code for a session, then routes the user:
+ *   - New Google user who hasn't set a password yet → /password-setup (shown once)
+ *   - New Google user who skipped / returning user → /onboarding or /dashboard
  */
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -17,54 +18,65 @@ export default function AuthCallback() {
   useEffect(() => {
     let handled = false;
 
-    async function finish(userId: string, identities: { provider: string }[]) {
+    async function finish(session: { user: { id: string; user_metadata?: Record<string, unknown>; app_metadata?: Record<string, unknown>; identities?: Array<{ provider: string }> } }) {
       if (handled) return;
       handled = true;
 
-      // If user has only a Google identity (no email/password identity), send to set-password
-      const hasEmailIdentity = identities.some(
-        (id) => id.provider === "email"
-      );
-      const hasGoogleIdentity = identities.some(
-        (id) => id.provider === "google"
-      );
+      await loadSession();
 
-      if (hasGoogleIdentity && !hasEmailIdentity) {
-        navigate("/set-password", { replace: true });
+      const user = session.user;
+
+      // Check if this is a Google-authenticated user
+      const isGoogleUser =
+        user.app_metadata?.provider === "google" ||
+        user.identities?.some((i) => i.provider === "google") ||
+        false;
+
+      // Check if the "set password" screen has already been seen
+      const hasSeenPasswordSetup =
+        user.user_metadata?.password_setup_seen === true;
+
+      // If Google user and hasn't seen the password setup yet → show it once
+      if (isGoogleUser && !hasSeenPasswordSetup) {
+        navigate("/password-setup", { replace: true });
         return;
       }
 
-      await loadSession();
-
+      // Otherwise go to onboarding (new user) or dashboard (returning user)
       const { data: profile } = await supabase
         .from("profiles")
         .select("travel_interests")
-        .eq("id", userId)
+        .eq("id", user.id)
         .single();
 
-      const hasOnboarded = ((profile?.travel_interests as string[] | null)?.length ?? 0) > 0;
+      const hasOnboarded =
+        ((profile?.travel_interests as string[] | null)?.length ?? 0) > 0;
       navigate(hasOnboarded ? "/dashboard" : "/onboarding", { replace: true });
     }
 
-    // First check: session may already be ready
+    // First check: session may already be ready (Supabase exchanges code on load)
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        finish(session.user.id, (session.user.identities ?? []) as { provider: string }[]);
-      }
+      if (session?.user) finish(session);
     });
 
     // Second check: listen for the exchange completing asynchronously
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
-        subscription.unsubscribe();
-        finish(session.user.id, (session.user.identities ?? []) as { provider: string }[]);
-        return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (
+          (event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
+          session?.user
+        ) {
+          subscription.unsubscribe();
+          finish(session);
+          return;
+        }
+        if (event === "INITIAL_SESSION" && !session && !handled) {
+          // No code in URL — fall back to login
+          subscription.unsubscribe();
+          navigate("/login", { replace: true });
+        }
       }
-      if (event === "INITIAL_SESSION" && !session && !handled) {
-        subscription.unsubscribe();
-        navigate("/login", { replace: true });
-      }
-    });
+    );
 
     return () => subscription.unsubscribe();
   }, []);

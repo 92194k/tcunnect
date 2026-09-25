@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Lock, Eye, EyeOff, Loader2, Compass, Check, X } from "lucide-react";
-import { supabase } from "../../lib/supabase";
+import { Compass, Lock, Eye, EyeOff, Check, X, Loader2 } from "lucide-react";
+import { supabase, isSupabaseConfigured } from "../../lib/supabase";
 import { useAuthStore } from "../../stores";
 
 function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
@@ -13,62 +13,65 @@ function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+/**
+ * /password-setup
+ * Shown ONCE to brand-new Google sign-up users so they can also log in with email+password.
+ * After completing or skipping, sets user_metadata.password_setup_seen = true so it never appears again.
+ */
 export default function SetPassword() {
   const navigate = useNavigate();
-  const { loadSession } = useAuthStore();
-  const [form, setForm] = useState({ password: "", confirm: "" });
-  const [showPw, setShowPw] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const { onboardingComplete } = useAuthStore();
 
-  const pw = form.password;
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const [error, setError] = useState("");
+
   const rules = {
-    length: pw.length >= 8,
-    upper: /[A-Z]/.test(pw),
-    number: /[0-9]/.test(pw),
+    length: password.length >= 8,
+    upper: /[A-Z]/.test(password),
+    number: /[0-9]/.test(password),
   };
   const pwStrong = Object.values(rules).every(Boolean);
+  const destination = onboardingComplete ? "/dashboard" : "/onboarding";
 
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
+  // Mark setup as seen in Supabase user metadata (so it never shows again)
+  async function markSeen() {
+    if (!isSupabaseConfigured) return;
+    try {
+      await supabase.auth.updateUser({ data: { password_setup_seen: true } });
+    } catch {
+      // Non-fatal — worst case they see this screen once more next sign-in
+    }
+  }
 
-  const onSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-
-    if (!form.password || !form.confirm) return setError("Please fill in both fields.");
     if (!pwStrong) return setError("Please meet all password requirements.");
-    if (form.password !== form.confirm) return setError("Passwords do not match.");
+    if (password !== confirm) return setError("Passwords do not match.");
 
-    setIsLoading(true);
+    setSaving(true);
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password: form.password });
-      if (updateError) throw new Error(updateError.message);
-
-      // Reload session so the store picks up the updated user
-      await loadSession();
-
-      // Check if onboarding is needed
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
-      if (!userId) { navigate("/login", { replace: true }); return; }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("travel_interests")
-        .eq("id", userId)
-        .single();
-
-      const hasOnboarded = ((profile?.travel_interests as string[] | null)?.length ?? 0) > 0;
-      navigate(hasOnboarded ? "/dashboard" : "/onboarding", { replace: true });
+      if (isSupabaseConfigured) {
+        const { error: updateError } = await supabase.auth.updateUser({ password });
+        if (updateError) throw new Error(updateError.message);
+      }
+      await markSeen();
+      navigate(destination, { replace: true });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to set password.";
-      setError(msg);
-    } finally {
-      setIsLoading(false);
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setSaving(false);
     }
-  };
+  }
+
+  async function handleSkip() {
+    setSkipping(true);
+    await markSeen();
+    navigate(destination, { replace: true });
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
@@ -81,42 +84,39 @@ export default function SetPassword() {
             </span>
             <span className="text-2xl font-bold text-slate-900">TC<span className="text-sky-600">U</span>nnect</span>
           </div>
-          <p className="text-slate-500 text-sm mt-2">Travel. Connect. Unwind.</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
-          <div className="flex items-center justify-center mb-4">
-            <div className="h-12 w-12 bg-sky-100 rounded-full flex items-center justify-center">
-              <Lock className="h-6 w-6 text-sky-600" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-1 text-center">Create a password</h1>
-          <p className="text-slate-500 text-sm mb-7 text-center">
+          <h1 className="text-2xl font-bold text-slate-900 mb-1">Create a password</h1>
+          <p className="text-slate-500 text-sm mb-7">
             Set a password so you can log in to your TCUnnect account with email too.
           </p>
 
           {error && (
-            <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-              {error}
-            </div>
+            <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
           )}
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">New Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
-                  name="password" type={showPw ? "text" : "password"} value={form.password} onChange={onChange}
+                  type={showPw ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="w-full pl-9 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition"
                 />
-                <button type="button" onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <button
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
                   {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              {form.password && (
+              {password && (
                 <ul className="mt-2 space-y-1 pl-1">
                   <PasswordRule ok={rules.length} label="At least 8 characters" />
                   <PasswordRule ok={rules.upper} label="One uppercase letter" />
@@ -130,27 +130,39 @@ export default function SetPassword() {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
-                  name="confirm" type={showConfirm ? "text" : "password"} value={form.confirm} onChange={onChange}
+                  type="password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition"
+                  className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition"
                 />
-                <button type="button" onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
-              {form.confirm && form.password !== form.confirm && (
+              {confirm && password !== confirm && (
                 <p className="mt-1 text-xs text-red-500">Passwords don't match</p>
               )}
             </div>
 
-            <button type="submit" disabled={isLoading}
-              className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm mt-2">
-              {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Setting password...</> : "Set Password & Continue"}
+            <button
+              type="submit"
+              disabled={saving || skipping}
+              className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm mt-2"
+            >
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : "Set Password & Continue"}
             </button>
           </form>
 
-          <p className="text-center text-xs text-slate-400 mt-6">
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={handleSkip}
+              disabled={saving || skipping}
+              className="text-sm text-slate-400 hover:text-slate-600 transition disabled:opacity-50"
+            >
+              {skipping ? "Skipping..." : "Skip for now"}
+            </button>
+          </div>
+
+          <p className="mt-5 text-center text-xs text-slate-400">
             You can always log in with Google — this just adds email login as an option.
           </p>
         </div>

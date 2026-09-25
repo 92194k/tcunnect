@@ -10,9 +10,6 @@ import SignUp from "./pages/auth/SignUp";
 import Onboarding from "./pages/auth/Onboarding";
 import AuthCallback from "./pages/auth/AuthCallback";
 import SetPassword from "./pages/auth/SetPassword";
-import ForgotPassword from "./pages/auth/ForgotPassword";
-import ResetPassword from "./pages/auth/ResetPassword";
-import VerifyOtp from "./pages/auth/VerifyOtp";
 
 // App pages
 import Dashboard from "./pages/Dashboard";
@@ -85,45 +82,18 @@ export default function AppRoutes() {
     if (!isSupabaseConfigured) return;
 
     // Global auth listener — handles OAuth redirects landing on ANY page
+    // (e.g. when Supabase redirects back to "/" instead of "/auth/callback"
+    // because the callback URL wasn't added to the Supabase allowed list)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // PASSWORD_RECOVERY must be intercepted BEFORE SIGNED_IN handling.
-        // When a reset link is clicked, Supabase fires PASSWORD_RECOVERY (then
-        // SIGNED_IN). We must NOT treat that as a normal login — flag it via
-        // sessionStorage and route to /reset-password immediately.
-        if (event === "PASSWORD_RECOVERY") {
-          sessionStorage.setItem("_tcunnect_pw_recovery", "1");
-          if (window.location.pathname !== "/reset-password") {
-            navigate("/reset-password", { replace: true });
-          }
-          return; // Do NOT call loadSession() or navigate to dashboard
-        }
-
         if (event === "SIGNED_IN" && session?.user) {
-          // If we're in the middle of a password recovery flow, let
-          // ResetPassword.tsx handle everything — do not touch auth store here.
-          if (
-            window.location.pathname === "/reset-password" ||
-            sessionStorage.getItem("_tcunnect_pw_recovery") === "1"
-          ) {
-            return;
-          }
-
           // Re-load the full profile into the store
           await loadSession();
 
           // Only auto-navigate if we're still on a "public-only" page
-          const currentPath = window.location.pathname;
+          const path = window.location.pathname;
           const publicPaths = ["/", "/login", "/signup", "/auth/callback"];
-          if (publicPaths.includes(currentPath)) {
-            // Check if Google-only user (no password set)
-            const identities = session.user.identities ?? [];
-            const hasEmailIdentity = identities.some((id: { provider: string }) => id.provider === "email");
-            const hasGoogleIdentity = identities.some((id: { provider: string }) => id.provider === "google");
-            if (hasGoogleIdentity && !hasEmailIdentity) {
-              navigate("/set-password", { replace: true });
-              return;
-            }
+          if (publicPaths.includes(path)) {
             const { data: profile } = await supabase
               .from("profiles")
               .select("travel_interests")
@@ -161,10 +131,7 @@ export default function AppRoutes() {
       />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
-      <Route path="/set-password" element={<SetPassword />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/verify-otp" element={<VerifyOtp />} />
+      <Route path="/password-setup" element={<SetPassword />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/safety" element={<Safety />} />
