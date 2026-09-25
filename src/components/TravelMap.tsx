@@ -81,6 +81,8 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<ReturnType<typeof window.L.map> | null>(null);
   const markersRef = useRef<Map<string, ReturnType<typeof window.L.marker>>>(new Map());
+  // Track which marker types are currently shown for the legend
+  const markerTypesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     loadLeaflet(() => {
@@ -89,7 +91,7 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
 
       const map = L.map(containerRef.current, {
         center: center ?? [12.0, 122.5],
-        zoom: 6,
+        zoom: center ? 9 : 6,
         zoomControl: false,
       });
 
@@ -105,9 +107,7 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
         { maxZoom: 18, opacity: 0.7 }
       ).addTo(map);
 
-      // Custom zoom control
       L.control.zoom({ position: "bottomright" }).addTo(map);
-
       mapRef.current = map;
     });
 
@@ -123,10 +123,11 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
     if (!mapRef.current || !window._leafletLoaded) return;
     const L = window.L;
     const map = mapRef.current;
-
     const existing = new Set(markersRef.current.keys());
+    const types = new Set<string>();
 
     markers.forEach((m) => {
+      types.add(m.type);
       existing.delete(m.id);
       const icon = makeIcon(m.type, m.active);
 
@@ -162,23 +163,56 @@ export default function TravelMap({ markers, center }: TravelMapProps) {
       markersRef.current.delete(id);
     });
 
-    // Fly to active user marker
+    markerTypesRef.current = types;
+
+    // Smoothly pan to the active user marker (panTo avoids tile-blur from flyTo zoom)
     const active = markers.find((m) => m.active && m.type === "user");
     if (active) {
-      map.flyTo([active.lat, active.lng], 9, { duration: 1.2, easeLinearity: 0.4 });
+      const currentZoom = map.getZoom();
+      if (currentZoom < 8) {
+        // Only zoom in if we're currently zoomed out too far
+        map.setView([active.lat, active.lng], 9, { animate: true, duration: 0.8 });
+      } else {
+        map.panTo([active.lat, active.lng], { animate: true, duration: 0.6 });
+      }
+    } else if (markers.length === 0) {
+      // No markers — reset to Philippines overview
+      map.setView([12.0, 122.5], 6, { animate: true, duration: 0.8 });
     }
   }, [markers]);
+
+  // Types currently on the map (derived from last marker update)
+  const hasUser     = markers.some((m) => m.type === "user");
+  const hasFeatured = markers.some((m) => m.type === "featured");
+  const hasGem      = markers.some((m) => m.type === "gem");
 
   return (
     <div className="relative w-full h-full rounded-2xl overflow-hidden">
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Legend */}
-      <div className="absolute top-3 left-3 z-[400] bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg border border-white/60 text-xs font-medium space-y-1.5">
-        <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-sky-500 inline-block"/><span className="text-slate-700">Travelers</span></div>
-        <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-amber-400 inline-block"/><span className="text-slate-700">Featured</span></div>
-        <div className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full bg-emerald-500 inline-block"/><span className="text-slate-700">Hidden Gems</span></div>
-      </div>
+      {/* Dynamic legend — only shows types that are present */}
+      {(hasUser || hasFeatured || hasGem) && (
+        <div className="absolute top-3 left-3 z-[400] bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg border border-white/60 text-xs font-medium space-y-1.5">
+          {hasUser && (
+            <div className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-sky-500 inline-block" />
+              <span className="text-slate-700">Traveler</span>
+            </div>
+          )}
+          {hasFeatured && (
+            <div className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-amber-400 inline-block" />
+              <span className="text-slate-700">Featured</span>
+            </div>
+          )}
+          {hasGem && (
+            <div className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-emerald-500 inline-block" />
+              <span className="text-slate-700">Hidden Gem</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
