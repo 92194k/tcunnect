@@ -1,8 +1,198 @@
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { supabase, isSupabaseConfigured } from "./lib/supabase";
+
+interface FeaturedGem {
+  id: string;
+  name: string;
+  location: string;
+  category: string;
+  images: string[];
+  description: string;
+  budget_level: string;
+}
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+  Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
+  Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
+  "Beach & Island Hopping": "🏖", "Nature & Hiking": "🌿",
+  "History & Culture": "🏛", "Food & Cafés": "🍜",
+  "City Exploring": "🌆", "Adventure & Thrills": "🧗",
+  "Scenic & Sunset Spots": "🌅", "Hidden Gems": "💎",
+};
+
+const BEST_FOR: Record<string, string[]> = {
+  Beach: ["Solo", "Duo", "Group"],
+  "Beach & Island Hopping": ["Solo", "Duo", "Group"],
+  Mountain: ["Solo", "Group", "Adventurers"],
+  "Nature & Hiking": ["Solo", "Duo"],
+  Heritage: ["Family", "Duo"],
+  "History & Culture": ["Family", "Duo"],
+  Waterfalls: ["Solo", "Group"],
+  Food: ["Duo", "Group"],
+  "Food & Cafés": ["Duo", "Group"],
+  City: ["Solo", "Duo"],
+  "City Exploring": ["Solo", "Duo"],
+  default: ["Solo", "Duo"],
+};
+
+function FeaturedCarousel() {
+  const [gems, setGems] = useState<FeaturedGem[]>([]);
+  const [current, setCurrent] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const total = gems.length;
+
+  useEffect(() => {
+    async function fetchFeatured() {
+      if (!isSupabaseConfigured) { setLoading(false); return; }
+      const { data } = await supabase
+        .from("hidden_gems")
+        .select("id, name, location, category, images, description, budget_level")
+        .eq("status", "approved")
+        .eq("is_featured", true)
+        .limit(6);
+      if (data && data.length > 0) setGems(data as FeaturedGem[]);
+      setLoading(false);
+    }
+    fetchFeatured();
+  }, []);
+
+  const prev = useCallback(() => setCurrent((c) => (c - 1 + total) % total), [total]);
+  const next = useCallback(() => setCurrent((c) => (c + 1) % total), [total]);
+
+  // Auto-advance every 5 s
+  useEffect(() => {
+    if (total < 2) return;
+    timerRef.current = setTimeout(next, 5000);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [current, next, total]);
+
+  if (loading) {
+    return (
+      <div className="relative min-h-[420px] rounded-[30px] bg-slate-200 animate-pulse flex items-center justify-center lg:min-h-[520px]">
+        <span className="text-slate-400 text-sm">Loading featured gems…</span>
+      </div>
+    );
+  }
+
+  // Fallback if no featured gems yet
+  if (gems.length === 0) {
+    return (
+      <div className="relative min-h-[420px] rounded-[30px] overflow-hidden lg:min-h-[520px]">
+        <img
+          src="https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85"
+          alt="The Philippines"
+          className="w-full h-full object-cover absolute inset-0"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/30 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-0 p-8 sm:p-12 max-w-xl">
+          <span className="inline-block mb-3 rounded-full bg-amber-400 px-4 py-1.5 text-[10px] font-extrabold tracking-[0.16em] text-amber-950">FEATURED BY TCUNNECT</span>
+          <h3 className="text-3xl font-bold text-white sm:text-4xl leading-tight">The Philippines Awaits</h3>
+          <p className="mt-3 text-sm text-white/75 leading-relaxed line-clamp-3">From pristine beaches to misty mountain trails — the Philippines is full of places waiting to be discovered.</p>
+          <a href="/signup" className="mt-6 inline-flex items-center gap-2 rounded-full bg-white text-slate-900 font-bold px-6 py-3 text-sm transition hover:bg-amber-300">
+            Explore This Gem <Icon name="chevron" className="h-4 w-4" />
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  const gem = gems[current];
+  const heroImg = gem.images?.[0];
+  const bestFor = BEST_FOR[gem.category] ?? BEST_FOR.default;
+  const emoji = CATEGORY_EMOJIS[gem.category] ?? "📍";
+
+  return (
+    <div className="relative min-h-[420px] rounded-[30px] overflow-hidden select-none lg:min-h-[520px]">
+      {/* Slide image */}
+      {heroImg ? (
+        <img
+          key={gem.id}
+          src={heroImg}
+          alt={gem.name}
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-slate-700 flex items-center justify-center text-7xl">
+          {emoji}
+        </div>
+      )}
+
+      {/* Gradient overlays — pointer-events-none so they NEVER block clicks */}
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/30 to-transparent pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent pointer-events-none" />
+
+      {/* Badge */}
+      <span className="absolute top-6 left-6 z-10 rounded-full bg-amber-400 px-4 py-1.5 text-[10px] font-extrabold tracking-[0.16em] text-amber-950 shadow">
+        FEATURED BY TCUNNECT
+      </span>
+
+      {/* Prev arrow — z-10 so it sits above gradients */}
+      <button
+        onClick={prev}
+        aria-label="Previous gem"
+        className="absolute left-4 top-1/2 -translate-y-1/2 z-10 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
+
+      {/* Next arrow — z-10 so it sits above gradients */}
+      <button
+        onClick={next}
+        aria-label="Next gem"
+        className="absolute right-4 top-1/2 -translate-y-1/2 z-10 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
+      >
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m9 18 6-6-6-6" /></svg>
+      </button>
+
+      {/* Content */}
+      <div className="absolute bottom-0 left-0 p-8 sm:p-12 max-w-xl z-10">
+        <h3 className="text-3xl font-bold text-white sm:text-4xl leading-tight">{gem.name}</h3>
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-white/70">
+          <Icon name="location" className="h-4 w-4 text-rose-400" /> {gem.location}
+        </p>
+        {gem.description && (
+          <p className="mt-3 text-sm text-white/75 leading-relaxed line-clamp-3">{gem.description}</p>
+        )}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-medium text-white">{emoji} {gem.category}</span>
+          {gem.budget_level && <span className="rounded-full bg-white/15 backdrop-blur-sm px-3 py-1 text-xs font-medium text-white">{gem.budget_level}</span>}
+          {bestFor.length > 0 && (
+            <span className="text-xs text-white/50">Best for:</span>
+          )}
+          {bestFor.map((b) => (
+            <span key={b} className="rounded-full bg-sky-500/70 backdrop-blur-sm px-3 py-1 text-xs font-semibold text-white">{b}</span>
+          ))}
+        </div>
+        <Link
+          to={`/gems/${gem.id}`}
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-white text-slate-900 font-bold px-6 py-3 text-sm transition hover:bg-amber-300"
+        >
+          Explore This Gem <Icon name="chevron" className="h-4 w-4" />
+        </Link>
+      </div>
+
+      {/* Dot indicators */}
+      {total > 1 && (
+        <div className="absolute bottom-6 right-6 z-10 flex gap-1.5">
+          {gems.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              aria-label={`Slide ${i + 1}`}
+              className={`h-2 rounded-full transition-all ${i === current ? "w-6 bg-white" : "w-2 bg-white/40 hover:bg-white/70"}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const images = {
-  hero: "/hero-philippines.jpg",
+  hero: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85",
   nacpan:
     "https://images.unsplash.com/photo-1602587921225-3cca658d31bb?auto=format&fit=crop&w=1400&q=85",
   lagoon:
@@ -148,183 +338,6 @@ const travelers = [
   { name: "Ana", city: "Cebu City", tags: ["Culture", "Diving"], image: images.traveler3, color: "bg-sky-500" },
 ];
 
-
-const FEATURED_DESTINATIONS = [
-  {
-    name: "Siquijor",
-    location: "Siquijor Province, Visayas",
-    description: "A mystical island wrapped in folklore and fireflies, with powder-white beaches and healing traditions that feel untouched by time.",
-    image: "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=1400&q=85",
-    tags: ["🏖 Beach", "🌿 Nature", "💎 Hidden Gem"],
-    bestFor: ["Solo", "Duo"],
-  },
-  {
-    name: "Camiguin",
-    location: "Camiguin, Northern Mindanao",
-    description: "The island born of fire — seven volcanoes, a sunken cemetery, hot springs, and waterfalls packed into one small paradise.",
-    image: "https://images.unsplash.com/photo-1547036967-23d11aacaee0?auto=format&fit=crop&w=1400&q=85",
-    tags: ["🌿 Nature", "🏔 Mountain", "💦 Waterfalls"],
-    bestFor: ["Solo", "Group"],
-  },
-  {
-    name: "Batanes",
-    location: "Batanes Province, Luzon",
-    description: "Rolling green hills, stone houses, dramatic cliffs, and wind-swept coves at the northernmost tip of the Philippines.",
-    image: "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1400&q=85",
-    tags: ["🏛 Heritage", "🌿 Nature", "📷 Photography"],
-    bestFor: ["Solo", "Duo"],
-  },
-  {
-    name: "Bukidnon",
-    location: "Bukidnon, Mindanao",
-    description: "A cool highland plateau with sprawling pineapple farms, misty mountains, and some of the Philippines' most serene landscapes.",
-    image: "https://images.unsplash.com/photo-1465056836041-7f43ac27dcb5?auto=format&fit=crop&w=1400&q=85",
-    tags: ["🌿 Nature", "🏔 Mountain", "⛺ Camping"],
-    bestFor: ["Group", "Family"],
-  },
-  {
-    name: "Romblon",
-    location: "Romblon Province, Mimaropa",
-    description: "The marble capital of the Philippines — crystal-clear waters, pristine reefs, and beaches so quiet you'll feel like you found a secret.",
-    image: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=85",
-    tags: ["🏖 Beach", "💎 Hidden Gem", "🌿 Nature"],
-    bestFor: ["Solo", "Duo"],
-  },
-];
-
-function FeaturedCarousel() {
-  const [current, setCurrent] = useState(0);
-  const [visible, setVisible] = useState(true);
-  const [paused, setPaused] = useState(false);
-  const total = FEATURED_DESTINATIONS.length;
-
-  const goTo = useCallback((idx: number) => {
-    setVisible(false);
-    setTimeout(() => {
-      setCurrent((idx + total) % total);
-      setVisible(true);
-    }, 320);
-  }, [total]);
-
-  const next = useCallback(() => goTo(current + 1), [current, goTo]);
-  const prev = useCallback(() => goTo(current - 1), [current, goTo]);
-
-  useEffect(() => {
-    if (paused) return;
-    const id = setInterval(next, 5000);
-    return () => clearInterval(id);
-  }, [paused, next]);
-
-  const dest = FEATURED_DESTINATIONS[current];
-
-  return (
-    <div
-      className="relative overflow-hidden rounded-[30px] shadow-[0_22px_70px_rgba(15,45,65,0.13)]"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      {/* Image layer */}
-      <div className="relative h-[480px] lg:h-[560px]">
-        <img
-          key={current}
-          src={dest.image}
-          alt={dest.name}
-          className="absolute inset-0 h-full w-full object-cover"
-          style={{
-            opacity: visible ? 1 : 0,
-            transform: visible ? "scale(1)" : "scale(1.03)",
-            transition: "opacity 0.4s ease, transform 0.4s ease",
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/30 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent" />
-
-        {/* Badge */}
-        <div className="absolute left-6 top-6">
-          <span className="rounded-full bg-amber-300 px-4 py-2 text-[10px] font-extrabold tracking-[0.16em] text-amber-950 shadow-sm">
-            ✨ FEATURED BY TCUNNECT
-          </span>
-        </div>
-
-        {/* Prev / Next */}
-        <button
-          onClick={prev}
-          className="absolute left-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
-          aria-label="Previous"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <button
-          onClick={next}
-          className="absolute right-4 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-white/20 hover:bg-white/40 backdrop-blur-md flex items-center justify-center text-white transition"
-          aria-label="Next"
-        >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-        </button>
-
-        {/* Content overlay */}
-        <div
-          className="absolute bottom-0 left-0 right-0 p-8 lg:p-12"
-          style={{
-            opacity: visible ? 1 : 0,
-            transform: visible ? "translateY(0)" : "translateY(12px)",
-            transition: "opacity 0.35s ease 0.05s, transform 0.35s ease 0.05s",
-          }}
-        >
-          <div className="max-w-2xl">
-            <h3 className="text-4xl font-bold text-white tracking-tight lg:text-5xl">{dest.name}</h3>
-            <p className="mt-2 flex items-center gap-2 text-sm font-medium text-white/70">
-              <svg className="h-4 w-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
-              {dest.location}
-            </p>
-            <p className="mt-4 text-base leading-7 text-white/85 max-w-lg">{dest.description}</p>
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              {dest.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-white/15 backdrop-blur-sm border border-white/20 px-3 py-1 text-xs font-semibold text-white">
-                  {tag}
-                </span>
-              ))}
-              <span className="ml-2 text-xs text-white/50">Best for:</span>
-              {dest.bestFor.map((b) => (
-                <span key={b} className="rounded-full bg-sky-500/30 border border-sky-400/40 px-3 py-1 text-xs font-semibold text-sky-200">
-                  {b}
-                </span>
-              ))}
-            </div>
-            <div className="mt-7">
-              <a
-                href="/signup"
-                className="inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-bold text-slate-900 shadow-lg transition hover:gap-3 hover:bg-sky-50"
-              >
-                Explore This Gem
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Dot indicators */}
-      <div className="absolute bottom-6 right-8 flex items-center gap-1.5">
-        {FEATURED_DESTINATIONS.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => goTo(i)}
-            aria-label={`Go to slide ${i + 1}`}
-            className="transition-all duration-300"
-            style={{
-              width: i === current ? "24px" : "8px",
-              height: "8px",
-              borderRadius: "9999px",
-              background: i === current ? "white" : "rgba(255,255,255,0.35)",
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ScrollArrow() {
   const [atBottom, setAtBottom] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -434,13 +447,8 @@ export default function App() {
 
       <section className="section-pad bg-[#fffdf8]" id="gems">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
-          <div className="mb-8">
-            <div className="eyebrow text-amber-700">
-              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
-                <path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3ZM5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16Z" />
-              </svg>
-              Featured Gem by TCUnnect
-            </div>
+          <div className="mb-10 max-w-2xl">
+            <div className="eyebrow text-amber-700"><Icon name="sparkle" className="h-4 w-4" /> Featured Gem by TCUnnect</div>
             <h2 className="section-title mt-4">Discover somewhere worth getting lost in.</h2>
           </div>
           <FeaturedCarousel />
