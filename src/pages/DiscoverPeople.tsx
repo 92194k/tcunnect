@@ -210,17 +210,19 @@ export default function DiscoverPeople() {
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
 
-  // ── Match state — three independent variables ─────────────────────
-  // mutualMatchData: locked in when a mutual match is found; cleared only by user action
+  // ── Match state — four independent variables ─────────────────────
+  // mutualMatchData : locked in when a match is found; cleared ONLY by user action
   const [mutualMatchData, setMutualMatchData] = useState<{ traveler: User; matchId: string } | null>(null);
-  // showConnectionAnim: true during the 2.5 s map line animation
+  // showConnectionLine: keeps the map polyline visible from start of anim through modal dismiss
+  const [showConnectionLine, setShowConnectionLine] = useState(false);
+  // showConnectionAnim: drives the card bounce overlay (true only during the 2.5 s animation)
   const [showConnectionAnim, setShowConnectionAnim] = useState(false);
-  // showMatchModal: true after animation finishes
+  // showMatchModal: true after animation finishes, until user acts
   const [showMatchModal, setShowMatchModal] = useState(false);
-  // Timer lives in a ref so React effect cleanup never accidentally kills it
+  // Timer lives in a ref — React effect cleanup can never accidentally kill it
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cleanup timer on unmount
+  // Cleanup timer on unmount only
   useEffect(() => () => { if (animTimerRef.current) clearTimeout(animTimerRef.current); }, []);
 
   // ── Fetch profiles ───────────────────────────────────────────────
@@ -277,6 +279,11 @@ export default function DiscoverPeople() {
 
   // ── Start match sequence ─────────────────────────────────────────
   function startMatchSequence(traveler: User, matchId: string) {
+    if (animTimerRef.current) {
+      clearTimeout(animTimerRef.current);
+      animTimerRef.current = null;
+    }
+
     // Save match to Zustand store immediately (makes it available to chat)
     addMatch({
       id: matchId,
@@ -289,12 +296,13 @@ export default function DiscoverPeople() {
 
     // Lock in match data
     setMutualMatchData({ traveler, matchId });
-    // Show the connection animation on the map
+    // Line stays visible for the ENTIRE sequence (anim + modal)
+    setShowConnectionLine(true);
+    // Card overlay / map badge active only during the 2.5 s window
     setShowConnectionAnim(true);
     setShowMatchModal(false);
 
-    // After 2.5 s: hide animation, show modal
-    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    // After 2.5 s: end card animation, open modal — line stays on
     animTimerRef.current = setTimeout(() => {
       setShowConnectionAnim(false);
       setShowMatchModal(true);
@@ -303,9 +311,13 @@ export default function DiscoverPeople() {
 
   // ── Dismiss modal (Keep Exploring) ───────────────────────────────
   function dismissModal() {
-    if (animTimerRef.current) clearTimeout(animTimerRef.current);
-    setShowConnectionAnim(false);
+    if (animTimerRef.current) {
+      clearTimeout(animTimerRef.current);
+      animTimerRef.current = null;
+    }
     setShowMatchModal(false);
+    setShowConnectionAnim(false);
+    setShowConnectionLine(false);
     setMutualMatchData(null);
     advance();
   }
@@ -314,9 +326,13 @@ export default function DiscoverPeople() {
   function goToChat() {
     if (!mutualMatchData) return;
     const { traveler, matchId } = mutualMatchData;
-    if (animTimerRef.current) clearTimeout(animTimerRef.current);
-    setShowConnectionAnim(false);
+    if (animTimerRef.current) {
+      clearTimeout(animTimerRef.current);
+      animTimerRef.current = null;
+    }
     setShowMatchModal(false);
+    setShowConnectionAnim(false);
+    setShowConnectionLine(false);
     setMutualMatchData(null);
     navigate(`/chat/${matchId}`, {
       state: {
@@ -406,14 +422,14 @@ export default function DiscoverPeople() {
           label: currentTraveler.fullName,
           sublabel: currentTraveler.location,
           photo: currentTraveler.profilePhoto || undefined,
-          // Don't auto-pan during animation — fitBounds handles the view
-          active: !showConnectionAnim,
+          // Suppress auto-pan whenever the connection line is active — fitBounds handles it
+          active: !showConnectionLine,
         });
       }
     }
 
-    // During connection animation, also show the logged-in user's location
-    if (showConnectionAnim && user?.location) {
+    // Show "You" pin for the entire match sequence (anim + modal)
+    if (showConnectionLine && user?.location) {
       const myCoords = geocodeLocation(user.location);
       if (myCoords) {
         markers.push({
@@ -430,12 +446,14 @@ export default function DiscoverPeople() {
     }
 
     return markers;
-  }, [currentTraveler, showConnectionAnim, user]);
+  }, [currentTraveler, showConnectionLine, user]);
 
-  // ── Build match line (only during connection animation) ───────────
+  // ── Build match line ──────────────────────────────────────────────
+  // Driven by showConnectionLine so it stays visible through both animation AND modal phases.
+  // Uses mutualMatchData.traveler (not currentTraveler) so the locked traveler is always correct.
   const matchLine = useMemo(() => {
-    if (!showConnectionAnim || !currentTraveler || !user?.location) return undefined;
-    const theirCoords = geocodeLocation(currentTraveler.location);
+    if (!showConnectionLine || !mutualMatchData || !user?.location) return undefined;
+    const theirCoords = geocodeLocation(mutualMatchData.traveler.location);
     const myCoords = geocodeLocation(user.location);
     if (!theirCoords || !myCoords) return undefined;
     return {
@@ -444,7 +462,7 @@ export default function DiscoverPeople() {
       toLat: theirCoords[0],
       toLng: theirCoords[1],
     };
-  }, [showConnectionAnim, currentTraveler, user]);
+  }, [showConnectionLine, mutualMatchData, user]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
