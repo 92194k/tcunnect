@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
-import Avatar from "../components/Avatar";
 import TravelMap from "../components/TravelMap";
 import type { MapMarker } from "../components/TravelMap";
 import { useAuthStore, useMatchStore } from "../stores";
@@ -144,13 +143,25 @@ function MatchModal({
 
         {/* Avatars */}
         <div className="flex items-center justify-center gap-4 mb-6">
-          <Avatar src={myPhoto} name="You"
-            className="h-20 w-20 rounded-full border-4 border-white shadow-lg ring-2 ring-sky-300"
-            textSize="text-2xl" />
+          <div className="h-20 w-20 rounded-full overflow-hidden border-4 border-white shadow-lg ring-2 ring-sky-300">
+            {myPhoto ? (
+              <img src={myPhoto} alt="You" className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-2xl font-bold">
+                👤
+              </div>
+            )}
+          </div>
           <Heart className="h-8 w-8 text-rose-500 fill-current animate-pulse" />
-          <Avatar src={traveler.profilePhoto} name={traveler.fullName}
-            className="h-20 w-20 rounded-full border-4 border-white shadow-lg ring-2 ring-rose-300"
-            textSize="text-2xl" />
+          <div className="h-20 w-20 rounded-full overflow-hidden border-4 border-white shadow-lg ring-2 ring-rose-300">
+            {traveler.profilePhoto ? (
+              <img src={traveler.profilePhoto} alt={traveler.fullName} className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center text-white text-2xl font-bold">
+                {traveler.fullName[0]}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Shared interests */}
@@ -198,6 +209,7 @@ export default function DiscoverPeople() {
   const [liking, setLiking] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
+  const [gemMarkers, setGemMarkers] = useState<MapMarker[]>([]);
 
   // ── Match state — four independent variables ─────────────────────
   // mutualMatchData : locked in when a match is found; cleared ONLY by user action
@@ -218,6 +230,34 @@ export default function DiscoverPeople() {
   useEffect(() => {
     fetchPeople(activeFilter);
   }, [activeFilter, user?.id]);
+
+  // ── Fetch hidden gem markers (once) ──────────────────────────────
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    supabase
+      .from("hidden_gems")
+      .select("id, name, location, category")
+      .eq("status", "approved")
+      .limit(100)
+      .then(({ data }) => {
+        if (!data) return;
+        const markers: MapMarker[] = [];
+        for (const gem of data) {
+          const coords = geocodeLocation(gem.location ?? "");
+          if (!coords) continue;
+          markers.push({
+            id: `gem_${gem.id}`,
+            lat: coords[0],
+            lng: coords[1],
+            type: "gem",
+            label: gem.name ?? "Hidden Gem",
+            sublabel: gem.location ?? "",
+            active: false,
+          });
+        }
+        setGemMarkers(markers);
+      });
+  }, []);
 
   async function fetchPeople(filter: string | null) {
     setLoading(true);
@@ -417,24 +457,24 @@ export default function DiscoverPeople() {
   const mapMarkers = useMemo<MapMarker[]>(() => {
     const markers: MapMarker[] = [];
 
-    if (currentTraveler) {
-      const coords = geocodeLocation(currentTraveler.location);
-      if (coords) {
-        markers.push({
-          id: `user_${currentTraveler.id}`,
-          lat: coords[0],
-          lng: coords[1],
-          type: "user",
-          label: currentTraveler.fullName,
-          sublabel: currentTraveler.location,
-          photo: currentTraveler.profilePhoto || undefined,
-          // Suppress auto-pan whenever the connection line is active — fitBounds handles it
-          active: !showConnectionLine,
-        });
-      }
+    // ALL deck users — every profile gets a marker; only the current one is "active"
+    for (const traveler of deck) {
+      const coords = geocodeLocation(traveler.location);
+      if (!coords) continue;
+      const isActive = traveler.id === currentTraveler?.id && !showConnectionLine;
+      markers.push({
+        id: `user_${traveler.id}`,
+        lat: coords[0],
+        lng: coords[1],
+        type: "user",
+        label: traveler.fullName,
+        sublabel: traveler.location,
+        photo: traveler.profilePhoto || undefined,
+        active: isActive,
+      });
     }
 
-    // Show "You" pin for the entire match sequence (anim + modal)
+    // "You" pin — visible during entire match sequence (anim + modal)
     if (showConnectionLine && user?.location) {
       const myCoords = geocodeLocation(user.location);
       if (myCoords) {
@@ -451,8 +491,11 @@ export default function DiscoverPeople() {
       }
     }
 
+    // ALL approved hidden gems
+    markers.push(...gemMarkers);
+
     return markers;
-  }, [currentTraveler, showConnectionLine, user]);
+  }, [deck, currentTraveler, showConnectionLine, user, gemMarkers]);
 
   // ── Build match line ──────────────────────────────────────────────
   // Driven by showConnectionLine so it stays visible through both animation AND modal phases.
@@ -561,8 +604,17 @@ export default function DiscoverPeople() {
                 showConnectionAnim ? "border-rose-300 shadow-rose-100/80" : "border-slate-100 shadow-slate-200/60"
               }`}>
                 <div className="relative h-80">
-                  <Avatar src={currentTraveler.profilePhoto} name={currentTraveler.fullName}
-                    className="w-full h-full" textSize="text-7xl" />
+                  {currentTraveler.profilePhoto ? (
+                    <img
+                      src={currentTraveler.profilePhoto}
+                      alt={currentTraveler.fullName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-sky-100 to-slate-200 flex items-center justify-center">
+                      <span className="text-6xl">👤</span>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent" />
 
                   {currentTraveler.isVerified && (
