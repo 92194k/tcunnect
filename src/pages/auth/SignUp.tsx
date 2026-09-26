@@ -19,6 +19,7 @@ export default function SignUp() {
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -44,17 +45,47 @@ export default function SignUp() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign up failed.";
       if (msg === "__EMAIL_CONFIRM__") {
-        navigate(`/verify-otp?email=${encodeURIComponent(form.email)}`, { replace: true });
-        return;
+        setEmailSent(true);
       } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("user already")) {
         setError("An account with this email already exists. Please log in instead.");
-      } else if (msg.toLowerCase().includes("504") || msg.toLowerCase().includes("smtp") || msg.toLowerCase().includes("timeout") || msg.toLowerCase().includes("email")) {
-        setError("Account created but we couldn't send your verification email right now. Please try signing up again in a moment, or contact support.");
       } else {
-        setError(msg || "Sign up failed. Please try again.");
+        setError(msg);
       }
     }
   };
+
+  if (emailSent) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md text-center">
+          <div className="text-6xl mb-6">📬</div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-3">Almost there!</h1>
+          <p className="text-slate-500 text-sm mb-2">
+            We sent a confirmation link to
+          </p>
+          <p className="font-semibold text-sky-700 mb-6">{form.email}</p>
+          <div className="bg-sky-50 border border-sky-100 rounded-2xl p-5 mb-8 text-left space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">1️⃣</span>
+              <p className="text-sm text-slate-600">Open the email from TCUnnect in your inbox (check spam if you don't see it).</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-xl">2️⃣</span>
+              <p className="text-sm text-slate-600">Click the <span className="font-semibold text-sky-700">Confirm your account</span> button in the email.</p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-xl">3️⃣</span>
+              <p className="text-sm text-slate-600">You'll be taken straight to your <span className="font-semibold text-slate-800">account setup</span> — no extra steps needed!</p>
+            </div>
+          </div>
+          <Link to="/login" className="inline-block rounded-full bg-sky-600 px-8 py-3 text-sm font-semibold text-white hover:bg-sky-700 transition">
+            Go to Log In
+          </Link>
+          <p className="text-xs text-slate-400 mt-4">Didn't get the email? Check your spam folder or try signing up again.</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
