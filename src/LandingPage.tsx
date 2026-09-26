@@ -399,13 +399,16 @@ function DiscoverPeopleSection() {
   useEffect(() => {
     async function fetchProfiles() {
       if (!isSupabaseConfigured) { setLoading(false); return; }
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, profile_photo, home_city, travel_style, interests")
-        .not("full_name", "is", null)
-        .not("full_name", "eq", "")
         .limit(6);
-      if (data && data.length > 0) setProfiles(data as PublicProfile[]);
+      console.log("[TCUnnect] profiles fetch:", data, error);
+      if (data && data.length > 0) {
+        // Use any profile that exists, even without a name
+        const valid = data.filter((p) => p.id);
+        setProfiles(valid as PublicProfile[]);
+      }
       setLoading(false);
     }
     fetchProfiles();
@@ -458,7 +461,7 @@ function DiscoverPeopleSection() {
         {!loading && show && (
           <div className={gridClass}>
             {profiles.slice(0, 3).map((profile, index) => {
-              const name = profile.full_name || "Traveler";
+              const name = (profile.full_name && profile.full_name.trim()) ? profile.full_name.trim() : "Traveler";
               const tags = tagsFor(profile);
               const hasPhoto = !!profile.profile_photo;
               const floatStyle = FLOAT_STYLES[index % FLOAT_STYLES.length];
