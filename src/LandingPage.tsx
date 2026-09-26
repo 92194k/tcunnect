@@ -374,6 +374,24 @@ function avatarColor(name: string) {
   return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
 }
 
+// Float animation delays per card
+const FLOAT_STYLES = [
+  { animation: "float-a 4s ease-in-out infinite" },
+  { animation: "float-b 4.6s ease-in-out infinite" },
+  { animation: "float-a 5.2s ease-in-out infinite" },
+];
+
+const FLOAT_KEYFRAMES = `
+@keyframes float-a {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+@keyframes float-b {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-14px); }
+}
+`;
+
 function DiscoverPeopleSection() {
   const [profiles, setProfiles] = useState<PublicProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -386,14 +404,13 @@ function DiscoverPeopleSection() {
         .select("id, full_name, profile_photo, home_city, travel_style, interests")
         .not("full_name", "is", null)
         .not("full_name", "eq", "")
-        .limit(8);
+        .limit(6);
       if (data && data.length > 0) setProfiles(data as PublicProfile[]);
       setLoading(false);
     }
     fetchProfiles();
   }, []);
 
-  // Assign 2 random-ish travel tags per profile
   function tagsFor(profile: PublicProfile, count = 2): string[] {
     if (profile.interests && Array.isArray(profile.interests) && profile.interests.length > 0) {
       return profile.interests.slice(0, count);
@@ -405,78 +422,112 @@ function DiscoverPeopleSection() {
   }
 
   const show = profiles.length > 0;
+  // Determine grid cols based on count
+  const count = Math.min(profiles.length, 3);
+  const gridClass = count === 1
+    ? "flex justify-center"
+    : count === 2
+    ? "grid gap-6 sm:grid-cols-2 max-w-2xl mx-auto"
+    : "grid gap-6 sm:grid-cols-3";
 
   return (
-    <section className="section-pad bg-sky-50/70" id="travelers">
+    <section className="section-pad bg-sky-50/70 overflow-hidden" id="travelers">
+      {/* Inject float keyframes */}
+      <style>{FLOAT_KEYFRAMES}</style>
+
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
-        <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+        <div className="mb-12 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div className="max-w-xl">
             <div className="eyebrow text-rose-500"><Icon name="people" className="h-4 w-4" /> Meet Fellow Travelers</div>
             <h2 className="section-title mt-4">Your next adventure might start with a new connection.</h2>
-            <p className="section-copy">Discover real Filipino travelers who share your interests — match anonymously, then chat when the feeling is mutual.</p>
+            <p className="section-copy">Real Filipino travelers — match anonymously, chat when it's mutual, then go explore together.</p>
           </div>
           <ArrowLink href="/signup">Start Discovering</ArrowLink>
         </div>
 
+        {/* Loading skeletons */}
         {loading && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[1,2,3,4].map((i) => <div key={i} className="rounded-3xl bg-slate-200 animate-pulse h-72" />)}
+          <div className="grid gap-6 sm:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-3xl bg-slate-200 animate-pulse h-80" />
+            ))}
           </div>
         )}
 
+        {/* Real user cards */}
         {!loading && show && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {profiles.slice(0, 4).map((profile, index) => {
+          <div className={gridClass}>
+            {profiles.slice(0, 3).map((profile, index) => {
               const name = profile.full_name || "Traveler";
               const tags = tagsFor(profile);
               const hasPhoto = !!profile.profile_photo;
+              const floatStyle = FLOAT_STYLES[index % FLOAT_STYLES.length];
+              const midCard = index === 1;
+
               return (
-                <article
+                <a
+                  href="/signup"
                   key={profile.id}
-                  className={`overflow-hidden rounded-3xl bg-white shadow-[0_15px_40px_rgba(17,80,110,0.09)] ${index === 1 ? "sm:-translate-y-5" : ""}`}
+                  style={floatStyle}
+                  className={`block overflow-hidden rounded-3xl bg-white shadow-[0_20px_50px_rgba(17,80,110,0.13)] transition hover:shadow-[0_28px_60px_rgba(17,80,110,0.2)] cursor-pointer ${midCard ? "sm:scale-105" : ""}`}
                 >
-                  {/* Avatar — blurred for privacy */}
-                  <div className="relative h-56 overflow-hidden">
+                  {/* Photo area — blurred */}
+                  <div className="relative h-60 overflow-hidden">
                     {hasPhoto ? (
                       <>
+                        {/* Blurred background */}
                         <img
                           src={profile.profile_photo!}
                           alt=""
-                          className="h-full w-full object-cover scale-110"
-                          style={{ filter: "blur(12px)" }}
+                          className="absolute inset-0 h-full w-full object-cover scale-125"
+                          style={{ filter: "blur(16px)", transform: "scale(1.25)" }}
                         />
-                        {/* Initials on top of blurred photo */}
-                        <div className={`absolute inset-0 flex items-center justify-center`}>
-                          <div className={`h-20 w-20 rounded-full bg-gradient-to-br ${avatarColor(name)} flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white/40`}>
+                        {/* Gradient overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/50" />
+                        {/* Centered initials avatar */}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                          <div className={`h-24 w-24 rounded-full bg-gradient-to-br ${avatarColor(name)} flex items-center justify-center text-white text-3xl font-bold shadow-2xl ring-4 ring-white/50`}>
                             {initials(name)}
                           </div>
                         </div>
                       </>
                     ) : (
-                      <div className={`h-full w-full bg-gradient-to-br ${avatarColor(name)} flex items-center justify-center`}>
-                        <div className="h-20 w-20 rounded-full bg-white/20 flex items-center justify-center text-white text-2xl font-bold">
-                          {initials(name)}
+                      <>
+                        <div className={`h-full w-full bg-gradient-to-br ${avatarColor(name)}`} />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="h-24 w-24 rounded-full bg-white/25 flex items-center justify-center text-white text-3xl font-bold ring-4 ring-white/40">
+                            {initials(name)}
+                          </div>
                         </div>
-                      </div>
+                      </>
                     )}
+
                     {/* Lock badge */}
-                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 text-[10px] font-semibold text-slate-600 flex items-center gap-1 shadow">
-                      🔒 Sign up to view
+                    <div className="absolute top-3 right-3 bg-white/95 backdrop-blur-sm rounded-full px-3 py-1.5 text-[10px] font-bold text-slate-700 flex items-center gap-1 shadow-md">
+                      🔒 Sign up to see
                     </div>
-                    {/* Online dot */}
-                    <span className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1 text-[10px] font-semibold text-emerald-700 shadow">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 inline-block" />
+
+                    {/* Online indicator */}
+                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-white/95 backdrop-blur-sm rounded-full px-3 py-1.5 text-[10px] font-semibold text-emerald-700 shadow-md">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                      </span>
                       Active recently
-                    </span>
+                    </div>
                   </div>
+
+                  {/* Card info */}
                   <div className="p-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        {/* Show first name only for privacy */}
-                        <h3 className="font-bold text-slate-900">{name.split(" ")[0]}</h3>
-                        <p className="mt-0.5 text-xs text-slate-500">{profile.home_city || "Philippines"}</p>
+                        <h3 className="font-bold text-slate-900 text-base">{name.split(" ")[0]}</h3>
+                        <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
+                          <Icon name="location" className="h-3 w-3 text-rose-400" />
+                          {profile.home_city || "Philippines"}
+                        </p>
                       </div>
-                      <span className="grid h-9 w-9 place-items-center rounded-full bg-rose-50 text-rose-400">
+                      <span className="grid h-10 w-10 place-items-center rounded-full bg-rose-50 text-rose-400 hover:bg-rose-100 transition">
                         <Icon name="heart" className="h-4 w-4" />
                       </span>
                     </div>
@@ -485,49 +536,25 @@ function DiscoverPeopleSection() {
                         <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-600">{tag}</span>
                       ))}
                       {profile.travel_style && (
-                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-medium text-sky-700">{profile.travel_style}</span>
+                        <span className="rounded-full bg-sky-50 border border-sky-100 px-2.5 py-1 text-[10px] font-semibold text-sky-700">{profile.travel_style}</span>
                       )}
                     </div>
+                    <div className="mt-4 w-full rounded-xl bg-rose-500 py-2 text-center text-xs font-bold text-white">
+                      View Profile →
+                    </div>
                   </div>
-                </article>
+                </a>
               );
             })}
           </div>
         )}
 
-        {/* If no real profiles yet, show illustrative placeholder cards */}
-        {!loading && !show && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {["Solo Explorer", "Island Hopper", "Foodie Traveler", "Adventure Seeker"].map((type, index) => (
-              <article key={type} className={`overflow-hidden rounded-3xl bg-white shadow-[0_15px_40px_rgba(17,80,110,0.09)] ${index === 1 ? "sm:-translate-y-5" : ""}`}>
-                <div className={`h-56 bg-gradient-to-br ${AVATAR_GRADIENTS[index]} flex items-center justify-center`}>
-                  <div className="h-20 w-20 rounded-full bg-white/20 flex items-center justify-center text-4xl">
-                    {["🧍", "🏄", "🍜", "🧗"][index]}
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-slate-900">{type}</h3>
-                      <p className="mt-0.5 text-xs text-slate-500">Philippines</p>
-                    </div>
-                    <span className="grid h-9 w-9 place-items-center rounded-full bg-rose-50 text-rose-400">
-                      <Icon name="heart" className="h-4 w-4" />
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {TRAVEL_TAGS.slice(index * 2, index * 2 + 2).map((tag) => (
-                      <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-600">{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-10 text-center">
-          <a href="/signup" className="inline-flex items-center gap-2 rounded-full bg-rose-500 px-8 py-3.5 text-sm font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-rose-400">
+        {/* CTA */}
+        <div className="mt-12 text-center">
+          <p className="text-sm text-slate-500 mb-4">
+            {show ? `Join ${profiles.length}+ travelers already on TCUnnect` : "Be one of the first travelers on TCUnnect"}
+          </p>
+          <a href="/signup" className="inline-flex items-center gap-2 rounded-full bg-rose-500 px-8 py-3.5 text-sm font-bold text-white shadow-lg shadow-rose-200 transition hover:-translate-y-0.5 hover:bg-rose-400">
             Find Your Travel Match <Icon name="heart" className="h-4 w-4" />
           </a>
         </div>
