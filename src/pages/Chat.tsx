@@ -421,19 +421,6 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
   const { user } = useAuthStore();
   const [previews, setPreviews] = useState<Record<string, { lastMsg: string; unread: number; ts?: string }>>({});
 
-  const DEMO_MATCHES = [
-    {
-      id: "dm1",
-      user: {
-        id: "u1", fullName: "Maria",
-        profilePhoto: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=100&q=80",
-        location: "Quezon City",
-        travelInterests: ["Beach", "Food"],
-      },
-      lastMsg: "Are you free next weekend? 🏖",
-    },
-  ];
-
   // Fetch last message + unread count from Supabase for real matches
   useEffect(() => {
     if (!isSupabaseConfigured || !user || matches.length === 0) return;
@@ -465,17 +452,14 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
       });
   }, [matches.length, user?.id]);
 
-  const allMatches = [
-    ...DEMO_MATCHES,
-    ...matches.map((m) => ({
-      id: m.id,
-      user: m.user,
-      lastMsg:
-        previews[m.id]?.lastMsg ??
-        (messages[m.id] ?? [])[0]?.content ??
-        "Start a conversation!",
-    })),
-  ];
+  const allMatches = matches.map((m) => ({
+    id: m.id,
+    user: m.user,
+    lastMsg:
+      previews[m.id]?.lastMsg ??
+      (messages[m.id] ?? [])[0]?.content ??
+      "Start a conversation!",
+  }));
 
   const formatTs = (ts?: string) => {
     if (!ts) return "";
@@ -504,7 +488,7 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
       ) : (
         <div className="space-y-2">
           {allMatches.map((m) => {
-            const unread = previews[m.id]?.unread ?? (m.id === "dm1" ? 1 : 0);
+            const unread = previews[m.id]?.unread ?? 0;
             const ts = previews[m.id]?.ts;
             return (
               <button key={m.id} onClick={() => onSelectMatch(m.id)}
@@ -526,7 +510,7 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
                 <div className="text-right shrink-0 flex flex-col items-end gap-1">
                   {ts && <p className="text-[10px] text-slate-400">{formatTs(ts)}</p>}
                   {unread > 0 && (
-                    <span className="h-5 w-5 bg-sky-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                    <span className="h-5 min-w-5 px-1 bg-sky-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                       {unread}
                     </span>
                   )}
@@ -545,6 +529,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   const { user } = useAuthStore();
   const { matches } = useMatchStore();
   const { messages, loadingMessages, addMessage, loadMessages, sendMessage: storeSend, markConversationRead } = useChatStore();
+  // addMessage is still used by the Realtime handler below
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -563,49 +548,28 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
 
   const systemMessage = (location.state as { systemMessage?: string } | null)?.systemMessage ?? null;
 
-  // Demo match
-  const demoMatch = {
-    id: "dm1",
-    user: {
-      id: "u1", fullName: "Maria",
-      profilePhoto: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=100&q=80",
-      location: "Quezon City",
-      travelInterests: ["Beach", "Food"],
-      email: "", age: 21, bio: "", createdAt: "", isPremium: false, isVerified: true,
-    },
-  };
-
-  const match = matchId === "dm1" ? demoMatch : matches.find((m) => m.id === matchId);
+  const match = matches.find((m) => m.id === matchId);
   const partner = match?.user;
-  const isDemo = matchId === "dm1";
 
-  // Demo messages for the demo conversation
-  const DEMO_MSGS: Message[] = isDemo ? [
-    { id: "m1", matchId: "dm1", senderId: "u1", content: "Hey! I saw we both love beaches 🏖", timestamp: new Date(Date.now() - 3600000).toISOString(), read: true },
-    { id: "m2", matchId: "dm1", senderId: "u0", content: "Yes! I've been wanting to visit Nacpan Beach 😍", timestamp: new Date(Date.now() - 3500000).toISOString(), read: true },
-    { id: "m3", matchId: "dm1", senderId: "u1", content: "Are you free next weekend? 🏖", timestamp: new Date(Date.now() - 1800000).toISOString(), read: true },
-  ] : [];
-
-  const supabaseMessages = messages[matchId] ?? [];
-  const threadMsgs = isDemo ? [...DEMO_MSGS, ...supabaseMessages] : supabaseMessages;
+  const threadMsgs = messages[matchId] ?? [];
   const loadingThread = loadingMessages[matchId] ?? false;
 
   // Load messages from Supabase on mount
   useEffect(() => {
-    if (!isDemo && isSupabaseConfigured) {
+    if (isSupabaseConfigured) {
       loadMessages(matchId);
     }
-  }, [matchId, isDemo]);
+  }, [matchId]);
 
   // Mark messages as read when opening conversation
   useEffect(() => {
-    if (!user || isDemo || !isSupabaseConfigured) return;
+    if (!user || !isSupabaseConfigured) return;
     markConversationRead(matchId, user.id);
-  }, [matchId, user?.id, isDemo]);
+  }, [matchId, user?.id]);
 
   // Supabase Realtime subscription
   useEffect(() => {
-    if (!isSupabaseConfigured || isDemo || !user) return;
+    if (!isSupabaseConfigured || !user) return;
     const channel = supabase
       .channel(`messages_${matchId}`)
       .on(
@@ -640,7 +604,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [matchId, user?.id, isDemo]);
+  }, [matchId, user?.id]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -660,32 +624,18 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
     if (!text || !user || !partner) return;
     setSending(true);
 
-    if (isDemo || !isSupabaseConfigured) {
-      const msg: Message = {
-        id: `msg_${Date.now()}`,
-        matchId,
-        senderId: user.id,
-        content: text,
-        messageType: (msgType as Message["messageType"]) ?? "text",
-        metadata: meta,
-        timestamp: new Date().toISOString(),
-        read: false,
-      };
-      addMessage(matchId, msg);
-    } else {
-      await storeSend({
-        matchId,
-        senderId: user.id,
-        receiverId: partner.id,
-        content: text,
-        messageType: msgType,
-        metadata: meta,
-      });
-    }
+    await storeSend({
+      matchId,
+      senderId: user.id,
+      receiverId: partner.id,
+      content: text,
+      messageType: msgType,
+      metadata: meta,
+    });
 
     if (!content) setInput(""); // only clear when sending from input
     setSending(false);
-  }, [input, user, partner, matchId, isDemo, addMessage, storeSend]);
+  }, [input, user, partner, matchId, storeSend]);
 
   const handleShareGem = (gem: SavedGemOption) => {
     setShowTripPanel(false);
@@ -796,7 +746,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           </div>
         )}
 
-        {loadingThread && !isDemo && (
+        {loadingThread && (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 text-sky-400 animate-spin" />
           </div>
