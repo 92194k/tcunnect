@@ -6,10 +6,16 @@ import { isSupabaseConfigured } from "../../lib/supabase";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, loginWithGoogle, isLoading } = useAuthStore();
+  // NOTE: we deliberately do NOT destructure isLoading from the store here.
+  // isLoading in the store tracks only the initial loadSession() call.
+  // Using it here caused RedirectIfLoggedIn to unmount this component mid-submission,
+  // which would silently drop any state updates on the dead old instance.
+  const { login, loginWithGoogle } = useAuthStore();
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  // Local submitting state — never triggers a guard re-render
+  const [submitting, setSubmitting] = useState(false);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -18,11 +24,15 @@ export default function Login() {
     e.preventDefault();
     setError("");
     if (!form.email || !form.password) return setError("Please fill in all fields.");
+    console.log("[LOGIN] submit started — email:", form.email);
+    setSubmitting(true);
     try {
       await login(form.email, form.password);
+      console.log("[LOGIN] login() resolved — navigating to /dashboard");
       navigate("/dashboard");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Login failed.";
+      console.log("[LOGIN] login() threw:", msg);
       if (msg.toLowerCase().includes("email not confirmed")) {
         setError("Please confirm your email first. Check your inbox for the verification link.");
       } else if (msg.toLowerCase().includes("invalid login credentials")) {
@@ -30,6 +40,8 @@ export default function Login() {
       } else {
         setError(msg);
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -89,9 +101,9 @@ export default function Login() {
               <Link to="/forgot-password" className="text-xs text-sky-600 hover:text-sky-700 font-medium">Forgot password?</Link>
             </div>
 
-            <button type="submit" disabled={isLoading}
+            <button type="submit" disabled={submitting}
               className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm">
-              {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Logging in...</> : "Log In"}
+              {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Logging in...</> : "Log In"}
             </button>
           </form>
 

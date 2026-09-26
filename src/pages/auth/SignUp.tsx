@@ -15,11 +15,17 @@ function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
 
 export default function SignUp() {
   const navigate = useNavigate();
-  const { signup, loginWithGoogle, isLoading } = useAuthStore();
+  // NOTE: we deliberately do NOT destructure isLoading from the store here.
+  // isLoading in the store tracks only the initial loadSession() call.
+  // Using it here caused RedirectIfLoggedIn to unmount this component mid-submission,
+  // which meant setEmailSent(true) ran on a dead component and was silently dropped.
+  const { signup, loginWithGoogle } = useAuthStore();
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [emailSent, setEmailSent] = useState(false);
+  // Local submitting state — never triggers a guard re-render
+  const [submitting, setSubmitting] = useState(false);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -39,18 +45,33 @@ export default function SignUp() {
       return setError("Please fill in all fields.");
     if (!pwStrong) return setError("Please meet all password requirements.");
     if (form.password !== form.confirm) return setError("Passwords do not match.");
+
+    console.log("[SIGNUP] submit started — email:", form.email);
+    setSubmitting(true);
     try {
       await signup(form.email, form.password, form.fullName);
+      // Only reaches here when email confirmation is OFF (session returned immediately)
+      console.log("[SIGNUP] signup() resolved — navigating to /onboarding");
       navigate("/onboarding");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign up failed.";
+      console.log("[SIGNUP] signup() threw:", msg);
       if (msg === "__EMAIL_CONFIRM__") {
+        // Email confirmation required — show the "check your email" screen.
+        // This state update is safe because the component is still mounted
+        // (we never set store isLoading, so RedirectIfLoggedIn never unmounted us).
         setEmailSent(true);
-      } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("already exists") || msg.toLowerCase().includes("user already")) {
+      } else if (
+        msg.toLowerCase().includes("already registered") ||
+        msg.toLowerCase().includes("already exists") ||
+        msg.toLowerCase().includes("user already")
+      ) {
         setError("An account with this email already exists. Please log in instead.");
       } else {
         setError(msg);
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -60,9 +81,7 @@ export default function SignUp() {
         <div className="w-full max-w-md text-center">
           <div className="text-6xl mb-6">📬</div>
           <h1 className="text-2xl font-bold text-slate-900 mb-3">Almost there!</h1>
-          <p className="text-slate-500 text-sm mb-2">
-            We sent a confirmation link to
-          </p>
+          <p className="text-slate-500 text-sm mb-2">We sent a confirmation link to</p>
           <p className="font-semibold text-sky-700 mb-6">{form.email}</p>
           <div className="bg-sky-50 border border-sky-100 rounded-2xl p-5 mb-8 text-left space-y-3">
             <div className="flex items-start gap-3">
@@ -162,9 +181,9 @@ export default function SignUp() {
               )}
             </div>
 
-            <button type="submit" disabled={isLoading}
+            <button type="submit" disabled={submitting}
               className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm mt-2">
-              {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating account...</> : "Create Account"}
+              {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating account...</> : "Create Account"}
             </button>
           </form>
 

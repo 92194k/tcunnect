@@ -63,11 +63,15 @@ function profileToUser(profile: Record<string, unknown>): User {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoggedIn: false,
-  isLoading: true,  // true until loadSession resolves — prevents premature guard redirects
+  // isLoading is ONLY for loadSession() — the initial session check on app boot.
+  // login() and signup() must NOT touch isLoading so that RedirectIfLoggedIn
+  // never unmounts an active form component mid-submission.
+  isLoading: true,
   onboardingComplete: false,
 
   // Load existing session on app start
   loadSession: async () => {
+    console.log("[loadSession] called");
     if (!isSupabaseConfigured) { set({ isLoading: false }); return; } // demo mode
     set({ isLoading: true });
     const { data: { session } } = await supabase.auth.getSession();
@@ -77,35 +81,40 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (profile) {
       const user = profileToUser(profile);
       const onboardingComplete = (user.travelInterests?.length ?? 0) > 0;
+      console.log("[loadSession] profile loaded — onboardingComplete:", onboardingComplete);
       set({ user, isLoggedIn: true, onboardingComplete, isLoading: false });
     } else {
+      console.log("[loadSession] no profile row found for user");
       set({ isLoading: false });
     }
   },
 
   login: async (email, password) => {
-    set({ isLoading: true });
+    // NOTE: intentionally does NOT set isLoading — that flag is only for loadSession().
+    // Login.tsx manages its own submitting state to avoid unmounting the form.
+    console.log("[login] START");
 
     // ── Demo mode ──────────────────────────────────────────────
     if (!isSupabaseConfigured) {
       await new Promise((r) => setTimeout(r, 800));
       const user = DEMO_USERS[email.toLowerCase()];
       if (!user || password.length < 6) {
-        set({ isLoading: false });
         throw new Error("Invalid credentials. Try demo@tcunnect.com / password123");
       }
-      set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: true });
+      set({ user, isLoggedIn: true, onboardingComplete: true });
       return;
     }
 
     // ── Live Supabase mode ─────────────────────────────────────
     const { error, data } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { set({ isLoading: false }); throw new Error(error.message); }
-    if (!data.user) { set({ isLoading: false }); return; }
+    console.log("[login] supabase response — error:", error, "user:", data?.user?.id, "session:", !!data?.session);
+    if (error) throw new Error(error.message);
+    if (!data.user) return;
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: "", created_at: new Date().toISOString() });
-    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
+    console.log("[login] setting store — isLoggedIn:true onboardingComplete:", (user.travelInterests?.length ?? 0) > 0);
+    set({ user, isLoggedIn: true, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
   },
 
   loginWithGoogle: async () => {
@@ -120,7 +129,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signup: async (email, password, fullName) => {
-    set({ isLoading: true });
+    // NOTE: intentionally does NOT set isLoading — that flag is only for loadSession().
+    // SignUp.tsx manages its own submitting state to avoid unmounting the form
+    // (which would cause setEmailSent(true) to run on an unmounted component and be lost).
+    console.log("[signup] START — email:", email);
 
     // ── Demo mode ──────────────────────────────────────────────
     if (!isSupabaseConfigured) {
@@ -130,7 +142,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         profilePhoto: "", travelInterests: [],
         createdAt: new Date().toISOString(), isPremium: false, isVerified: false,
       };
-      set({ user: newUser, isLoggedIn: true, isLoading: false, onboardingComplete: false });
+      set({ user: newUser, isLoggedIn: true, onboardingComplete: false });
       return;
     }
 
@@ -138,19 +150,31 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { error, data } = await supabase.auth.signUp({
       email, password, options: { data: { full_name: fullName } },
     });
-    if (error) { set({ isLoading: false }); throw new Error(error.message); }
-    if (!data.user) { set({ isLoading: false }); return; }
+    console.log("[signup] supabase.auth.signUp response:", {
+      error: error?.message ?? null,
+      userId: data?.user?.id ?? null,
+      hasSession: !!data?.session,
+    });
+
+    if (error) throw new Error(error.message);
+    if (!data.user) {
+      console.warn("[signup] no user in response — unusual");
+      return;
+    }
 
     // Email confirmation required — no session yet
     if (!data.session) {
-      set({ isLoading: false });
+      console.log("[signup] no session — email confirmation required → throwing __EMAIL_CONFIRM__");
       throw new Error("__EMAIL_CONFIRM__");
     }
 
+    // Session exists — confirmation is disabled or auto-confirmed
+    console.log("[signup] session exists — loading profile");
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: fullName, created_at: new Date().toISOString() });
-    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
+    console.log("[signup] setting store — isLoggedIn:true onboardingComplete:", (user.travelInterests?.length ?? 0) > 0);
+    set({ user, isLoggedIn: true, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
   },
 
   logout: async () => {
