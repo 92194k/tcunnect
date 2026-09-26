@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore, useNotificationStore } from "../stores";
 import {
   Compass, Home, Users, Star, Map, MessageCircle,
-  Bell, LogOut, Crown, Menu, X, Shield, BookOpen, ChevronDown
+  Bell, LogOut, Crown, Menu, X, Shield, BookOpen, ChevronDown, Bookmark
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import ScrollArrow from "./ScrollArrow";
@@ -145,6 +145,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     My Bookings
                   </Link>
 
+                  <Link to="/saved-places" onClick={() => setProfileOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition">
+                    <Bookmark className="h-4 w-4 text-slate-400" />
+                    Saved Places
+                  </Link>
+
                   {!user?.isPremium && (
                     <Link to="/premium" onClick={() => setProfileOpen(false)}
                       className="flex items-center gap-2.5 px-4 py-2 text-sm text-amber-600 hover:bg-amber-50 transition font-medium">
@@ -226,6 +232,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Link to="/my-bookings" onClick={() => setMobileMenuOpen(false)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50 text-sm">
               <BookOpen className="h-4 w-4 text-slate-400" /> My Bookings
+            </Link>
+            <Link to="/saved-places" onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50 text-sm">
+              <Bookmark className="h-4 w-4 text-slate-400" /> Saved Places
             </Link>
             {!user?.isPremium ? (
               <Link to="/premium" onClick={() => setMobileMenuOpen(false)}

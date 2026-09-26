@@ -11,7 +11,7 @@ import { useAuthStore } from "../stores";
 import {
   MapPin, Star, ArrowLeft, Heart, Share2, Calendar, Clock,
   Users, ChevronRight, Loader2, Lock, Utensils, ShoppingBag,
-  Bed, Compass, Sparkles, ExternalLink, Phone,
+  Bed, Compass, Sparkles, ExternalLink, Phone, Bookmark,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -26,11 +26,8 @@ interface Gem {
   budget_level: string;
   description: string;
   tip: string;
-  best_time_to_visit: string;
+  best_time: string;
   is_featured: boolean;
-  photo_source?: string;
-  status?: string;
-  submitted_by?: string;
 }
 
 interface NearbyGem {
@@ -407,12 +404,26 @@ export default function GemDetail() {
   const [liked, setLiked] = useState(false);
   const [copied, setCopied] = useState(false);
   const [nearbyGems, setNearbyGems] = useState<NearbyGem[]>([]);
+  const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [savingLoading, setSavingLoading] = useState(false);
 
   const isPremium = user?.isPremium ?? false;
 
   useEffect(() => {
     if (!gemId) return;
     fetchGem(gemId);
+    if (user && isSupabaseConfigured) {
+      supabase
+        .from("saved_places")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("gem_id", gemId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) { setSaved(true); setSavedId(data.id); }
+        });
+    }
   }, [gemId]);
 
   async function fetchGem(id: string) {
@@ -425,19 +436,12 @@ export default function GemDetail() {
       return;
     }
 
-    const { user: authUser } = useAuthStore.getState();
     const { data, error } = await supabase
       .from("hidden_gems")
-      .select("id, name, location, category, images, rating, review_count, budget_level, description, tip, best_time_to_visit, is_featured, status, submitted_by, photo_source")
+      .select("id, name, location, category, images, rating, review_count, budget_level, description, tip, best_time, is_featured")
       .eq("id", id)
+      .eq("status", "approved")
       .single();
-
-    // Hide gems that are pending/rejected unless you submitted them
-    if (data && data.status !== "approved" && data.submitted_by !== authUser?.id) {
-      setNotFound(true);
-      setLoading(false);
-      return;
-    }
 
     if (error || !data) {
       setNotFound(true);
@@ -460,6 +464,29 @@ export default function GemDetail() {
       .limit(8);
 
     if (data) setNearbyGems(data as NearbyGem[]);
+  }
+
+  async function handleSave() {
+    if (!user || !gem) return;
+    setSavingLoading(true);
+    if (saved && savedId) {
+      if (isSupabaseConfigured) {
+        await supabase.from("saved_places").delete().eq("id", savedId);
+      }
+      setSaved(false);
+      setSavedId(null);
+    } else {
+      if (isSupabaseConfigured) {
+        const { data } = await supabase
+          .from("saved_places")
+          .insert({ user_id: user.id, gem_id: gem.id })
+          .select("id")
+          .single();
+        if (data) setSavedId(data.id);
+      }
+      setSaved(true);
+    }
+    setSavingLoading(false);
   }
 
   async function handleShare() {
@@ -543,6 +570,16 @@ export default function GemDetail() {
               <Heart className={`h-4 w-4 ${liked ? "fill-rose-500 text-rose-500" : "text-slate-500"}`} />
             </button>
             <button
+              onClick={handleSave}
+              disabled={savingLoading}
+              title={saved ? "Remove from Saved Places" : "Save to My Places"}
+              className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow"
+            >
+              {savingLoading
+                ? <Loader2 className="h-4 w-4 text-slate-400 animate-spin" />
+                : <Bookmark className={`h-4 w-4 ${saved ? "fill-emerald-500 text-emerald-500" : "text-slate-500"}`} />}
+            </button>
+            <button
               onClick={handleShare}
               title={copied ? "Copied!" : "Share"}
               className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow"
@@ -581,13 +618,6 @@ export default function GemDetail() {
           </div>
         )}
 
-        {/* Photo credit */}
-        {gem.photo_source && (
-          <p className="text-[11px] text-slate-400 mb-4 flex items-center gap-1">
-            <span>📷</span> {gem.photo_source}
-          </p>
-        )}
-
         {/* Title */}
         <div className="mb-5">
           <h1 className="text-2xl font-bold text-slate-900 mb-1">{gem.name}</h1>
@@ -611,7 +641,7 @@ export default function GemDetail() {
           <div className="bg-sky-50 rounded-xl p-3 text-center">
             <Calendar className="h-4 w-4 text-sky-600 mx-auto mb-1" />
             <p className="text-[10px] text-slate-500 mb-0.5">Best Time</p>
-            <p className="text-xs font-semibold text-slate-800">{gem.best_time_to_visit || "—"}</p>
+            <p className="text-xs font-semibold text-slate-800">{gem.best_time || "—"}</p>
           </div>
           <div className="bg-emerald-50 rounded-xl p-3 text-center">
             <Clock className="h-4 w-4 text-emerald-600 mx-auto mb-1" />
@@ -641,13 +671,29 @@ export default function GemDetail() {
           </div>
         )}
 
-        {/* Book CTA */}
-        <Link
-          to={`/booking/${gem.id}`}
-          className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-sky-200 mb-8"
-        >
-          Book a Trip Here <ChevronRight className="h-4 w-4" />
-        </Link>
+        {/* CTAs */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-8">
+          <Link
+            to={`/booking/${gem.id}`}
+            className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-sky-200"
+          >
+            Book a Trip Here <ChevronRight className="h-4 w-4" />
+          </Link>
+          <button
+            onClick={handleSave}
+            disabled={savingLoading}
+            className={`flex-1 sm:flex-none sm:w-auto px-5 font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition border-2 ${
+              saved
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                : "border-slate-200 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
+            }`}
+          >
+            {savingLoading
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <Bookmark className={`h-4 w-4 ${saved ? "fill-emerald-500" : ""}`} />}
+            {saved ? "Saved" : "Save Place"}
+          </button>
+        </div>
 
         {/* ─── DESTINATION DISCOVERY ─────────────────────────────────── */}
         <div className="border-t border-slate-100 pt-8">

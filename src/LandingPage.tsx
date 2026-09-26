@@ -913,11 +913,12 @@ export default function App() {
             <h2 className="section-title mt-4">Travel your way.</h2>
             <p className="section-copy">From a reset for one to an unforgettable trip with your whole barkada.</p>
           </div>
-          <div className="mt-12 grid gap-5 md:grid-cols-3">
+          <div className="mt-12 grid gap-5 md:grid-cols-4">
             {[
               { title: "Solo", icon: "compass" as IconName, text: "Freedom, flexibility, and handpicked experiences just for you.", color: "bg-sky-100 text-sky-700" },
               { title: "Duo / Couple", icon: "heart" as IconName, text: "Thoughtful escapes made for two, without the planning stress.", color: "bg-rose-100 text-rose-600" },
               { title: "Group", icon: "people" as IconName, text: "Easy booking and shared adventures for friends and new connections.", color: "bg-amber-100 text-amber-700" },
+              { title: "Family", icon: "people" as IconName, text: "Fun for the whole family — kid-friendly gems and stress-free planning.", color: "bg-emerald-100 text-emerald-700" },
             ].map((option) => (
               <article className="rounded-3xl border border-slate-100 bg-white p-8 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/60" key={option.title}>
                 <span className={`grid h-12 w-12 place-items-center rounded-2xl ${option.color}`}><Icon name={option.icon} /></span>

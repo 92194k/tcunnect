@@ -24,6 +24,7 @@ import Profile from "./pages/Profile";
 import Notifications from "./pages/Notifications";
 import Premium from "./pages/Premium";
 import Featured from "./pages/Featured";
+import SavedPlaces from "./pages/SavedPlaces";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -64,11 +65,7 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 
 function RedirectIfLoggedIn({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, onboardingComplete, isLoading } = useAuthStore();
-  // NOTE: while isLoading (initial session check), show children, NOT a spinner.
-  // Showing a spinner here unmounts the form component (Login/SignUp) mid-submission,
-  // which silently drops in-flight state updates (e.g. setEmailSent(true)).
-  // Public auth pages are safe to render while session loads — they redirect after.
-  if (isLoading) return <>{children}</>;
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-sky-50"><div className="h-8 w-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin" /></div>;
   if (isLoggedIn && onboardingComplete) return <Navigate to="/dashboard" replace />;
   if (isLoggedIn && !onboardingComplete) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
@@ -90,12 +87,7 @@ export default function AppRoutes() {
     // because the callback URL wasn't added to the Supabase allowed list)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        // Only act on a real, confirmed sign-in (has access_token).
-        // Supabase also fires SIGNED_IN when an email OTP is issued (email confirmation pending),
-        // but in that case session.access_token is null — we must NOT call loadSession() there,
-        // because loadSession() sets isLoading:true which unmounts the SignUp form component.
-        if (event === "SIGNED_IN" && session?.user && session?.access_token) {
-          console.log("[onAuthStateChange] SIGNED_IN with access_token — loading session");
+        if (event === "SIGNED_IN" && session?.user) {
           // Re-load the full profile into the store
           await loadSession();
 
@@ -109,11 +101,8 @@ export default function AppRoutes() {
               .eq("id", session.user.id)
               .single();
             const hasInterests = ((profile?.travel_interests as string[] | null)?.length ?? 0) > 0;
-            console.log("[onAuthStateChange] navigating to", hasInterests ? "/dashboard" : "/onboarding");
             navigate(hasInterests ? "/dashboard" : "/onboarding", { replace: true });
           }
-        } else if (event === "SIGNED_IN" && session?.user && !session?.access_token) {
-          console.log("[onAuthStateChange] SIGNED_IN but no access_token — email confirmation pending, ignoring");
         }
       }
     );
@@ -157,6 +146,7 @@ export default function AppRoutes() {
       <Route path="/gems/:gemId" element={<RequireAuth><GemDetail /></RequireAuth>} />
       <Route path="/booking/:gemId" element={<RequireAuth><Booking /></RequireAuth>} />
       <Route path="/my-bookings" element={<RequireAuth><MyBookings /></RequireAuth>} />
+      <Route path="/saved-places" element={<RequireAuth><SavedPlaces /></RequireAuth>} />
       <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
       <Route path="/chat/:matchId" element={<RequireAuth><Chat /></RequireAuth>} />
       <Route path="/community" element={<RequireAuth><Community /></RequireAuth>} />
