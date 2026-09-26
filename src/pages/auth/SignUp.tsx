@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "../../stores";
 import { Mail, Lock, User, Eye, EyeOff, Loader2, Compass, Check, X } from "lucide-react";
-import { isSupabaseConfigured } from "../../lib/supabase";
+import { isSupabaseConfigured, supabase } from "../../lib/supabase";
 
 function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -13,18 +13,173 @@ function PasswordRule({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+// ─── OTP Verification Screen ───────────────────────────────────
+function OtpScreen({
+  email,
+  onBack,
+  onVerified,
+}: {
+  email: string;
+  onBack: () => void;
+  onVerified: () => void;
+}) {
+  const [digits, setDigits] = useState(["", "", "", "", "", "", "", ""]);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
+  const [resent, setResent] = useState(false);
+  const refs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const code = digits.join("");
+
+  const handleDigit = (i: number, val: string) => {
+    // Handle paste of full code
+    if (val.length > 1) {
+      const cleaned = val.replace(/\D/g, "").slice(0, 8);
+      const next = [...digits];
+      for (let j = 0; j < 8; j++) next[j] = cleaned[j] ?? "";
+      setDigits(next);
+      refs.current[Math.min(cleaned.length, 7)]?.focus();
+      return;
+    }
+    if (!/^\d*$/.test(val)) return;
+    const next = [...digits];
+    next[i] = val;
+    setDigits(next);
+    if (val && i < 7) refs.current[i + 1]?.focus();
+  };
+
+  const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !digits[i] && i > 0) {
+      refs.current[i - 1]?.focus();
+    }
+  };
+
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (code.length < 6) return setError("Please enter the full code.");
+    setError("");
+    setVerifying(true);
+    try {
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        email,
+        token: code,
+        type: "signup",
+      });
+      if (verifyError) throw verifyError;
+      console.log("[OTP] verified — calling onVerified");
+      onVerified();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Invalid code.";
+      console.log("[OTP] verify error:", msg);
+      if (msg.toLowerCase().includes("expired") || msg.toLowerCase().includes("invalid")) {
+        setError("That code is expired or invalid. Request a new one below.");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const resend = async () => {
+    setError("");
+    try {
+      await supabase.auth.resend({ type: "signup", email });
+      setResent(true);
+      setDigits(["", "", "", "", "", "", "", ""]);
+      refs.current[0]?.focus();
+      setTimeout(() => setResent(false), 4000);
+    } catch {
+      setError("Couldn't resend. Please try again.");
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center gap-2 group">
+            <span className="h-11 w-11 bg-sky-600 rounded-xl flex items-center justify-center text-white shadow-md group-hover:bg-sky-700 transition">
+              <Compass className="h-6 w-6" />
+            </span>
+            <span className="text-2xl font-bold text-slate-900">TC<span className="text-sky-600">U</span>nnect</span>
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 p-8 border border-slate-100">
+          <div className="text-center mb-6">
+            <div className="text-5xl mb-4">📬</div>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">Check your email</h1>
+            <p className="text-slate-500 text-sm">
+              We sent a verification code to
+            </p>
+            <p className="font-semibold text-sky-700 text-sm mt-1">{email}</p>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
+          )}
+          {resent && (
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm">New code sent! Check your inbox.</div>
+          )}
+
+          <form onSubmit={verify} className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-3 text-center">
+                Enter your verification code
+              </label>
+              <div className="flex gap-2 justify-center">
+                {digits.map((d, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => { refs.current[i] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={d}
+                    onChange={(e) => handleDigit(i, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(i, e)}
+                    className="w-9 h-11 text-center text-lg font-bold border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none transition bg-slate-50"
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 text-center mt-2">Code expires in 10 minutes</p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={verifying || code.replace(/\D/g, "").length < 6}
+              className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
+            >
+              {verifying ? <><Loader2 className="h-4 w-4 animate-spin" /> Verifying...</> : "Verify Email"}
+            </button>
+          </form>
+
+          <div className="mt-5 text-center space-y-2">
+            <p className="text-sm text-slate-500">
+              Didn't get the code?{" "}
+              <button onClick={resend} className="text-sky-600 hover:text-sky-700 font-semibold">
+                Resend
+              </button>
+            </p>
+            <button onClick={onBack} className="text-xs text-slate-400 hover:text-slate-600">
+              ← Use a different email
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ─── Main SignUp Component ─────────────────────────────────────
 export default function SignUp() {
   const navigate = useNavigate();
-  // NOTE: we deliberately do NOT destructure isLoading from the store here.
-  // isLoading in the store tracks only the initial loadSession() call.
-  // Using it here caused RedirectIfLoggedIn to unmount this component mid-submission,
-  // which meant setEmailSent(true) ran on a dead component and was silently dropped.
-  const { signup, loginWithGoogle } = useAuthStore();
+  const { signup, loginWithGoogle, loadSession } = useAuthStore();
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [emailSent, setEmailSent] = useState(false);
-  // Local submitting state — never triggers a guard re-render
   const [submitting, setSubmitting] = useState(false);
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -50,16 +205,12 @@ export default function SignUp() {
     setSubmitting(true);
     try {
       await signup(form.email, form.password, form.fullName);
-      // Only reaches here when email confirmation is OFF (session returned immediately)
-      console.log("[SIGNUP] signup() resolved — navigating to /onboarding");
+      console.log("[SIGNUP] signup() resolved (no confirm required) — navigating to /onboarding");
       navigate("/onboarding");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign up failed.";
       console.log("[SIGNUP] signup() threw:", msg);
       if (msg === "__EMAIL_CONFIRM__") {
-        // Email confirmation required — show the "check your email" screen.
-        // This state update is safe because the component is still mounted
-        // (we never set store isLoading, so RedirectIfLoggedIn never unmounted us).
         setEmailSent(true);
       } else if (
         msg.toLowerCase().includes("already registered") ||
@@ -75,34 +226,20 @@ export default function SignUp() {
     }
   };
 
+  // After OTP verified, reload the session then navigate to onboarding
+  const handleOtpVerified = async () => {
+    console.log("[SIGNUP] OTP verified — loading session then navigating to /onboarding");
+    await loadSession();
+    navigate("/onboarding", { replace: true });
+  };
+
   if (emailSent) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-slate-100 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md text-center">
-          <div className="text-6xl mb-6">📬</div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-3">Almost there!</h1>
-          <p className="text-slate-500 text-sm mb-2">We sent a confirmation link to</p>
-          <p className="font-semibold text-sky-700 mb-6">{form.email}</p>
-          <div className="bg-sky-50 border border-sky-100 rounded-2xl p-5 mb-8 text-left space-y-3">
-            <div className="flex items-start gap-3">
-              <span className="text-xl">1️⃣</span>
-              <p className="text-sm text-slate-600">Open the email from TCUnnect in your inbox (check spam if you don't see it).</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-xl">2️⃣</span>
-              <p className="text-sm text-slate-600">Click the <span className="font-semibold text-sky-700">Confirm your account</span> button in the email.</p>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="text-xl">3️⃣</span>
-              <p className="text-sm text-slate-600">You'll be taken straight to your <span className="font-semibold text-slate-800">account setup</span> — no extra steps needed!</p>
-            </div>
-          </div>
-          <Link to="/login" className="inline-block rounded-full bg-sky-600 px-8 py-3 text-sm font-semibold text-white hover:bg-sky-700 transition">
-            Go to Log In
-          </Link>
-          <p className="text-xs text-slate-400 mt-4">Didn't get the email? Check your spam folder or try signing up again.</p>
-        </div>
-      </main>
+      <OtpScreen
+        email={form.email}
+        onBack={() => setEmailSent(false)}
+        onVerified={handleOtpVerified}
+      />
     );
   }
 
