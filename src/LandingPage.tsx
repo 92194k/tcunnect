@@ -29,6 +29,15 @@ interface CategoryGem {
   images: string[];
 }
 
+interface PublicProfile {
+  id: string;
+  full_name: string;
+  profile_photo: string | null;
+  home_city: string | null;
+  travel_style: string | null;
+  interests: string[] | null;
+}
+
 type IconName =
   | "arrow"
   | "chevron"
@@ -347,6 +356,186 @@ function FeaturedCarousel() {
   );
 }
 
+// ─── Discover People Section ──────────────────────────────────────────────────
+
+const TRAVEL_TAGS = ["Beach trips", "Island hopping", "Hiking", "Food trips", "Culture", "Photography", "Backpacking", "Road trips", "Diving", "Camping"];
+
+function initials(name: string) {
+  return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+}
+
+const AVATAR_GRADIENTS = [
+  "from-sky-400 to-sky-600", "from-rose-400 to-rose-500", "from-violet-400 to-violet-600",
+  "from-amber-400 to-orange-500", "from-emerald-400 to-emerald-600", "from-pink-400 to-pink-600",
+];
+function avatarColor(name: string) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
+}
+
+function DiscoverPeopleSection() {
+  const [profiles, setProfiles] = useState<PublicProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchProfiles() {
+      if (!isSupabaseConfigured) { setLoading(false); return; }
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, profile_photo, home_city, travel_style, interests")
+        .not("full_name", "is", null)
+        .not("full_name", "eq", "")
+        .limit(8);
+      if (data && data.length > 0) setProfiles(data as PublicProfile[]);
+      setLoading(false);
+    }
+    fetchProfiles();
+  }, []);
+
+  // Assign 2 random-ish travel tags per profile
+  function tagsFor(profile: PublicProfile, count = 2): string[] {
+    if (profile.interests && Array.isArray(profile.interests) && profile.interests.length > 0) {
+      return profile.interests.slice(0, count);
+    }
+    let h = 0;
+    for (const c of (profile.id ?? "x")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    const start = h % (TRAVEL_TAGS.length - count);
+    return TRAVEL_TAGS.slice(start, start + count);
+  }
+
+  const show = profiles.length > 0;
+
+  return (
+    <section className="section-pad bg-sky-50/70" id="travelers">
+      <div className="mx-auto max-w-7xl px-5 lg:px-8">
+        <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div className="max-w-xl">
+            <div className="eyebrow text-rose-500"><Icon name="people" className="h-4 w-4" /> Meet Fellow Travelers</div>
+            <h2 className="section-title mt-4">Your next adventure might start with a new connection.</h2>
+            <p className="section-copy">Discover real Filipino travelers who share your interests — match anonymously, then chat when the feeling is mutual.</p>
+          </div>
+          <ArrowLink href="/signup">Start Discovering</ArrowLink>
+        </div>
+
+        {loading && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[1,2,3,4].map((i) => <div key={i} className="rounded-3xl bg-slate-200 animate-pulse h-72" />)}
+          </div>
+        )}
+
+        {!loading && show && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {profiles.slice(0, 4).map((profile, index) => {
+              const name = profile.full_name || "Traveler";
+              const tags = tagsFor(profile);
+              const hasPhoto = !!profile.profile_photo;
+              return (
+                <article
+                  key={profile.id}
+                  className={`overflow-hidden rounded-3xl bg-white shadow-[0_15px_40px_rgba(17,80,110,0.09)] ${index === 1 ? "sm:-translate-y-5" : ""}`}
+                >
+                  {/* Avatar — blurred for privacy */}
+                  <div className="relative h-56 overflow-hidden">
+                    {hasPhoto ? (
+                      <>
+                        <img
+                          src={profile.profile_photo!}
+                          alt=""
+                          className="h-full w-full object-cover scale-110"
+                          style={{ filter: "blur(12px)" }}
+                        />
+                        {/* Initials on top of blurred photo */}
+                        <div className={`absolute inset-0 flex items-center justify-center`}>
+                          <div className={`h-20 w-20 rounded-full bg-gradient-to-br ${avatarColor(name)} flex items-center justify-center text-white text-2xl font-bold shadow-xl ring-4 ring-white/40`}>
+                            {initials(name)}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className={`h-full w-full bg-gradient-to-br ${avatarColor(name)} flex items-center justify-center`}>
+                        <div className="h-20 w-20 rounded-full bg-white/20 flex items-center justify-center text-white text-2xl font-bold">
+                          {initials(name)}
+                        </div>
+                      </div>
+                    )}
+                    {/* Lock badge */}
+                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 text-[10px] font-semibold text-slate-600 flex items-center gap-1 shadow">
+                      🔒 Sign up to view
+                    </div>
+                    {/* Online dot */}
+                    <span className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-white/90 rounded-full px-2.5 py-1 text-[10px] font-semibold text-emerald-700 shadow">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 inline-block" />
+                      Active recently
+                    </span>
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        {/* Show first name only for privacy */}
+                        <h3 className="font-bold text-slate-900">{name.split(" ")[0]}</h3>
+                        <p className="mt-0.5 text-xs text-slate-500">{profile.home_city || "Philippines"}</p>
+                      </div>
+                      <span className="grid h-9 w-9 place-items-center rounded-full bg-rose-50 text-rose-400">
+                        <Icon name="heart" className="h-4 w-4" />
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {tags.map((tag) => (
+                        <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-600">{tag}</span>
+                      ))}
+                      {profile.travel_style && (
+                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-medium text-sky-700">{profile.travel_style}</span>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+
+        {/* If no real profiles yet, show illustrative placeholder cards */}
+        {!loading && !show && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {["Solo Explorer", "Island Hopper", "Foodie Traveler", "Adventure Seeker"].map((type, index) => (
+              <article key={type} className={`overflow-hidden rounded-3xl bg-white shadow-[0_15px_40px_rgba(17,80,110,0.09)] ${index === 1 ? "sm:-translate-y-5" : ""}`}>
+                <div className={`h-56 bg-gradient-to-br ${AVATAR_GRADIENTS[index]} flex items-center justify-center`}>
+                  <div className="h-20 w-20 rounded-full bg-white/20 flex items-center justify-center text-4xl">
+                    {["🧍", "🏄", "🍜", "🧗"][index]}
+                  </div>
+                </div>
+                <div className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-slate-900">{type}</h3>
+                      <p className="mt-0.5 text-xs text-slate-500">Philippines</p>
+                    </div>
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-rose-50 text-rose-400">
+                      <Icon name="heart" className="h-4 w-4" />
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {TRAVEL_TAGS.slice(index * 2, index * 2 + 2).map((tag) => (
+                      <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium text-slate-600">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-10 text-center">
+          <a href="/signup" className="inline-flex items-center gap-2 rounded-full bg-rose-500 px-8 py-3.5 text-sm font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-rose-400">
+            Find Your Travel Match <Icon name="heart" className="h-4 w-4" />
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── Gem Categories Section ───────────────────────────────────────────────────
 
 function GemCategoriesSection() {
@@ -599,8 +788,11 @@ export default function App() {
       {/* ── Gem Categories ───────────────────────────────────────────────────── */}
       <GemCategoriesSection />
 
+      {/* ── Discover People ──────────────────────────────────────────────────── */}
+      <DiscoverPeopleSection />
+
       {/* ── How It Works ─────────────────────────────────────────────────────── */}
-      <section className="section-pad bg-sky-50/70" id="how-it-works">
+      <section className="section-pad" id="how-it-works">
         <div className="mx-auto max-w-7xl px-5 lg:px-8">
           <div className="mb-12 max-w-2xl">
             <div className="eyebrow text-rose-500"><Icon name="people" className="h-4 w-4" /> How TCUnnect Works</div>
