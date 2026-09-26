@@ -272,3 +272,8 @@ create policy "Users can submit reports"
   on public.reports for insert with check (auth.uid() = reported_by);
 
 -- Admins can read/update everything — handled via service_role key in admin panel
+
+-- ─── Enable Realtime on messages table ────────────────────────
+-- Run this in Supabase SQL editor if not already done:
+-- alter publication supabase_realtime add table public.messages;
+-- Without this, subscribeToMatch channel never receives INSERT events.

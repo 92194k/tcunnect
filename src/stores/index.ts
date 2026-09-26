@@ -232,14 +232,15 @@ export const useMatchStore = create<MatchState>((set) => ({
       .from("matches")
       .select(`
         id, created_at, status,
-        user1:profiles!matches_user1_id_fkey(id, full_name, avatar_url, location, travel_interests),
-        user2:profiles!matches_user2_id_fkey(id, full_name, avatar_url, location, travel_interests)
+        user1:profiles!matches_user1_id_fkey(id, full_name, profile_photo, location, travel_interests),
+        user2:profiles!matches_user2_id_fkey(id, full_name, profile_photo, location, travel_interests)
       `)
       .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
       .eq("status", "active")
       .order("created_at", { ascending: false });
 
-    if (error) { console.error("[fetchMatches]", error); return; }
+    console.log("[fetchMatches] raw data:", JSON.stringify(data?.slice(0,2)));
+    if (error) { console.error("[fetchMatches] error:", error.message, error.code); return; }
 
     const matches: Match[] = (data ?? []).map((row: any) => {
       const partner = row.user1?.id === userId ? row.user2 : row.user1;
@@ -252,9 +253,7 @@ export const useMatchStore = create<MatchState>((set) => ({
           id: partner?.id ?? "",
           fullName: partner?.full_name ?? "Unknown",
           email: "",
-          profilePhoto: partner?.avatar_url
-            ? `${partner.avatar_url}?t=${Date.now()}`
-            : `https://ui-avatars.com/api/?name=${encodeURIComponent(partner?.full_name ?? "?")}&background=0ea5e9&color=fff`,
+          profilePhoto: partner?.profile_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner?.full_name ?? "?")}&background=0ea5e9&color=fff`,
           location: partner?.location ?? "",
           travelInterests: partner?.travel_interests ?? [],
           age: 0, bio: "", createdAt: row.created_at, isPremium: false, isVerified: false,
@@ -301,7 +300,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .eq("match_id", matchId)
       .order("created_at", { ascending: true });
 
-    if (error) { console.error("[fetchMessages]", error); return; }
+    console.log("[fetchMessages] matchId:", matchId, "rows:", data?.length, "error:", error?.message);
+    if (error) { console.error("[fetchMessages] error:", error.message); return; }
 
     const msgs: Message[] = (data ?? []).map((m: any) => ({
       id: m.id,
@@ -315,22 +315,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (matchId: string, senderId: string, content: string) => {
-    if (!isSupabaseConfigured) {
-      // offline fallback
-      const msg: Message = { id: `local_${Date.now()}`, matchId, senderId, content, read: false, timestamp: new Date().toISOString() };
-      get().addMessage(matchId, msg);
-      return;
-    }
+    // Optimistic: add to local state immediately with a temp id
+    const tempId = `temp_${Date.now()}`;
+    const optimistic: Message = { id: tempId, matchId, senderId, content, read: false, timestamp: new Date().toISOString() };
+    get().addMessage(matchId, optimistic);
+    console.log("[sendMessage] optimistic add", { matchId, senderId, content });
+
+    if (!isSupabaseConfigured) return;
+
     const { data, error } = await supabase
       .from("messages")
       .insert({ match_id: matchId, sender_id: senderId, content })
       .select("id, match_id, sender_id, content, read, created_at")
       .single();
 
-    if (error) { console.error("[sendMessage]", error); return; }
+    if (error) {
+      console.error("[sendMessage] insert error:", error.message, error.code, error.details);
+      // Remove the optimistic message on failure
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [matchId]: (s.messages[matchId] ?? []).filter((m) => m.id !== tempId),
+        },
+      }));
+      return;
+    }
+
     if (data) {
-      const msg: Message = { id: data.id, matchId: data.match_id, senderId: data.sender_id, content: data.content, read: data.read, timestamp: data.created_at };
-      get().addMessage(matchId, msg);
+      console.log("[sendMessage] insert success, id:", data.id);
+      // Replace temp message with real one from DB
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [matchId]: (s.messages[matchId] ?? []).map((m) =>
+            m.id === tempId
+              ? { id: data.id, matchId: data.match_id, senderId: data.sender_id, content: data.content, read: data.read, timestamp: data.created_at }
+              : m
+          ),
+        },
+      }));
     }
   },
 
@@ -353,14 +376,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         (payload) => {
           const m = payload.new as any;
           const msg: Message = { id: m.id, matchId: m.match_id, senderId: m.sender_id, content: m.content, read: m.read, timestamp: m.created_at };
-          // Only add if not already in store (avoids duplicate from sendMessage optimistic insert)
+          // Only add if not already in store.
+          // Sender already has it (optimistic or replaced). Receiver doesn't yet.
           const existing = get().messages[matchId] ?? [];
-          if (!existing.find((e) => e.id === msg.id)) {
+          const alreadyExists = existing.find((e) => e.id === msg.id);
+          if (!alreadyExists) {
+            console.log("[realtime] new message from", msg.senderId, ":", msg.content);
             get().addMessage(matchId, msg);
+          } else {
+            console.log("[realtime] deduped message id", msg.id);
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log("[realtime] channel", `messages:${matchId}`, "status:", status, err ?? "");
+      });
     return () => { supabase.removeChannel(channel); };
   },
 }));

@@ -170,8 +170,11 @@ export default function Profile() {
       // Append cache-busting param so browsers and CDNs don't serve the old photo
       // after the user re-uploads (same path → same URL → cached by default)
       const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
-      const bustedUrl = `${publicUrl}?t=${Date.now()}`;
-      await updateProfile({ profilePhoto: bustedUrl });
+      // Store the clean URL (no timestamp). Cache-busting is applied at display time
+      // in the component so the stored URL stays stable and other users load it correctly.
+      await updateProfile({ profilePhoto: publicUrl });
+      // Force re-render with busted URL locally so uploader sees change immediately
+      setUser({ ...user!, profilePhoto: `${publicUrl}?t=${Date.now()}` });
     } catch (err) {
       console.error("Photo upload failed:", err);
     } finally {
