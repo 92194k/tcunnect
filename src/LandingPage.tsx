@@ -356,27 +356,36 @@ function GemCategoriesSection() {
   useEffect(() => {
     async function fetchCategoryGems() {
       if (!isSupabaseConfigured) { setLoading(false); return; }
-      // Fetch approved gems that have images, ordered by rating/newest
+      // Fetch approved gems — filter images client-side to avoid JSONB comparison issues
       const { data } = await supabase
         .from("hidden_gems")
         .select("id, name, location, category, images")
         .eq("status", "approved")
-        .not("images", "eq", "[]")
-        .not("images", "is", null)
-        .limit(20);
+        .limit(50);
 
       if (data && data.length > 0) {
-        // Pick one gem per category (first match wins)
+        // Pick one gem per category (prefer ones with a photo)
         const seen = new Set<string>();
         const picks: CategoryGem[] = [];
+        // First pass: gems with photos
         for (const gem of data as CategoryGem[]) {
-          if (!seen.has(gem.category) && gem.images?.[0]) {
+          if (!seen.has(gem.category) && Array.isArray(gem.images) && gem.images[0]) {
             seen.add(gem.category);
             picks.push(gem);
             if (picks.length === 4) break;
           }
         }
-        setGems(picks);
+        // Second pass: fill remaining slots with gems even without photos
+        if (picks.length < 4) {
+          for (const gem of data as CategoryGem[]) {
+            if (!seen.has(gem.category)) {
+              seen.add(gem.category);
+              picks.push(gem);
+              if (picks.length === 4) break;
+            }
+          }
+        }
+        if (picks.length > 0) setGems(picks);
       }
       setLoading(false);
     }
@@ -394,7 +403,7 @@ function GemCategoriesSection() {
     { category: "Scenic & Sunset Spots" },
   ];
 
-  const cards = gems.length >= 2 ? gems : null;
+  const cards = gems.length >= 1 ? gems : null;
 
   return (
     <section className="section-pad" id="discover">
