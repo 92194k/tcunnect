@@ -26,8 +26,10 @@ interface Gem {
   budget_level: string;
   description: string;
   tip: string;
-  best_time: string;
+  best_time_to_visit: string;
   is_featured: boolean;
+  status?: string;
+  submitted_by?: string;
 }
 
 interface NearbyGem {
@@ -422,12 +424,19 @@ export default function GemDetail() {
       return;
     }
 
+    const { user: authUser } = useAuthStore.getState();
     const { data, error } = await supabase
       .from("hidden_gems")
-      .select("id, name, location, category, images, rating, review_count, budget_level, description, tip, best_time, is_featured")
+      .select("id, name, location, category, images, rating, review_count, budget_level, description, tip, best_time_to_visit, is_featured, status, submitted_by")
       .eq("id", id)
-      .eq("status", "approved")
       .single();
+
+    // Hide gems that are pending/rejected unless you submitted them
+    if (data && data.status !== "approved" && data.submitted_by !== authUser?.id) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
 
     if (error || !data) {
       setNotFound(true);
@@ -594,7 +603,7 @@ export default function GemDetail() {
           <div className="bg-sky-50 rounded-xl p-3 text-center">
             <Calendar className="h-4 w-4 text-sky-600 mx-auto mb-1" />
             <p className="text-[10px] text-slate-500 mb-0.5">Best Time</p>
-            <p className="text-xs font-semibold text-slate-800">{gem.best_time || "—"}</p>
+            <p className="text-xs font-semibold text-slate-800">{gem.best_time_to_visit || "—"}</p>
           </div>
           <div className="bg-emerald-50 rounded-xl p-3 text-center">
             <Clock className="h-4 w-4 text-emerald-600 mx-auto mb-1" />

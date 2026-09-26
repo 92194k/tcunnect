@@ -155,6 +155,9 @@ create table if not exists public.hidden_gems (
   best_time_to_visit text not null default '',
   submitted_by      uuid references public.profiles(id) on delete set null,
   status            text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  rating            numeric(3,1) not null default 0,
+  review_count      integer not null default 0,
+  tip               text not null default '',
   is_featured       boolean not null default false,
   created_at        timestamptz not null default now()
 );
@@ -297,3 +300,11 @@ create policy "Users can submit reports"
 -- create policy "Avatars are publicly readable"
 -- on storage.objects for select to public
 -- using (bucket_id = 'avatars');
+
+-- ─── hidden_gems: add missing columns ─────────────────────────────────────
+-- Run in Supabase SQL Editor if the table was already created without these:
+--
+-- alter table public.hidden_gems
+--   add column if not exists rating       numeric(3,1) not null default 0,
+--   add column if not exists review_count integer       not null default 0,
+--   add column if not exists tip          text          not null default '';
