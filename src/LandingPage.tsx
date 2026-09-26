@@ -21,6 +21,14 @@ interface FeaturedGem {
   budget_level: string;
 }
 
+interface CategoryGem {
+  id: string;
+  name: string;
+  location: string;
+  category: string;
+  images: string[];
+}
+
 type IconName =
   | "arrow"
   | "chevron"
@@ -41,32 +49,21 @@ type IconName =
 // Illustrative background photos (not fake user profiles — just scenic images)
 const FALLBACK_HERO = "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1800&q=85";
 
-const gemCategoryCards = [
-  {
-    category: "Beach & Islands",
-    icon: "🏖",
-    emoji_bg: "bg-sky-100",
-    desc: "Crystal-clear waters and white sand shores",
-  },
-  {
-    category: "Nature & Hiking",
-    icon: "🌿",
-    emoji_bg: "bg-emerald-100",
-    desc: "Lush mountains and untouched wilderness",
-  },
-  {
-    category: "Hidden Gems",
-    icon: "💎",
-    emoji_bg: "bg-violet-100",
-    desc: "Off-the-beaten-path local discoveries",
-  },
-  {
-    category: "Scenic Escapes",
-    icon: "🌅",
-    emoji_bg: "bg-amber-100",
-    desc: "Breathtaking views and peaceful retreats",
-  },
-];
+// Category fallback config (used when no gem photo is available for that category)
+const CATEGORY_CONFIG: Record<string, { icon: string; emoji_bg: string; desc: string }> = {
+  "Beach & Island Hopping": { icon: "🏖", emoji_bg: "bg-sky-100", desc: "Crystal-clear waters and white sand shores" },
+  "Beach": { icon: "🏖", emoji_bg: "bg-sky-100", desc: "Crystal-clear waters and white sand shores" },
+  "Nature & Hiking": { icon: "🌿", emoji_bg: "bg-emerald-100", desc: "Lush mountains and untouched wilderness" },
+  "Mountain": { icon: "🏔", emoji_bg: "bg-emerald-100", desc: "Misty peaks and highland trails" },
+  "Hidden Gems": { icon: "💎", emoji_bg: "bg-violet-100", desc: "Off-the-beaten-path local discoveries" },
+  "Scenic & Sunset Spots": { icon: "🌅", emoji_bg: "bg-amber-100", desc: "Breathtaking views and peaceful retreats" },
+  "History & Culture": { icon: "🏛", emoji_bg: "bg-orange-100", desc: "Rich heritage and storied places" },
+  "Food & Cafés": { icon: "🍜", emoji_bg: "bg-rose-100", desc: "Local flavors and hidden dining spots" },
+  "Adventure & Thrills": { icon: "🧗", emoji_bg: "bg-yellow-100", desc: "For those who seek the extraordinary" },
+  "City Exploring": { icon: "🌆", emoji_bg: "bg-indigo-100", desc: "Urban gems and neighborhood finds" },
+  "Waterfalls": { icon: "💦", emoji_bg: "bg-cyan-100", desc: "Hidden cascades and cool swimming holes" },
+  "default": { icon: "📍", emoji_bg: "bg-slate-100", desc: "Discover amazing places across the Philippines" },
+};
 
 const HOW_IT_WORKS = [
   {
@@ -350,6 +347,118 @@ function FeaturedCarousel() {
   );
 }
 
+// ─── Gem Categories Section ───────────────────────────────────────────────────
+
+function GemCategoriesSection() {
+  const [gems, setGems] = useState<CategoryGem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCategoryGems() {
+      if (!isSupabaseConfigured) { setLoading(false); return; }
+      // Fetch approved gems that have images, ordered by rating/newest
+      const { data } = await supabase
+        .from("hidden_gems")
+        .select("id, name, location, category, images")
+        .eq("status", "approved")
+        .not("images", "eq", "[]")
+        .not("images", "is", null)
+        .limit(20);
+
+      if (data && data.length > 0) {
+        // Pick one gem per category (first match wins)
+        const seen = new Set<string>();
+        const picks: CategoryGem[] = [];
+        for (const gem of data as CategoryGem[]) {
+          if (!seen.has(gem.category) && gem.images?.[0]) {
+            seen.add(gem.category);
+            picks.push(gem);
+            if (picks.length === 4) break;
+          }
+        }
+        setGems(picks);
+      }
+      setLoading(false);
+    }
+    fetchCategoryGems();
+  }, []);
+
+  const getConfig = (category: string) =>
+    CATEGORY_CONFIG[category] ?? CATEGORY_CONFIG["default"];
+
+  // Fallback cards when no real data yet
+  const fallbackCards = [
+    { category: "Beach & Island Hopping" },
+    { category: "Nature & Hiking" },
+    { category: "Hidden Gems" },
+    { category: "Scenic & Sunset Spots" },
+  ];
+
+  const cards = gems.length >= 2 ? gems : null;
+
+  return (
+    <section className="section-pad" id="discover">
+      <div className="mx-auto max-w-7xl px-5 lg:px-8">
+        <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div className="max-w-xl">
+            <div className="eyebrow text-sky-700"><Icon name="compass" className="h-4 w-4" /> Hidden Gems</div>
+            <h2 className="section-title mt-4">There's more to discover.</h2>
+            <p className="section-copy">Find quiet shores, misty mountains, and local favorites across the Philippines.</p>
+          </div>
+          <ArrowLink href="/hidden-gems">Explore All Gems</ArrowLink>
+        </div>
+
+        {loading ? (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {[1,2,3,4].map((i) => (
+              <div key={i} className="rounded-3xl bg-slate-200 animate-pulse h-72" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {(cards ?? fallbackCards).map((item) => {
+              const cfg = getConfig(item.category);
+              const gemItem = item as CategoryGem;
+              const hasPhoto = !!gemItem.images?.[0];
+              return (
+                <Link
+                  className="group overflow-hidden rounded-3xl bg-white border border-slate-100 shadow-[0_10px_35px_rgba(15,45,65,0.07)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,45,65,0.12)]"
+                  to={hasPhoto ? `/gems/${gemItem.id}` : "/hidden-gems"}
+                  key={item.category}
+                >
+                  <div className="relative h-52 overflow-hidden">
+                    {hasPhoto ? (
+                      <img
+                        src={gemItem.images[0]}
+                        alt={gemItem.name ?? item.category}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className={`h-full w-full ${cfg.emoji_bg} flex items-center justify-center text-7xl`}>
+                        {cfg.icon}
+                      </div>
+                    )}
+                    {hasPhoto && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <h3 className="font-bold text-slate-900">{cfg.icon} {item.category}</h3>
+                    {hasPhoto && gemItem.location && (
+                      <p className="mt-0.5 text-[11px] text-sky-600 font-medium">{gemItem.location}</p>
+                    )}
+                    <p className="mt-1 text-xs text-slate-500">{cfg.desc}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ─── Scroll arrow ─────────────────────────────────────────────────────────────
 
 function ScrollArrow() {
@@ -479,35 +588,7 @@ export default function App() {
       </section>
 
       {/* ── Gem Categories ───────────────────────────────────────────────────── */}
-      <section className="section-pad" id="discover">
-        <div className="mx-auto max-w-7xl px-5 lg:px-8">
-          <div className="mb-10 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-            <div className="max-w-xl">
-              <div className="eyebrow text-sky-700"><Icon name="compass" className="h-4 w-4" /> Hidden Gems</div>
-              <h2 className="section-title mt-4">There's more to discover.</h2>
-              <p className="section-copy">Find quiet shores, misty mountains, and local favorites across the Philippines.</p>
-            </div>
-            <ArrowLink href="/signup">Explore All Gems</ArrowLink>
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {gemCategoryCards.map((cat) => (
-              <a
-                className="group overflow-hidden rounded-3xl bg-white border border-slate-100 shadow-[0_10px_35px_rgba(15,45,65,0.07)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,45,65,0.12)]"
-                href="/signup"
-                key={cat.category}
-              >
-                <div className={`h-44 ${cat.emoji_bg} flex items-center justify-center text-7xl transition duration-500 group-hover:scale-105`}>
-                  {cat.icon}
-                </div>
-                <div className="p-5">
-                  <h3 className="font-bold text-slate-900">{cat.icon} {cat.category}</h3>
-                  <p className="mt-1 text-xs text-slate-500">{cat.desc}</p>
-                </div>
-              </a>
-            ))}
-          </div>
-        </div>
-      </section>
+      <GemCategoriesSection />
 
       {/* ── How It Works ─────────────────────────────────────────────────────── */}
       <section className="section-pad bg-sky-50/70" id="how-it-works">
