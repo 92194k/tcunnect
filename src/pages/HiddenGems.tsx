@@ -5,10 +5,31 @@ import { useAuthStore } from "../stores";
 import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check, Image, Link2 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
-const CATEGORIES = ["All", "Beach", "Mountain", "Nature", "Heritage", "Cafe", "Waterfalls", "City", "Food"];
+const CATEGORIES = [
+  "All",
+  "Beach & Island Hopping",
+  "Nature & Hiking",
+  "History & Culture",
+  "Food & Cafés",
+  "City Exploring",
+  "Adventure & Thrills",
+  "Scenic & Sunset Spots",
+  "Hidden Gems",
+  "Waterfalls",
+];
 const CATEGORY_EMOJIS: Record<string, string> = {
+  "Beach & Island Hopping": "🏖",
+  "Nature & Hiking": "🌿",
+  "History & Culture": "🏛",
+  "Food & Cafés": "🍜",
+  "City Exploring": "🌆",
+  "Adventure & Thrills": "🧗",
+  "Scenic & Sunset Spots": "🌅",
+  "Hidden Gems": "💎",
+  "Waterfalls": "💦",
+  // legacy short names (in case any old gems use them)
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
-  Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
+  Cafe: "☕", City: "🌆", Food: "🍜",
 };
 
 interface Gem {
@@ -28,7 +49,7 @@ interface Gem {
 const EMPTY_FORM = {
   name: "",
   location: "",
-  category: "Beach",
+  category: "Beach & Island Hopping",
   description: "",
   imageUrl: "",
   budget_level: "₱₱",
