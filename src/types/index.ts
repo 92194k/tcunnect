@@ -36,11 +36,16 @@ export interface Match {
   status: "active" | "blocked" | "archived";
 }
 
+export type MessageType = 'text' | 'gem_card' | 'booking_card' | 'trip_plan';
+
 export interface Message {
   id: string;
   matchId: string;
   senderId: string;
+  receiverId?: string;
   content: string;
+  messageType?: MessageType;
+  metadata?: Record<string, unknown>;
   timestamp: string;   // used in Chat.tsx
   read: boolean;       // used in Chat.tsx
 }
@@ -154,9 +159,20 @@ export interface Notification {
 export interface Report {
   id: string;
   reportedBy: string;
-  reportedItemType: "Post" | "Comment" | "User";
+  reportedUserId?: string;
+  reportedItemType: "Post" | "Comment" | "User" | "Message";
   reportedItemId: string;
+  matchId?: string;
+  messageContent?: string;
   reason: string;
+  details?: string;
   status: "pending" | "resolved" | "dismissed";
+  createdAt: string;
+}
+
+export interface Block {
+  id: string;
+  blockerId: string;
+  blockedId: string;
   createdAt: string;
 }

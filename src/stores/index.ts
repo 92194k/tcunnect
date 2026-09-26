@@ -205,12 +205,39 @@ export const useMatchStore = create<MatchState>((set) => ({
 // ─── Chat Store ──────────────────────────────────────────────
 interface ChatState {
   messages: Record<string, Message[]>; // keyed by matchId
+  loadingMessages: Record<string, boolean>;
   addMessage: (matchId: string, message: Message) => void;
   setMessages: (matchId: string, messages: Message[]) => void;
+  loadMessages: (matchId: string) => Promise<void>;
+  sendMessage: (opts: {
+    matchId: string;
+    senderId: string;
+    receiverId: string;
+    content: string;
+    messageType?: string;
+    metadata?: Record<string, unknown>;
+  }) => Promise<Message>;
+  markConversationRead: (matchId: string, currentUserId: string) => Promise<void>;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+function rowToMessage(row: Record<string, unknown>): Message {
+  return {
+    id: row.id as string,
+    matchId: row.match_id as string,
+    senderId: row.sender_id as string,
+    receiverId: row.receiver_id as string,
+    content: row.content as string,
+    messageType: (row.message_type as Message["messageType"]) ?? "text",
+    metadata: (row.metadata as Record<string, unknown>) ?? undefined,
+    timestamp: row.created_at as string,
+    read: row.read as boolean,
+  };
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
   messages: {},
+  loadingMessages: {},
+
   addMessage: (matchId, message) =>
     set((s) => ({
       messages: {
@@ -218,8 +245,105 @@ export const useChatStore = create<ChatState>((set) => ({
         [matchId]: [...(s.messages[matchId] ?? []), message],
       },
     })),
+
   setMessages: (matchId, messages) =>
     set((s) => ({ messages: { ...s.messages, [matchId]: messages } })),
+
+  loadMessages: async (matchId) => {
+    if (!isSupabaseConfigured) return;
+    set((s) => ({ loadingMessages: { ...s.loadingMessages, [matchId]: true } }));
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, match_id, sender_id, receiver_id, content, message_type, metadata, read, created_at")
+      .eq("match_id", matchId)
+      .order("created_at", { ascending: true })
+      .limit(200);
+    if (!error && data) {
+      const msgs = data.map(rowToMessage);
+      set((s) => ({
+        messages: { ...s.messages, [matchId]: msgs },
+        loadingMessages: { ...s.loadingMessages, [matchId]: false },
+      }));
+    } else {
+      set((s) => ({ loadingMessages: { ...s.loadingMessages, [matchId]: false } }));
+    }
+  },
+
+  sendMessage: async ({ matchId, senderId, receiverId, content, messageType, metadata }) => {
+    const tempId = `tmp_${Date.now()}`;
+    const optimistic: Message = {
+      id: tempId,
+      matchId,
+      senderId,
+      receiverId,
+      content,
+      messageType: (messageType as Message["messageType"]) ?? "text",
+      metadata,
+      timestamp: new Date().toISOString(),
+      read: false,
+    };
+
+    // Optimistic add
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [matchId]: [...(s.messages[matchId] ?? []), optimistic],
+      },
+    }));
+
+    if (!isSupabaseConfigured) return optimistic;
+
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert({
+          match_id: matchId,
+          sender_id: senderId,
+          receiver_id: receiverId,
+          content,
+          message_type: messageType ?? "text",
+          metadata: metadata ?? null,
+        })
+        .select("id, match_id, sender_id, receiver_id, content, message_type, metadata, read, created_at")
+        .single();
+
+      if (data && !error) {
+        const saved = rowToMessage(data);
+        // Replace optimistic message with real one
+        set((s) => ({
+          messages: {
+            ...s.messages,
+            [matchId]: (s.messages[matchId] ?? []).map((m) =>
+              m.id === tempId ? saved : m
+            ),
+          },
+        }));
+        return saved;
+      }
+    } catch {
+      // Keep the optimistic message on error
+    }
+    return optimistic;
+  },
+
+  markConversationRead: async (matchId, currentUserId) => {
+    // Optimistically mark all messages from partner as read
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [matchId]: (s.messages[matchId] ?? []).map((m) =>
+          m.receiverId === currentUserId && !m.read ? { ...m, read: true } : m
+        ),
+      },
+    }));
+    if (!isSupabaseConfigured) return;
+    await supabase
+      .from("messages")
+      .update({ read: true })
+      .eq("match_id", matchId)
+      .eq("receiver_id", currentUserId)
+      .eq("read", false);
+  },
 }));
 
 // ─── Notification Store ───────────────────────────────────────

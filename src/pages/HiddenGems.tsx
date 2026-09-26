@@ -458,14 +458,22 @@ export default function HiddenGems() {
             <h1 className="text-2xl font-bold text-slate-900">Hidden Gems</h1>
             <p className="text-slate-500 text-sm mt-1">Discover underrated destinations across the Philippines</p>
           </div>
-          {isAdmin && (
-            <button
-              onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition"
+          <div className="flex items-center gap-2">
+            <Link
+              to="/saved-places"
+              className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-sky-400 text-slate-700 hover:text-sky-700 text-sm font-semibold px-4 py-2 rounded-full transition"
             >
-              <Plus className="h-4 w-4" /> Add Gem
-            </button>
-          )}
+              <Bookmark className="h-4 w-4" /> My Saved Places
+            </Link>
+            {isAdmin && (
+              <button
+                onClick={() => setShowModal(true)}
+                className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition"
+              >
+                <Plus className="h-4 w-4" /> Add Gem
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Search */}

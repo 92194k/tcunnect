@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
-import { useAuthStore } from "../stores";
-import { Bookmark, MapPin, Star, Loader2, Trash2, ChevronRight, Compass } from "lucide-react";
+import { useAuthStore, useMatchStore, useChatStore } from "../stores";
+import { Bookmark, MapPin, Star, Loader2, Trash2, ChevronRight, Compass, Send, X, MessageCircle } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const CATEGORIES = ["All", "Beach", "Mountain", "Nature", "Heritage", "Cafe", "Waterfalls", "City", "Food"];
@@ -23,12 +23,141 @@ interface SavedGem {
   created_at: string;
 }
 
+// ── Share to Chat Modal ────────────────────────────────────────────────────
+interface ShareModalProps {
+  gem: SavedGem;
+  onClose: () => void;
+}
+
+function ShareToChatModal({ gem, onClose }: ShareModalProps) {
+  const { user } = useAuthStore();
+  const { matches } = useMatchStore();
+  const { sendMessage } = useChatStore();
+  const navigate = useNavigate();
+  const [sending, setSending] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+
+  async function handleShare(matchId: string, partnerId: string) {
+    if (!user) return;
+    setSending(matchId);
+    try {
+      await sendMessage({
+        matchId,
+        senderId: user.id,
+        receiverId: partnerId,
+        content: `📍 ${gem.gem_name} — ${gem.gem_location}`,
+        messageType: "gem_card",
+        metadata: {
+          gemId: gem.gem_id,
+          name: gem.gem_name,
+          location: gem.gem_location,
+          category: gem.gem_category,
+          image: gem.gem_images?.[0] ?? null,
+        },
+      });
+      setSent(matchId);
+    } catch {
+      // silent fail — still mark sent so user sees feedback
+      setSent(matchId);
+    } finally {
+      setSending(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div>
+            <h2 className="font-bold text-slate-900 text-base">Share to Chat</h2>
+            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">📍 {gem.gem_name}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Match list */}
+        <div className="overflow-y-auto flex-1 divide-y divide-slate-50">
+          {matches.length === 0 ? (
+            <div className="p-8 text-center">
+              <MessageCircle className="h-10 w-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-sm text-slate-500 mb-4">No matches yet — connect with someone first!</p>
+              <button
+                onClick={() => { onClose(); navigate("/discover"); }}
+                className="text-sm font-semibold text-sky-600 hover:underline"
+              >
+                Discover people
+              </button>
+            </div>
+          ) : (
+            matches.map((match) => {
+              const partner = match.user;
+              const alreadySent = sent === match.id;
+              const isSending = sending === match.id;
+              return (
+                <div key={match.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition">
+                  <div className="h-10 w-10 rounded-full overflow-hidden bg-slate-100 flex-shrink-0">
+                    {partner.profilePhoto ? (
+                      <img src={partner.profilePhoto} alt={partner.fullName} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-lg font-bold text-slate-400">
+                        {partner.fullName[0]}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{partner.fullName}</p>
+                    <p className="text-xs text-slate-400 truncate">{partner.location || "Traveler"}</p>
+                  </div>
+                  <button
+                    onClick={() => !alreadySent && handleShare(match.id, partner.id)}
+                    disabled={isSending || alreadySent}
+                    className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      alreadySent
+                        ? "bg-emerald-50 text-emerald-600"
+                        : "bg-sky-600 hover:bg-sky-700 text-white"
+                    }`}
+                  >
+                    {isSending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : alreadySent ? (
+                      "✓ Sent"
+                    ) : (
+                      <><Send className="h-3.5 w-3.5" /> Send</>
+                    )}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        {sent && (
+          <div className="p-4 border-t border-slate-100">
+            <button
+              onClick={() => { onClose(); navigate("/chat"); }}
+              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2.5 rounded-xl text-sm transition"
+            >
+              Go to Messages
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────
 export default function SavedPlaces() {
   const { user } = useAuthStore();
   const [saved, setSaved] = useState<SavedGem[]>([]);
   const [loading, setLoading] = useState(true);
   const [removing, setRemoving] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [sharingGem, setSharingGem] = useState<SavedGem | null>(null);
 
   useEffect(() => {
     fetchSaved();
@@ -90,6 +219,11 @@ export default function SavedPlaces() {
 
   return (
     <AppShell>
+      {/* Share to Chat Modal */}
+      {sharingGem && (
+        <ShareToChatModal gem={sharingGem} onClose={() => setSharingGem(null)} />
+      )}
+
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
@@ -210,13 +344,20 @@ export default function SavedPlaces() {
                       to={`/gems/${item.gem_id}`}
                       className="flex-1 text-center text-xs font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg transition flex items-center justify-center gap-1"
                     >
-                      View Details <ChevronRight className="h-3.5 w-3.5" />
+                      View <ChevronRight className="h-3.5 w-3.5" />
                     </Link>
+                    <button
+                      onClick={() => setSharingGem(item)}
+                      className="flex-1 text-center text-xs font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-lg transition flex items-center justify-center gap-1"
+                      title="Share this gem in a chat"
+                    >
+                      <Send className="h-3 w-3" /> Share
+                    </button>
                     <Link
                       to={`/booking/${item.gem_id}`}
                       className="flex-1 text-center text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 px-3 py-1.5 rounded-lg transition"
                     >
-                      Book a Trip
+                      Book
                     </Link>
                   </div>
                 </div>

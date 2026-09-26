@@ -1,50 +1,491 @@
-import { useState, useRef, useEffect } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useMatchStore, useChatStore, useAuthStore } from "../stores";
-import { Send, ArrowLeft, MapPin, Smile, Map, Loader2 } from "lucide-react";
-import Avatar from "../components/Avatar";
+import {
+  Send, ArrowLeft, MapPin, Smile, Map, MoreVertical, X,
+  Flag, ShieldOff, Loader2, ChevronRight, Bookmark, Calendar,
+  Star, Check,
+} from "lucide-react";
+import type { Message } from "../types";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
-const QUICK_REPLIES = ["Hey! 👋", "Sure, when are you free?", "I'd love to! 🏖", "Let me check my schedule", "Sounds great!"];
+// ─── Emoji Picker ─────────────────────────────────────────────────────────────
+const EMOJIS = [
+  "😀","😂","🥰","😍","😎","🤩","😢","😭","😡","🤔",
+  "🤣","😅","🥹","🤗","😬","🫶","🫡","😴","🥲","😇",
+  "👍","👎","❤️","🔥","✨","🎉","💯","👏","🙌","🤝",
+  "✈️","🏖","🌿","🗺️","🏔","🌊","🌅","🏞","🌴","🏝",
+  "🍜","🍺","🥂","🍕","🍣","🥘","🍦","☕","🧋","🍻",
+  "📍","💬","💌","📸","🎶","🎵","💪","🎒","🧳","🌺",
+];
 
-// ─── Chat List ────────────────────────────────────────────────
-function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
-  const { user } = useAuthStore();
-  const { matches, fetchMatches } = useMatchStore();
-  const { messages, fetchMessages, unreadByMatch } = useChatStore();
-  const [loading, setLoading] = useState(true);
-
+function EmojiPicker({ onSelect, onClose }: { onSelect: (e: string) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!user) return;
-    const load = async () => {
-      setLoading(true);
-      await fetchMatches(user.id);
-      setLoading(false);
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    load();
-  }, [user?.id]);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
 
-  // Fetch last message for each match
-  useEffect(() => {
-    matches.forEach((m) => {
-      if (!messages[m.id]) fetchMessages(m.id);
-    });
-  }, [matches.length]);
+  return (
+    <div
+      ref={ref}
+      className="absolute bottom-14 left-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 w-64"
+    >
+      <div className="grid grid-cols-10 gap-0.5">
+        {EMOJIS.map((e) => (
+          <button
+            key={e}
+            onClick={() => { onSelect(e); onClose(); }}
+            className="h-7 w-7 flex items-center justify-center text-base hover:bg-sky-50 rounded transition"
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  const getLastMsg = (matchId: string) => {
-    const msgs = messages[matchId];
-    if (!msgs || msgs.length === 0) return "Start a conversation!";
-    return msgs[msgs.length - 1].content;
+// ─── Rich Message Card ────────────────────────────────────────────────────────
+function RichMessageCard({ msg, onBookTrip }: { msg: Message; onBookTrip?: (gemId: string) => void }) {
+  const meta = msg.metadata ?? {};
+  if (msg.messageType === "gem_card") {
+    return (
+      <div className="bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm max-w-[240px]">
+        {meta.image && (
+          <img src={meta.image as string} alt="" className="w-full h-28 object-cover" />
+        )}
+        <div className="p-3">
+          <p className="font-semibold text-slate-900 text-sm">{meta.name as string}</p>
+          <p className="text-xs text-slate-500 flex items-center gap-1 mb-2">
+            <MapPin className="h-3 w-3 text-rose-400" /> {meta.location as string}
+          </p>
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="text-[10px] bg-sky-50 text-sky-700 font-semibold px-2 py-0.5 rounded-full">
+              {meta.category as string}
+            </span>
+            {meta.budgetLevel && (
+              <span className="text-[10px] text-slate-500">{meta.budgetLevel as string}</span>
+            )}
+          </div>
+          <div className="flex gap-1.5">
+            <Link
+              to={`/gems/${meta.gemId}`}
+              className="flex-1 text-center text-[10px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 px-2 py-1.5 rounded-lg transition"
+            >
+              View Gem
+            </Link>
+            <button
+              onClick={() => onBookTrip?.(meta.gemId as string)}
+              className="flex-1 text-[10px] font-semibold text-white bg-sky-600 hover:bg-sky-700 px-2 py-1.5 rounded-lg transition"
+            >
+              Book a Trip
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (msg.messageType === "booking_card") {
+    return (
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 max-w-[220px]">
+        <div className="flex items-center gap-2 mb-2">
+          <Calendar className="h-4 w-4 text-sky-500" />
+          <p className="text-xs font-semibold text-slate-900">Booking Shared</p>
+        </div>
+        <p className="font-medium text-slate-900 text-sm">{meta.gemName as string}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{meta.date as string} · {meta.guests as number} {(meta.guests as number) === 1 ? "person" : "people"}</p>
+        <span className={`inline-block mt-2 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+          meta.status === "confirmed" ? "bg-emerald-50 text-emerald-700" :
+          meta.status === "pending" ? "bg-amber-50 text-amber-700" :
+          "bg-slate-50 text-slate-600"
+        }`}>{(meta.status as string) ?? "pending"}</span>
+        <Link
+          to="/my-bookings"
+          className="mt-2 flex items-center justify-center gap-1 text-[10px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 px-2 py-1.5 rounded-lg transition w-full"
+        >
+          View Booking <ChevronRight className="h-3 w-3" />
+        </Link>
+      </div>
+    );
+  }
+  return <p className="text-sm">{msg.content}</p>;
+}
+
+// ─── Report User Modal ────────────────────────────────────────────────────────
+const REPORT_REASONS = [
+  "Harassment or bullying",
+  "Inappropriate content",
+  "Spam or scam",
+  "Fake profile",
+  "Threatening behaviour",
+  "Other",
+];
+
+function ReportUserModal({
+  reportedUserId, reporterUserId, matchId, onClose,
+}: {
+  reportedUserId: string; reporterUserId: string; matchId: string; onClose: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [details, setDetails] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!reason) return;
+    setSubmitting(true);
+    if (isSupabaseConfigured) {
+      await supabase.from("reports").insert({
+        reporter_id: reporterUserId,
+        reported_user_id: reportedUserId,
+        reported_item_type: "user",
+        reported_item_id: reportedUserId,
+        match_id: matchId,
+        reason,
+        details: details.trim() || null,
+        status: "pending",
+      });
+    }
+    setSubmitting(false);
+    setDone(true);
   };
 
-  const getLastTime = (matchId: string) => {
-    const msgs = messages[matchId];
-    if (!msgs || msgs.length === 0) return "";
-    const d = new Date(msgs[msgs.length - 1].timestamp);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <Flag className="h-4 w-4 text-rose-500" /> Report User
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+        </div>
+        {done ? (
+          <div className="p-6 text-center">
+            <div className="h-14 w-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Check className="h-7 w-7 text-emerald-600" />
+            </div>
+            <p className="font-semibold text-slate-900 mb-1">Report Submitted</p>
+            <p className="text-xs text-slate-500 mb-4">Our team will review this report. Thank you for keeping TCUnnect safe.</p>
+            <button onClick={onClose} className="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-xl text-sm">Done</button>
+          </div>
+        ) : (
+          <div className="p-4 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-2">Reason *</label>
+              <div className="space-y-1.5">
+                {REPORT_REASONS.map((r) => (
+                  <button key={r} onClick={() => setReason(r)}
+                    className={`w-full text-left text-xs px-3 py-2.5 rounded-lg border transition ${
+                      reason === r ? "border-rose-400 bg-rose-50 text-rose-700 font-medium" : "border-slate-200 text-slate-600 hover:border-rose-200"
+                    }`}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Additional details (optional)</label>
+              <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={3} placeholder="Tell us more about what happened..."
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none resize-none" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={handleSubmit} disabled={!reason || submitting}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
+                {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Submit Report
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Report Message Modal ─────────────────────────────────────────────────────
+function ReportMessageModal({
+  msg, reporterUserId, reportedUserId, matchId, onClose,
+}: {
+  msg: Message; reporterUserId: string; reportedUserId: string; matchId: string; onClose: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!reason) return;
+    setSubmitting(true);
+    if (isSupabaseConfigured) {
+      await supabase.from("reports").insert({
+        reporter_id: reporterUserId,
+        reported_user_id: reportedUserId,
+        reported_item_type: "message",
+        reported_item_id: msg.id,
+        match_id: matchId,
+        message_content: msg.content.slice(0, 500),
+        reason,
+        status: "pending",
+      });
+    }
+    setSubmitting(false);
+    setDone(true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <Flag className="h-4 w-4 text-rose-500" /> Report Message
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+        </div>
+        {done ? (
+          <div className="p-6 text-center">
+            <div className="h-14 w-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Check className="h-7 w-7 text-emerald-600" />
+            </div>
+            <p className="font-semibold text-slate-900 mb-1">Message Reported</p>
+            <p className="text-xs text-slate-500 mb-4">Our moderation team will review this message.</p>
+            <button onClick={onClose} className="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-xl text-sm">Done</button>
+          </div>
+        ) : (
+          <div className="p-4 space-y-4">
+            <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 border border-slate-100 line-clamp-2">
+              "{msg.content}"
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-2">Why are you reporting this?</label>
+              <div className="space-y-1.5">
+                {REPORT_REASONS.map((r) => (
+                  <button key={r} onClick={() => setReason(r)}
+                    className={`w-full text-left text-xs px-3 py-2.5 rounded-lg border transition ${
+                      reason === r ? "border-rose-400 bg-rose-50 text-rose-700 font-medium" : "border-slate-200 text-slate-600 hover:border-rose-200"
+                    }`}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={handleSubmit} disabled={!reason || submitting}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
+                {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Report
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Trip Share Panel ─────────────────────────────────────────────────────────
+interface SavedGemOption {
+  id: string;
+  gemId: string;
+  name: string;
+  location: string;
+  category: string;
+  image?: string;
+  budgetLevel?: string;
+}
+
+function TripSharePanel({
+  userId, onSelectGem, onClose,
+}: {
+  userId: string; onSelectGem: (gem: SavedGemOption) => void; onClose: () => void;
+}) {
+  const [gems, setGems] = useState<SavedGemOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"saved" | "all">("saved");
+  const [allGems, setAllGems] = useState<SavedGemOption[]>([]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) { setLoading(false); return; }
+    const fetchSaved = supabase
+      .from("saved_places")
+      .select("id, gem_id, hidden_gems(name, location, category, images, budget_level)")
+      .eq("user_id", userId)
+      .limit(20);
+    const fetchAll = supabase
+      .from("hidden_gems")
+      .select("id, name, location, category, images, budget_level")
+      .eq("status", "approved")
+      .order("is_featured", { ascending: false })
+      .limit(30);
+
+    Promise.all([fetchSaved, fetchAll]).then(([s, a]) => {
+      if (s.data) {
+        setGems(s.data
+          .filter((r: any) => r.hidden_gems)
+          .map((r: any) => ({
+            id: r.id,
+            gemId: r.gem_id,
+            name: r.hidden_gems.name,
+            location: r.hidden_gems.location,
+            category: r.hidden_gems.category,
+            image: r.hidden_gems.images?.[0],
+            budgetLevel: r.hidden_gems.budget_level,
+          })));
+      }
+      if (a.data) {
+        setAllGems((a.data as any[]).map((g) => ({
+          id: g.id,
+          gemId: g.id,
+          name: g.name,
+          location: g.location,
+          category: g.category,
+          image: g.images?.[0],
+          budgetLevel: g.budget_level,
+        })));
+      }
+      setLoading(false);
+    });
+  }, [userId]);
+
+  const list = tab === "saved" ? gems : allGems;
+
+  return (
+    <div className="bg-white border-t border-slate-100 shadow-lg">
+      <div className="px-4 pt-3 pb-2 flex items-center justify-between">
+        <p className="text-xs font-bold text-slate-700">🗺️ Share a Place</p>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="flex gap-2 px-4 mb-2">
+        <button onClick={() => setTab("saved")}
+          className={`text-xs px-3 py-1 rounded-full font-medium transition ${tab === "saved" ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <Bookmark className="h-3 w-3 inline mr-1" />Saved Places
+        </button>
+        <button onClick={() => setTab("all")}
+          className={`text-xs px-3 py-1 rounded-full font-medium transition ${tab === "all" ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+          <Map className="h-3 w-3 inline mr-1" />All Gems
+        </button>
+      </div>
+      <div className="px-4 pb-3 overflow-x-auto">
+        {loading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-5 w-5 text-sky-500 animate-spin" />
+          </div>
+        ) : list.length === 0 ? (
+          <div className="text-center py-4">
+            <p className="text-xs text-slate-500">
+              {tab === "saved" ? "No saved places yet." : "No gems available."}
+            </p>
+            {tab === "saved" && (
+              <Link to="/hidden-gems" onClick={onClose} className="text-xs text-sky-600 font-medium hover:underline">
+                Explore Hidden Gems →
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="flex gap-2 pb-1">
+            {list.map((gem) => (
+              <button key={gem.id} onClick={() => onSelectGem(gem)}
+                className="shrink-0 w-36 rounded-xl border border-slate-200 overflow-hidden hover:border-sky-400 hover:shadow-sm transition text-left">
+                <div className="h-20 bg-slate-100 relative">
+                  {gem.image ? (
+                    <img src={gem.image} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-2xl">📍</div>
+                  )}
+                </div>
+                <div className="p-2">
+                  <p className="text-[11px] font-semibold text-slate-900 line-clamp-1">{gem.name}</p>
+                  <p className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                    <MapPin className="h-2.5 w-2.5" /> <span className="truncate">{gem.location}</span>
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Quick Replies ────────────────────────────────────────────────────────────
+const QUICK_REPLIES = ["Hey! 👋", "Sure, when are you free?", "I'd love to! 🏖", "Let me check my schedule", "Sounds great!"];
+
+// ─── Chat List ────────────────────────────────────────────────────────────────
+function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
+  const { matches } = useMatchStore();
+  const { messages } = useChatStore();
+  const { user } = useAuthStore();
+  const [previews, setPreviews] = useState<Record<string, { lastMsg: string; unread: number; ts?: string }>>({});
+
+  const DEMO_MATCHES = [
+    {
+      id: "dm1",
+      user: {
+        id: "u1", fullName: "Maria",
+        profilePhoto: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=100&q=80",
+        location: "Quezon City",
+        travelInterests: ["Beach", "Food"],
+      },
+      lastMsg: "Are you free next weekend? 🏖",
+    },
+  ];
+
+  // Fetch last message + unread count from Supabase for real matches
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user || matches.length === 0) return;
+    const ids = matches.map((m) => m.id);
+    supabase
+      .from("messages")
+      .select("match_id, content, message_type, created_at, read, receiver_id")
+      .in("match_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(200)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, { lastMsg: string; unread: number; ts?: string }> = {};
+        for (const row of data) {
+          const mid = row.match_id as string;
+          if (!map[mid]) {
+            const isCard = row.message_type !== "text";
+            map[mid] = {
+              lastMsg: isCard ? "📍 Shared a place" : (row.content as string),
+              unread: 0,
+              ts: row.created_at as string,
+            };
+          }
+          if (!row.read && row.receiver_id === user.id) {
+            map[mid].unread = (map[mid].unread ?? 0) + 1;
+          }
+        }
+        setPreviews(map);
+      });
+  }, [matches.length, user?.id]);
+
+  const allMatches = [
+    ...DEMO_MATCHES,
+    ...matches.map((m) => ({
+      id: m.id,
+      user: m.user,
+      lastMsg:
+        previews[m.id]?.lastMsg ??
+        (messages[m.id] ?? [])[0]?.content ??
+        "Start a conversation!",
+    })),
+  ];
+
+  const formatTs = (ts?: string) => {
+    if (!ts) return "";
+    const d = new Date(ts);
     const now = new Date();
-    if (d.toDateString() === now.toDateString())
-      return d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
-    return d.toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+    const diff = now.getTime() - d.getTime();
+    if (diff < 60000) return "now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+    return `${Math.floor(diff / 86400000)}d`;
   };
 
   return (
@@ -54,11 +495,7 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
         <p className="text-slate-500 text-sm mt-1">Chat with your travel matches</p>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
-        </div>
-      ) : matches.length === 0 ? (
+      {allMatches.length === 0 ? (
         <div className="text-center py-20">
           <div className="text-4xl mb-3">💬</div>
           <h2 className="text-lg font-bold text-slate-900 mb-2">No matches yet</h2>
@@ -66,31 +503,28 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
         </div>
       ) : (
         <div className="space-y-2">
-          {matches.map((m) => {
-            const unread = unreadByMatch[m.id] ?? 0;
+          {allMatches.map((m) => {
+            const unread = previews[m.id]?.unread ?? (m.id === "dm1" ? 1 : 0);
+            const ts = previews[m.id]?.ts;
             return (
               <button key={m.id} onClick={() => onSelectMatch(m.id)}
                 className="w-full flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition text-left">
                 <div className="relative shrink-0">
-                  <Avatar src={m.user.profilePhoto} name={m.user.fullName}
-                    className="h-14 w-14 rounded-full" textSize="text-lg" />
-                  <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-slate-300 border-2 border-white rounded-full" />
+                  <img src={m.user.profilePhoto} alt={m.user.fullName}
+                    className="h-14 w-14 rounded-full object-cover" />
+                  <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-emerald-400 border-2 border-white rounded-full" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-slate-900">{m.user.fullName}</p>
-                  {m.user.location && (
-                    <p className="text-xs text-slate-500 flex items-center gap-1 mb-0.5">
-                      <MapPin className="h-3 w-3" /> {m.user.location}
-                    </p>
-                  )}
-                  <p className={`text-sm truncate ${unread > 0 ? "text-slate-900 font-medium" : "text-slate-500"}`}>
-                    {getLastMsg(m.id)}
+                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-0.5">
+                    <MapPin className="h-3 w-3" /> {m.user.location}
+                  </p>
+                  <p className={`text-sm truncate ${unread > 0 ? "font-medium text-slate-800" : "text-slate-500"}`}>
+                    {m.lastMsg}
                   </p>
                 </div>
                 <div className="text-right shrink-0 flex flex-col items-end gap-1">
-                  {getLastTime(m.id) && (
-                    <span className="text-[10px] text-slate-400">{getLastTime(m.id)}</span>
-                  )}
+                  {ts && <p className="text-[10px] text-slate-400">{formatTs(ts)}</p>}
                   {unread > 0 && (
                     <span className="h-5 w-5 bg-sky-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                       {unread}
@@ -106,112 +540,254 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
   );
 }
 
-// ─── Chat Thread ──────────────────────────────────────────────
+// ─── Chat Thread ──────────────────────────────────────────────────────────────
 function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }) {
   const { user } = useAuthStore();
   const { matches } = useMatchStore();
-  const { messages, fetchMessages, sendMessage, markMatchRead, subscribeToMatch } = useChatStore();
+  const { messages, loadingMessages, addMessage, loadMessages, sendMessage: storeSend, markConversationRead } = useChatStore();
+  const navigate = useNavigate();
   const location = useLocation();
+
   const [input, setInput] = useState("");
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [showTripPanel, setShowTripPanel] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [showReportUser, setShowReportUser] = useState(false);
+  const [reportMsg, setReportMsg] = useState<Message | null>(null);
+  const [blockConfirm, setBlockConfirm] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [showTripPlanner, setShowTripPlanner] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const systemMessage = (location.state as { systemMessage?: string } | null)?.systemMessage ?? null;
-  const match = matches.find((m) => m.id === matchId);
+
+  // Demo match
+  const demoMatch = {
+    id: "dm1",
+    user: {
+      id: "u1", fullName: "Maria",
+      profilePhoto: "https://images.unsplash.com/photo-1675705444858-97005ce93298?auto=format&fit=crop&w=100&q=80",
+      location: "Quezon City",
+      travelInterests: ["Beach", "Food"],
+      email: "", age: 21, bio: "", createdAt: "", isPremium: false, isVerified: true,
+    },
+  };
+
+  const match = matchId === "dm1" ? demoMatch : matches.find((m) => m.id === matchId);
   const partner = match?.user;
-  const threadMsgs = messages[matchId] ?? [];
+  const isDemo = matchId === "dm1";
 
-  useEffect(() => {
-    if (!user) return;
-    const load = async () => {
-      setLoading(true);
-      await fetchMessages(matchId);
-      await markMatchRead(matchId, user.id);
-      setLoading(false);
-      inputRef.current?.focus();
-    };
-    load();
-    const unsub = subscribeToMatch(matchId);
-    return unsub;
-  }, [matchId, user?.id]);
+  // Demo messages for the demo conversation
+  const DEMO_MSGS: Message[] = isDemo ? [
+    { id: "m1", matchId: "dm1", senderId: "u1", content: "Hey! I saw we both love beaches 🏖", timestamp: new Date(Date.now() - 3600000).toISOString(), read: true },
+    { id: "m2", matchId: "dm1", senderId: "u0", content: "Yes! I've been wanting to visit Nacpan Beach 😍", timestamp: new Date(Date.now() - 3500000).toISOString(), read: true },
+    { id: "m3", matchId: "dm1", senderId: "u1", content: "Are you free next weekend? 🏖", timestamp: new Date(Date.now() - 1800000).toISOString(), read: true },
+  ] : [];
 
-  // Mark read when new messages arrive from partner
+  const supabaseMessages = messages[matchId] ?? [];
+  const threadMsgs = isDemo ? [...DEMO_MSGS, ...supabaseMessages] : supabaseMessages;
+  const loadingThread = loadingMessages[matchId] ?? false;
+
+  // Load messages from Supabase on mount
   useEffect(() => {
-    if (user && threadMsgs.some((m) => m.senderId !== user.id && !m.read)) {
-      markMatchRead(matchId, user.id);
+    if (!isDemo && isSupabaseConfigured) {
+      loadMessages(matchId);
     }
-  }, [threadMsgs.length]);
+  }, [matchId, isDemo]);
 
+  // Mark messages as read when opening conversation
+  useEffect(() => {
+    if (!user || isDemo || !isSupabaseConfigured) return;
+    markConversationRead(matchId, user.id);
+  }, [matchId, user?.id, isDemo]);
+
+  // Supabase Realtime subscription
+  useEffect(() => {
+    if (!isSupabaseConfigured || isDemo || !user) return;
+    const channel = supabase
+      .channel(`messages_${matchId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          // Only add incoming messages (we already add our own optimistically)
+          if (row.sender_id !== user.id) {
+            const msg: Message = {
+              id: row.id as string,
+              matchId: row.match_id as string,
+              senderId: row.sender_id as string,
+              receiverId: row.receiver_id as string,
+              content: row.content as string,
+              messageType: (row.message_type as Message["messageType"]) ?? "text",
+              metadata: (row.metadata as Record<string, unknown>) ?? undefined,
+              timestamp: row.created_at as string,
+              read: false,
+            };
+            addMessage(matchId, msg);
+            // Auto-mark as read since we're viewing this conversation
+            supabase.from("messages").update({ read: true }).eq("id", msg.id);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [matchId, user?.id, isDemo]);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [threadMsgs.length]);
 
-  const handleSend = async () => {
-    if (!input.trim() || !user || sending) return;
-    const text = input.trim();
-    setInput("");
-    setSending(true);
-    try {
-      await sendMessage(matchId, user.id, text);
-    } finally {
-      setSending(false);
+  // Focus input for new matches
+  useEffect(() => {
+    if (systemMessage) {
+      const t = setTimeout(() => inputRef.current?.focus(), 300);
+      return () => clearTimeout(t);
     }
+  }, [systemMessage]);
+
+  const handleSend = useCallback(async (content?: string, msgType?: string, meta?: Record<string, unknown>) => {
+    const text = content ?? input.trim();
+    if (!text || !user || !partner) return;
+    setSending(true);
+
+    if (isDemo || !isSupabaseConfigured) {
+      const msg: Message = {
+        id: `msg_${Date.now()}`,
+        matchId,
+        senderId: user.id,
+        content: text,
+        messageType: (msgType as Message["messageType"]) ?? "text",
+        metadata: meta,
+        timestamp: new Date().toISOString(),
+        read: false,
+      };
+      addMessage(matchId, msg);
+    } else {
+      await storeSend({
+        matchId,
+        senderId: user.id,
+        receiverId: partner.id,
+        content: text,
+        messageType: msgType,
+        metadata: meta,
+      });
+    }
+
+    if (!content) setInput(""); // only clear when sending from input
+    setSending(false);
+  }, [input, user, partner, matchId, isDemo, addMessage, storeSend]);
+
+  const handleShareGem = (gem: SavedGemOption) => {
+    setShowTripPanel(false);
+    const label = `📍 ${gem.name} — ${gem.location}`;
+    handleSend(label, "gem_card", {
+      gemId: gem.gemId,
+      name: gem.name,
+      location: gem.location,
+      category: gem.category,
+      image: gem.image,
+      budgetLevel: gem.budgetLevel,
+    });
+  };
+
+  const handleBlock = async () => {
+    if (!user || !partner || !isSupabaseConfigured) { setBlocked(true); return; }
+    await supabase.from("blocks").insert({
+      blocker_id: user.id,
+      blocked_id: partner.id,
+    });
+    setBlocked(true);
+    setBlockConfirm(false);
   };
 
   const formatTime = (ts: string) =>
     new Date(ts).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
 
+  if (blocked) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto items-center justify-center gap-4 px-4">
+        <div className="text-5xl">🚫</div>
+        <h3 className="font-bold text-slate-900">User Blocked</h3>
+        <p className="text-sm text-slate-500 text-center">You have blocked this user. You will no longer see or receive messages from them.</p>
+        <button onClick={onBack} className="mt-2 bg-sky-600 text-white font-semibold px-6 py-2.5 rounded-xl text-sm">
+          Back to Messages
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto">
+    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto relative">
       {/* Header */}
       <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center gap-3">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
           <ArrowLeft className="h-5 w-5" />
         </button>
-        {partner ? (
+        {partner && (
           <>
-            <Avatar src={partner.profilePhoto} name={partner.fullName}
-              className="h-9 w-9 rounded-full" textSize="text-xs" />
-            <div className="flex-1">
+            <img src={partner.profilePhoto} alt={partner.fullName}
+              className="h-9 w-9 rounded-full object-cover cursor-pointer"
+              onClick={() => navigate(`/profile/${partner.id}`)} />
+            <div className="flex-1 cursor-pointer" onClick={() => navigate(`/profile/${partner.id}`)}>
               <p className="font-semibold text-slate-900 text-sm">{partner.fullName}</p>
-              {partner.location && (
-                <p className="text-xs text-slate-400 flex items-center gap-1">
-                  <MapPin className="h-2.5 w-2.5" /> {partner.location}
-                </p>
-              )}
+              <p className="text-xs text-emerald-500 font-medium">Online</p>
             </div>
           </>
-        ) : (
-          <div className="flex-1">
-            <div className="h-4 w-24 bg-slate-100 rounded animate-pulse" />
-          </div>
         )}
-        <button onClick={() => setShowTripPlanner(!showTripPlanner)}
-          className="p-2 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition" title="Plan a trip together">
-          <Map className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1 relative">
+          <button onClick={() => { setShowTripPanel(!showTripPanel); setShowHeaderMenu(false); }}
+            className="p-2 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition" title="Share a place">
+            <Map className="h-5 w-5" />
+          </button>
+          <button onClick={() => { setShowHeaderMenu(!showHeaderMenu); setShowTripPanel(false); }}
+            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition">
+            <MoreVertical className="h-5 w-5" />
+          </button>
+
+          {/* Header dropdown */}
+          {showHeaderMenu && (
+            <div className="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-30 w-44">
+              <button
+                onClick={() => { setShowReportUser(true); setShowHeaderMenu(false); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition"
+              >
+                <Flag className="h-4 w-4 text-rose-400" /> Report User
+              </button>
+              <button
+                onClick={() => { setBlockConfirm(true); setShowHeaderMenu(false); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 transition"
+              >
+                <ShieldOff className="h-4 w-4" /> Block User
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Trip planner banner */}
-      {showTripPlanner && (
-        <div className="bg-sky-50 border-b border-sky-100 px-4 py-3">
-          <p className="text-xs font-semibold text-sky-700 mb-2">🗺️ Trip Planner</p>
-          <div className="grid grid-cols-3 gap-2">
-            {["Nacpan Beach", "Kayangan Lake", "Kalanggaman"].map((place) => (
-              <button key={place} onClick={() => { setInput(`Let's go to ${place}! 🗺️`); setShowTripPlanner(false); }}
-                className="text-xs bg-white border border-sky-200 text-sky-700 rounded-lg px-2 py-1.5 hover:bg-sky-600 hover:text-white transition">
-                {place}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Trip Share Panel */}
+      {showTripPanel && user && (
+        <TripSharePanel
+          userId={user.id}
+          onSelectGem={handleShareGem}
+          onClose={() => setShowTripPanel(false)}
+        />
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50">
+      <div
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50"
+        onClick={() => { setShowHeaderMenu(false); setShowEmoji(false); }}
+      >
         {systemMessage && (
           <div className="flex justify-center my-2">
             <span className="bg-rose-50 text-rose-600 border border-rose-100 text-xs px-4 py-2 rounded-full font-medium shadow-sm">
@@ -220,38 +796,64 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           </div>
         )}
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-sky-500" />
+        {loadingThread && !isDemo && (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 text-sky-400 animate-spin" />
           </div>
-        ) : threadMsgs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="text-4xl mb-3">👋</div>
-            <p className="text-slate-500 text-sm">You matched with {partner?.fullName ?? "someone"}!</p>
-            <p className="text-slate-400 text-xs mt-1">Say hello and start planning your next trip.</p>
-          </div>
-        ) : (
-          threadMsgs.map((msg) => {
-            const isMe = msg.senderId === user?.id;
-            return (
-              <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                {!isMe && partner && (
-                  <Avatar src={partner.profilePhoto} name={partner.fullName}
-                    className="h-7 w-7 rounded-full mr-2 self-end shrink-0" textSize="text-[10px]" />
-                )}
-                <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm ${
-                  isMe ? "bg-sky-600 text-white rounded-br-sm" : "bg-white text-slate-800 shadow-sm rounded-bl-sm"
-                }`}>
-                  <p>{msg.content}</p>
-                  <p className={`text-[10px] mt-1 ${isMe ? "text-sky-200" : "text-slate-400"}`}>
-                    {formatTime(msg.timestamp)}
-                    {isMe && <span className="ml-1">{msg.read ? "✓✓" : "✓"}</span>}
-                  </p>
-                </div>
-              </div>
-            );
-          })
         )}
+
+        {threadMsgs.map((msg) => {
+          const isMe = user ? msg.senderId === user.id : msg.senderId !== partner?.id;
+          const isCard = msg.messageType && msg.messageType !== "text";
+          return (
+            <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} group`}>
+              {!isMe && partner && (
+                <img src={partner.profilePhoto} alt=""
+                  className="h-7 w-7 rounded-full object-cover mr-2 self-end" />
+              )}
+              <div className="max-w-[80%]">
+                {isCard ? (
+                  <div className={`${isMe ? "ml-auto" : ""}`}>
+                    <RichMessageCard msg={msg} onBookTrip={(gemId) => navigate(`/booking/${gemId}`)} />
+                    <p className={`text-[10px] mt-1 ${isMe ? "text-right text-slate-400" : "text-slate-400"}`}>
+                      {formatTime(msg.timestamp)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className={`px-4 py-2.5 rounded-2xl text-sm ${
+                      isMe ? "bg-sky-600 text-white rounded-br-sm" : "bg-white text-slate-800 shadow-sm rounded-bl-sm"
+                    }`}>
+                      <p>{msg.content}</p>
+                      <p className={`text-[10px] mt-1 ${isMe ? "text-sky-200" : "text-slate-400"}`}>
+                        {formatTime(msg.timestamp)}
+                        {isMe && msg.read && <span className="ml-1 text-sky-200">✓✓</span>}
+                      </p>
+                    </div>
+                    {/* Report message button — appears on hover for partner messages */}
+                    {!isMe && user && partner && (
+                      <button
+                        onClick={() => setReportMsg(msg)}
+                        className="absolute -right-6 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition p-1 text-slate-300 hover:text-rose-400"
+                        title="Report message"
+                      >
+                        <Flag className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {threadMsgs.length === 0 && !loadingThread && (
+          <div className="text-center py-12">
+            <div className="text-3xl mb-2">👋</div>
+            <p className="text-sm text-slate-500">Say hello to {partner?.fullName ?? "your match"}!</p>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -265,29 +867,87 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
         ))}
       </div>
 
-      {/* Input */}
-      <div className="px-4 py-3 bg-white border-t border-slate-100 flex items-center gap-2">
-        <button className="p-2 text-slate-400 hover:text-sky-500 transition">
+      {/* Input row */}
+      <div className="px-4 py-3 bg-white border-t border-slate-100 flex items-center gap-2 relative">
+        <button
+          onClick={() => { setShowEmoji(!showEmoji); setShowTripPanel(false); }}
+          className={`p-2 transition rounded-lg ${showEmoji ? "text-sky-600 bg-sky-50" : "text-slate-400 hover:text-sky-500"}`}
+        >
           <Smile className="h-5 w-5" />
         </button>
+        {showEmoji && (
+          <EmojiPicker
+            onSelect={(e) => setInput((prev) => prev + e)}
+            onClose={() => setShowEmoji(false)}
+          />
+        )}
         <input
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
           placeholder="Type a message..."
           className="flex-1 px-4 py-2 text-sm border border-slate-200 rounded-full focus:ring-2 focus:ring-sky-500 outline-none"
         />
-        <button onClick={handleSend} disabled={!input.trim() || sending}
-          className="h-9 w-9 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white rounded-full flex items-center justify-center transition">
+        <button
+          onClick={() => handleSend()}
+          disabled={!input.trim() || sending}
+          className="h-9 w-9 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white rounded-full flex items-center justify-center transition"
+        >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </button>
       </div>
+
+      {/* Block confirmation */}
+      {blockConfirm && partner && user && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6">
+            <div className="h-14 w-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ShieldOff className="h-7 w-7 text-rose-600" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-center mb-2">Block {partner.fullName}?</h3>
+            <p className="text-sm text-slate-500 text-center mb-6">
+              You won't be able to send or receive messages from this person. This action can be reversed from your settings.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setBlockConfirm(false)}
+                className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">
+                Cancel
+              </button>
+              <button onClick={handleBlock}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl transition">
+                Block User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report user modal */}
+      {showReportUser && user && partner && (
+        <ReportUserModal
+          reportedUserId={partner.id}
+          reporterUserId={user.id}
+          matchId={matchId}
+          onClose={() => setShowReportUser(false)}
+        />
+      )}
+
+      {/* Report message modal */}
+      {reportMsg && user && partner && (
+        <ReportMessageModal
+          msg={reportMsg}
+          reporterUserId={user.id}
+          reportedUserId={partner.id}
+          matchId={matchId}
+          onClose={() => setReportMsg(null)}
+        />
+      )}
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────
+// ─── Main Chat Component ──────────────────────────────────────────────────────
 export default function Chat() {
   const { matchId } = useParams<{ matchId?: string }>();
   const navigate = useNavigate();
@@ -296,7 +956,10 @@ export default function Chat() {
   if (activeMatch) {
     return (
       <AppShell>
-        <ChatThread matchId={activeMatch} onBack={() => { setActiveMatch(null); navigate("/chat"); }} />
+        <ChatThread
+          matchId={activeMatch}
+          onBack={() => { setActiveMatch(null); navigate("/chat"); }}
+        />
       </AppShell>
     );
   }
