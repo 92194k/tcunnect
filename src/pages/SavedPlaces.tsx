@@ -5,6 +5,8 @@ import { useAuthStore } from "../stores";
 import { Bookmark, MapPin, Star, Loader2, Trash2, ChevronRight, Compass } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
+const CATEGORIES = ["All", "Beach", "Mountain", "Nature", "Heritage", "Cafe", "Waterfalls", "City", "Food"];
+
 const CATEGORY_EMOJIS: Record<string, string> = {
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
   Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
@@ -26,6 +28,7 @@ export default function SavedPlaces() {
   const [saved, setSaved] = useState<SavedGem[]>([]);
   const [loading, setLoading] = useState(true);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
     fetchSaved();
@@ -81,6 +84,10 @@ export default function SavedPlaces() {
     setRemoving(null);
   }
 
+  const filtered = activeCategory === "All"
+    ? saved
+    : saved.filter(s => s.gem_category === activeCategory);
+
   return (
     <AppShell>
       <div className="max-w-2xl mx-auto px-4 py-6">
@@ -94,6 +101,25 @@ export default function SavedPlaces() {
             <p className="text-sm text-slate-500">Your personal list of hidden gems</p>
           </div>
         </div>
+
+        {/* Category filter chips */}
+        {!loading && saved.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-5 scrollbar-hide">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-medium transition ${
+                  activeCategory === cat
+                    ? "bg-sky-600 text-white"
+                    : "bg-white border border-slate-200 text-slate-600 hover:border-sky-300"
+                }`}
+              >
+                {cat === "All" ? "All" : `${CATEGORY_EMOJIS[cat] ?? ""} ${cat}`}
+              </button>
+            ))}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex justify-center py-20">
@@ -113,10 +139,20 @@ export default function SavedPlaces() {
               <Compass className="h-4 w-4" /> Explore Hidden Gems
             </Link>
           </div>
+        ) : filtered.length === 0 && activeCategory !== "All" ? (
+          <div className="text-center py-16">
+            <div className="text-4xl mb-3">{CATEGORY_EMOJIS[activeCategory] ?? "📍"}</div>
+            <p className="text-slate-500 text-sm">No saved {activeCategory} places yet.</p>
+            <button onClick={() => setActiveCategory("All")} className="mt-3 text-sky-600 text-sm font-medium hover:underline">
+              Show all saved places
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs text-slate-400 font-medium mb-4">{saved.length} place{saved.length !== 1 ? "s" : ""} saved</p>
-            {saved.map((item) => (
+            <p className="text-xs text-slate-400 font-medium mb-4">
+              {filtered.length} place{filtered.length !== 1 ? "s" : ""}{activeCategory !== "All" ? ` in ${activeCategory}` : " saved"}
+            </p>
+            {filtered.map((item) => (
               <div
                 key={item.id}
                 className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex gap-0"

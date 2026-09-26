@@ -5,31 +5,10 @@ import { useAuthStore } from "../stores";
 import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check, Image, Link2 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
-const CATEGORIES = [
-  "All",
-  "Beach & Island Hopping",
-  "Nature & Hiking",
-  "History & Culture",
-  "Food & Cafés",
-  "City Exploring",
-  "Adventure & Thrills",
-  "Scenic & Sunset Spots",
-  "Hidden Gems",
-  "Waterfalls",
-];
+const CATEGORIES = ["All", "Beach", "Mountain", "Nature", "Heritage", "Cafe", "Waterfalls", "City", "Food"];
 const CATEGORY_EMOJIS: Record<string, string> = {
-  "Beach & Island Hopping": "🏖",
-  "Nature & Hiking": "🌿",
-  "History & Culture": "🏛",
-  "Food & Cafés": "🍜",
-  "City Exploring": "🌆",
-  "Adventure & Thrills": "🧗",
-  "Scenic & Sunset Spots": "🌅",
-  "Hidden Gems": "💎",
-  "Waterfalls": "💦",
-  // legacy short names (in case any old gems use them)
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
-  Cafe: "☕", City: "🌆", Food: "🍜",
+  Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
 };
 
 interface Gem {
@@ -42,21 +21,19 @@ interface Gem {
   review_count: number;
   budget_level: string;
   tip: string;
-  photo_source: string;
   is_featured: boolean;
 }
 
 const EMPTY_FORM = {
   name: "",
   location: "",
-  category: "Beach & Island Hopping",
+  category: "Beach",
   description: "",
   imageUrl: "",
   budget_level: "₱₱",
   rating: "",
   review_count: "",
   tip: "",
-  photo_source: "",
   is_featured: false,
 };
 
@@ -66,7 +43,9 @@ export default function HiddenGems() {
 
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
-  const [saved, setSaved] = useState<Set<string>>(new Set());
+  // Map: gemId -> saved_places row id (empty string = not saved)
+  const [savedMap, setSavedMap] = useState<Map<string, string>>(new Map());
+  const [savingGemId, setSavingGemId] = useState<string | null>(null);
   const [gems, setGems] = useState<Gem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -82,6 +61,57 @@ export default function HiddenGems() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fetchGems(); }, []);
+
+  // Load user's saved places from Supabase on mount
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured) return;
+    supabase
+      .from("saved_places")
+      .select("id, gem_id")
+      .eq("user_id", user.id)
+      .then(({ data }) => {
+        if (data) {
+          const map = new Map<string, string>();
+          data.forEach((row: { id: string; gem_id: string }) => map.set(row.gem_id, row.id));
+          setSavedMap(map);
+        }
+      });
+  }, [user?.id]);
+
+  async function toggleSave(gemId: string, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user || savingGemId) return;
+    setSavingGemId(gemId);
+
+    const existingId = savedMap.get(gemId);
+    if (existingId) {
+      // Remove
+      if (isSupabaseConfigured) {
+        await supabase.from("saved_places").delete().eq("id", existingId);
+      }
+      setSavedMap(prev => {
+        const next = new Map(prev);
+        next.delete(gemId);
+        return next;
+      });
+    } else {
+      // Save
+      if (isSupabaseConfigured) {
+        const { data } = await supabase
+          .from("saved_places")
+          .insert({ user_id: user.id, gem_id: gemId })
+          .select("id")
+          .single();
+        if (data) {
+          setSavedMap(prev => new Map(prev).set(gemId, data.id));
+        }
+      } else {
+        setSavedMap(prev => new Map(prev).set(gemId, "local"));
+      }
+    }
+    setSavingGemId(null);
+  }
 
   async function fetchGems() {
     setLoading(true);
@@ -104,15 +134,6 @@ export default function HiddenGems() {
     const matchesCat = activeCategory === "All" || g.category === activeCategory;
     return matchesQuery && matchesCat;
   });
-
-  const toggleSave = (id: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    setSaved((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  };
 
   function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -165,7 +186,6 @@ export default function HiddenGems() {
         rating: form.rating ? parseFloat(form.rating) : 0,
         review_count: form.review_count ? parseInt(form.review_count) : 0,
         tip: form.tip.trim(),
-        photo_source: form.photo_source.trim(),
         is_featured: isAdmin ? form.is_featured : false,
         status,
         submitted_by: user?.id ?? null,
@@ -394,18 +414,6 @@ export default function HiddenGems() {
                   />
                 </div>
 
-                {/* Photo Source */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Photo Source / Credit</label>
-                  <input
-                    value={form.photo_source}
-                    onChange={(e) => setForm({ ...form, photo_source: e.target.value })}
-                    placeholder="e.g. Photo by Juan dela Cruz · Unsplash"
-                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Credit the photographer or where you found the photo</p>
-                </div>
-
                 {/* ✨ Feature checkbox — ADMIN ONLY */}
                 {isAdmin && (
                   <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
@@ -495,56 +503,83 @@ export default function HiddenGems() {
         {/* Gem grid */}
         {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filtered.map((gem) => (
-              <Link
-                key={gem.id}
-                to={`/gems/${gem.id}`}
-                className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition"
-              >
-                <div className="relative h-44 overflow-hidden bg-slate-100">
-                  {gem.images?.[0] ? (
-                    <img
-                      src={gem.images[0]}
-                      alt={gem.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-5xl">
-                      {CATEGORY_EMOJIS[gem.category] ?? "📍"}
+            {filtered.map((gem) => {
+              const isSaved = savedMap.has(gem.id);
+              const isSaving = savingGemId === gem.id;
+              return (
+                <div
+                  key={gem.id}
+                  className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col"
+                >
+                  {/* Clickable image + info area */}
+                  <Link to={`/gems/${gem.id}`} className="block">
+                    <div className="relative h-44 overflow-hidden bg-slate-100">
+                      {gem.images?.[0] ? (
+                        <img
+                          src={gem.images[0]}
+                          alt={gem.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-5xl">
+                          {CATEGORY_EMOJIS[gem.category] ?? "📍"}
+                        </div>
+                      )}
+                      <span className="absolute top-3 left-3 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-full">
+                        {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
+                      </span>
+                      {gem.is_featured && (
+                        <span className="absolute bottom-3 left-3 bg-amber-400 text-amber-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                          ✨ Featured
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <button
-                    onClick={(e) => toggleSave(gem.id, e)}
-                    className="absolute top-3 right-3 h-8 w-8 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white transition"
-                  >
-                    <Bookmark className={`h-4 w-4 ${saved.has(gem.id) ? "fill-sky-600 text-sky-600" : "text-slate-500"}`} />
-                  </button>
-                  <span className="absolute top-3 left-3 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-1 rounded-full">
-                    {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
-                  </span>
-                  {gem.is_featured && (
-                    <span className="absolute bottom-3 left-3 bg-amber-400 text-amber-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
-                      ✨ Featured
-                    </span>
-                  )}
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-slate-900 text-sm mb-0.5">{gem.name}</h3>
-                  <p className="text-xs text-slate-500 flex items-center gap-1 mb-2">
-                    <MapPin className="h-3 w-3" /> {gem.location}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 text-amber-400 fill-current" />
-                      <span className="text-xs font-medium text-slate-700">{gem.rating || "—"}</span>
-                      <span className="text-xs text-slate-400">({gem.review_count || 0})</span>
+                    <div className="p-4 pb-2">
+                      <h3 className="font-semibold text-slate-900 text-sm mb-0.5">{gem.name}</h3>
+                      <p className="text-xs text-slate-500 flex items-center gap-1 mb-2">
+                        <MapPin className="h-3 w-3" /> {gem.location}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <Star className="h-3.5 w-3.5 text-amber-400 fill-current" />
+                          <span className="text-xs font-medium text-slate-700">{gem.rating || "—"}</span>
+                          <span className="text-xs text-slate-400">({gem.review_count || 0})</span>
+                        </div>
+                        <span className="text-xs text-slate-500 font-medium">{gem.budget_level}</span>
+                      </div>
+                      {gem.tip && <p className="text-xs text-sky-600 mt-2 italic line-clamp-1">💡 {gem.tip}</p>}
                     </div>
-                    <span className="text-xs text-slate-500 font-medium">{gem.budget_level}</span>
+                  </Link>
+
+                  {/* Action buttons — outside Link so they don't navigate */}
+                  <div className="px-4 pb-4 pt-2 flex gap-2 mt-auto">
+                    <Link
+                      to={`/booking/${gem.id}`}
+                      className="flex-1 text-center text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 px-3 py-2 rounded-lg transition"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Book a Trip
+                    </Link>
+                    <button
+                      onClick={(e) => toggleSave(gem.id, e)}
+                      disabled={isSaving}
+                      className={`flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold transition border ${
+                        isSaved
+                          ? "bg-sky-50 border-sky-200 text-sky-700"
+                          : "bg-white border-slate-200 text-slate-600 hover:border-sky-300 hover:text-sky-700"
+                      }`}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Bookmark className={`h-3.5 w-3.5 ${isSaved ? "fill-sky-600 text-sky-600" : ""}`} />
+                      )}
+                      {isSaved ? "Saved" : "Save"}
+                    </button>
                   </div>
-                  {gem.tip && <p className="text-xs text-sky-600 mt-2 italic line-clamp-1">💡 {gem.tip}</p>}
                 </div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
         )}
 
