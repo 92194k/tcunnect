@@ -56,7 +56,7 @@ function RichMessageCard({ msg, onBookTrip }: { msg: Message; onBookTrip?: (gemI
   if (msg.messageType === "gem_card") {
     return (
       <div className="bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm max-w-[240px]">
-        {meta.image && (
+        {!!meta.image && (
           <img src={meta.image as string} alt="" className="w-full h-28 object-cover" />
         )}
         <div className="p-3">
@@ -68,7 +68,7 @@ function RichMessageCard({ msg, onBookTrip }: { msg: Message; onBookTrip?: (gemI
             <span className="text-[10px] bg-sky-50 text-sky-700 font-semibold px-2 py-0.5 rounded-full">
               {meta.category as string}
             </span>
-            {meta.budgetLevel && (
+            {!!meta.budgetLevel && (
               <span className="text-[10px] text-slate-500">{meta.budgetLevel as string}</span>
             )}
           </div>
