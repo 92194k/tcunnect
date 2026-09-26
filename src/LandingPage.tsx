@@ -36,6 +36,7 @@ interface PublicProfile {
   home_city: string | null;
   travel_style: string | null;
   interests: string[] | null;
+  age?: number;
 }
 
 type IconName =
@@ -393,9 +394,9 @@ const FLOAT_KEYFRAMES = `
 `;
 
 const FAKE_PROFILES: PublicProfile[] = [
-  { id: "1", full_name: "Mika R.", profile_photo: null, home_city: "Cebu City", travel_style: "Adventure", interests: ["Island hopping", "Diving"] },
-  { id: "2", full_name: "Carlo S.", profile_photo: null, home_city: "Manila", travel_style: "Backpacker", interests: ["Hiking", "Food trips"] },
-  { id: "3", full_name: "Aira T.", profile_photo: null, home_city: "Davao", travel_style: "Explorer", interests: ["Photography", "Culture"] },
+  { id: "1", full_name: "Maomao", profile_photo: "/avatars/maomao.jpg", home_city: "Taguig City", travel_style: "Explorer", interests: ["Hiking", "Nature"], age: 18 },
+  { id: "2", full_name: "Jinshi", profile_photo: "/avatars/jinshi.jpg", home_city: "Cebu City", travel_style: "Food Trip", interests: ["Beach Lover", "Food trips"], age: 19 },
+  { id: "3", full_name: "Lihaku", profile_photo: "/avatars/lihaku.webp", home_city: "Zamboanga", travel_style: "Outdoorsy", interests: ["Photography", "Camping"], age: 23 },
 ];
 
 function DiscoverPeopleSection() {
@@ -462,25 +463,16 @@ function DiscoverPeopleSection() {
                   style={floatStyle}
                   className={`block overflow-hidden rounded-3xl bg-white shadow-[0_20px_50px_rgba(17,80,110,0.13)] transition hover:shadow-[0_28px_60px_rgba(17,80,110,0.2)] cursor-pointer ${midCard ? "sm:scale-105" : ""}`}
                 >
-                  {/* Photo area — blurred */}
+                  {/* Photo area */}
                   <div className="relative h-60 overflow-hidden">
                     {hasPhoto ? (
                       <>
-                        {/* Blurred background */}
                         <img
                           src={profile.profile_photo!}
-                          alt=""
-                          className="absolute inset-0 h-full w-full object-cover scale-125"
-                          style={{ filter: "blur(16px)", transform: "scale(1.25)" }}
+                          alt={name}
+                          className="absolute inset-0 h-full w-full object-cover"
                         />
-                        {/* Gradient overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/50" />
-                        {/* Centered initials avatar */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                          <div className={`h-24 w-24 rounded-full bg-gradient-to-br ${avatarColor(name)} flex items-center justify-center text-white text-3xl font-bold shadow-2xl ring-4 ring-white/50`}>
-                            {initials(name)}
-                          </div>
-                        </div>
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40" />
                       </>
                     ) : (
                       <>
@@ -512,7 +504,7 @@ function DiscoverPeopleSection() {
                   <div className="p-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-bold text-slate-900 text-base">{name.split(" ")[0]}</h3>
+                        <h3 className="font-bold text-slate-900 text-base">{name.split(" ")[0]}{profile.age ? `, ${profile.age}` : ""}</h3>
                         <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
                           <Icon name="location" className="h-3 w-3 text-rose-400" />
                           {profile.home_city || "Philippines"}
