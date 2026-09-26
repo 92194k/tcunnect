@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import AppShell from "../components/AppShell";
-import { useAuthStore } from "../stores";
+import { useAuthStore, createNotification } from "../stores";
 import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -87,6 +87,19 @@ function PostCard({
 
     await loadComments();
     if (!parentId) setCommentCount((n) => n + 1);
+
+    // Notify user of their own community activity (reply/comment)
+    if (user) {
+      const isReply = parentId !== null;
+      await createNotification(user.id, {
+        type: "community_reply",
+        title: isReply ? "You replied to a comment 💬" : "You commented on a post 💬",
+        body: text.trim().slice(0, 80) + (text.trim().length > 80 ? "…" : ""),
+        linkTo: `/community#${post.id}`,
+        referenceId: post.id,
+      });
+    }
+
     setCommentText("");
     setReplyText("");
     setReplyingTo(null);

@@ -63,15 +63,11 @@ function profileToUser(profile: Record<string, unknown>): User {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isLoggedIn: false,
-  // isLoading is ONLY for loadSession() — the initial session check on app boot.
-  // login() and signup() must NOT touch isLoading so that RedirectIfLoggedIn
-  // never unmounts an active form component mid-submission.
-  isLoading: true,
+  isLoading: true,  // true until loadSession resolves — prevents premature guard redirects
   onboardingComplete: false,
 
   // Load existing session on app start
   loadSession: async () => {
-    console.log("[loadSession] called");
     if (!isSupabaseConfigured) { set({ isLoading: false }); return; } // demo mode
     set({ isLoading: true });
     const { data: { session } } = await supabase.auth.getSession();
@@ -81,40 +77,35 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (profile) {
       const user = profileToUser(profile);
       const onboardingComplete = (user.travelInterests?.length ?? 0) > 0;
-      console.log("[loadSession] profile loaded — onboardingComplete:", onboardingComplete);
       set({ user, isLoggedIn: true, onboardingComplete, isLoading: false });
     } else {
-      console.log("[loadSession] no profile row found for user");
       set({ isLoading: false });
     }
   },
 
   login: async (email, password) => {
-    // NOTE: intentionally does NOT set isLoading — that flag is only for loadSession().
-    // Login.tsx manages its own submitting state to avoid unmounting the form.
-    console.log("[login] START");
+    set({ isLoading: true });
 
     // ── Demo mode ──────────────────────────────────────────────
     if (!isSupabaseConfigured) {
       await new Promise((r) => setTimeout(r, 800));
       const user = DEMO_USERS[email.toLowerCase()];
       if (!user || password.length < 6) {
+        set({ isLoading: false });
         throw new Error("Invalid credentials. Try demo@tcunnect.com / password123");
       }
-      set({ user, isLoggedIn: true, onboardingComplete: true });
+      set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: true });
       return;
     }
 
     // ── Live Supabase mode ─────────────────────────────────────
     const { error, data } = await supabase.auth.signInWithPassword({ email, password });
-    console.log("[login] supabase response — error:", error, "user:", data?.user?.id, "session:", !!data?.session);
-    if (error) throw new Error(error.message);
-    if (!data.user) return;
+    if (error) { set({ isLoading: false }); throw new Error(error.message); }
+    if (!data.user) { set({ isLoading: false }); return; }
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: "", created_at: new Date().toISOString() });
-    console.log("[login] setting store — isLoggedIn:true onboardingComplete:", (user.travelInterests?.length ?? 0) > 0);
-    set({ user, isLoggedIn: true, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
+    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
   },
 
   loginWithGoogle: async () => {
@@ -129,10 +120,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signup: async (email, password, fullName) => {
-    // NOTE: intentionally does NOT set isLoading — that flag is only for loadSession().
-    // SignUp.tsx manages its own submitting state to avoid unmounting the form
-    // (which would cause setEmailSent(true) to run on an unmounted component and be lost).
-    console.log("[signup] START — email:", email);
+    set({ isLoading: true });
 
     // ── Demo mode ──────────────────────────────────────────────
     if (!isSupabaseConfigured) {
@@ -142,7 +130,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         profilePhoto: "", travelInterests: [],
         createdAt: new Date().toISOString(), isPremium: false, isVerified: false,
       };
-      set({ user: newUser, isLoggedIn: true, onboardingComplete: false });
+      set({ user: newUser, isLoggedIn: true, isLoading: false, onboardingComplete: false });
       return;
     }
 
@@ -150,31 +138,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { error, data } = await supabase.auth.signUp({
       email, password, options: { data: { full_name: fullName } },
     });
-    console.log("[signup] supabase.auth.signUp response:", {
-      error: error?.message ?? null,
-      userId: data?.user?.id ?? null,
-      hasSession: !!data?.session,
-    });
-
-    if (error) throw new Error(error.message);
-    if (!data.user) {
-      console.warn("[signup] no user in response — unusual");
-      return;
-    }
+    if (error) { set({ isLoading: false }); throw new Error(error.message); }
+    if (!data.user) { set({ isLoading: false }); return; }
 
     // Email confirmation required — no session yet
     if (!data.session) {
-      console.log("[signup] no session — email confirmation required → throwing __EMAIL_CONFIRM__");
+      set({ isLoading: false });
       throw new Error("__EMAIL_CONFIRM__");
     }
 
-    // Session exists — confirmation is disabled or auto-confirmed
-    console.log("[signup] session exists — loading profile");
     const { data: profile } = await supabase
       .from("profiles").select("*").eq("id", data.user.id).single();
     const user = profileToUser(profile ?? { id: data.user.id, email, full_name: fullName, created_at: new Date().toISOString() });
-    console.log("[signup] setting store — isLoggedIn:true onboardingComplete:", (user.travelInterests?.length ?? 0) > 0);
-    set({ user, isLoggedIn: true, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
+    set({ user, isLoggedIn: true, isLoading: false, onboardingComplete: (user.travelInterests?.length ?? 0) > 0 });
   },
 
   logout: async () => {
@@ -215,7 +191,6 @@ interface MatchState {
   setMatches: (matches: Match[]) => void;
   addMatch: (match: Match) => void;
   clearNewMatch: () => void;
-  fetchMatches: (userId: string) => Promise<void>;
 }
 
 export const useMatchStore = create<MatchState>((set) => ({
@@ -225,62 +200,17 @@ export const useMatchStore = create<MatchState>((set) => ({
   addMatch: (match) =>
     set((s) => ({ matches: [...s.matches, match], newMatch: match })),
   clearNewMatch: () => set({ newMatch: null }),
-
-  fetchMatches: async (userId: string) => {
-    if (!isSupabaseConfigured) return;
-    const { data, error } = await supabase
-      .from("matches")
-      .select(`
-        id, created_at, status,
-        user1:profiles!matches_user1_id_fkey(id, full_name, profile_photo, location, travel_interests),
-        user2:profiles!matches_user2_id_fkey(id, full_name, profile_photo, location, travel_interests)
-      `)
-      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-      .eq("status", "active")
-      .order("created_at", { ascending: false });
-
-    console.log("[fetchMatches] raw data:", JSON.stringify(data?.slice(0,2)));
-    if (error) { console.error("[fetchMatches] error:", error.message, error.code); return; }
-
-    const matches: Match[] = (data ?? []).map((row: any) => {
-      const partner = row.user1?.id === userId ? row.user2 : row.user1;
-      return {
-        id: row.id,
-        user1Id: row.user1?.id ?? "",
-        user2Id: row.user2?.id ?? "",
-        status: (row.status ?? "active") as "active" | "blocked" | "archived",
-        user: {
-          id: partner?.id ?? "",
-          fullName: partner?.full_name ?? "Unknown",
-          email: "",
-          profilePhoto: partner?.profile_photo ?? "",
-          location: partner?.location ?? "",
-          travelInterests: partner?.travel_interests ?? [],
-          age: 0, bio: "", createdAt: row.created_at, isPremium: false, isVerified: false,
-        },
-        createdAt: row.created_at,
-      };
-    });
-    set({ matches });
-  },
 }));
 
 // ─── Chat Store ──────────────────────────────────────────────
 interface ChatState {
   messages: Record<string, Message[]>; // keyed by matchId
-  unreadByMatch: Record<string, number>; // unread counts per match
   addMessage: (matchId: string, message: Message) => void;
   setMessages: (matchId: string, messages: Message[]) => void;
-  fetchMessages: (matchId: string) => Promise<void>;
-  sendMessage: (matchId: string, senderId: string, content: string) => Promise<void>;
-  markMatchRead: (matchId: string, userId: string) => Promise<void>;
-  subscribeToMatch: (matchId: string) => () => void;
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>((set) => ({
   messages: {},
-  unreadByMatch: {},
-
   addMessage: (matchId, message) =>
     set((s) => ({
       messages: {
@@ -288,111 +218,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         [matchId]: [...(s.messages[matchId] ?? []), message],
       },
     })),
-
   setMessages: (matchId, messages) =>
     set((s) => ({ messages: { ...s.messages, [matchId]: messages } })),
-
-  fetchMessages: async (matchId: string) => {
-    if (!isSupabaseConfigured) return;
-    const { data, error } = await supabase
-      .from("messages")
-      .select("id, match_id, sender_id, content, read, created_at")
-      .eq("match_id", matchId)
-      .order("created_at", { ascending: true });
-
-    console.log("[fetchMessages] matchId:", matchId, "rows:", data?.length, "error:", error?.message);
-    if (error) { console.error("[fetchMessages] error:", error.message); return; }
-
-    const msgs: Message[] = (data ?? []).map((m: any) => ({
-      id: m.id,
-      matchId: m.match_id,
-      senderId: m.sender_id,
-      content: m.content,
-      read: m.read,
-      timestamp: m.created_at,
-    }));
-    set((s) => ({ messages: { ...s.messages, [matchId]: msgs } }));
-  },
-
-  sendMessage: async (matchId: string, senderId: string, content: string) => {
-    // Optimistic: add to local state immediately with a temp id
-    const tempId = `temp_${Date.now()}`;
-    const optimistic: Message = { id: tempId, matchId, senderId, content, read: false, timestamp: new Date().toISOString() };
-    get().addMessage(matchId, optimistic);
-    console.log("[sendMessage] optimistic add", { matchId, senderId, content });
-
-    if (!isSupabaseConfigured) return;
-
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({ match_id: matchId, sender_id: senderId, content })
-      .select("id, match_id, sender_id, content, read, created_at")
-      .single();
-
-    if (error) {
-      console.error("[sendMessage] insert error:", error.message, error.code, error.details);
-      // Remove the optimistic message on failure
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [matchId]: (s.messages[matchId] ?? []).filter((m) => m.id !== tempId),
-        },
-      }));
-      return;
-    }
-
-    if (data) {
-      console.log("[sendMessage] insert success, id:", data.id);
-      // Replace temp message with real one from DB
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [matchId]: (s.messages[matchId] ?? []).map((m) =>
-            m.id === tempId
-              ? { id: data.id, matchId: data.match_id, senderId: data.sender_id, content: data.content, read: data.read, timestamp: data.created_at }
-              : m
-          ),
-        },
-      }));
-    }
-  },
-
-  markMatchRead: async (matchId: string, userId: string) => {
-    if (!isSupabaseConfigured) return;
-    await supabase
-      .from("messages")
-      .update({ read: true })
-      .eq("match_id", matchId)
-      .neq("sender_id", userId)
-      .eq("read", false);
-    set((s) => ({ unreadByMatch: { ...s.unreadByMatch, [matchId]: 0 } }));
-  },
-
-  subscribeToMatch: (matchId: string) => {
-    if (!isSupabaseConfigured) return () => {};
-    const channel = supabase
-      .channel(`messages:${matchId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `match_id=eq.${matchId}` },
-        (payload) => {
-          const m = payload.new as any;
-          const msg: Message = { id: m.id, matchId: m.match_id, senderId: m.sender_id, content: m.content, read: m.read, timestamp: m.created_at };
-          // Only add if not already in store.
-          // Sender already has it (optimistic or replaced). Receiver doesn't yet.
-          const existing = get().messages[matchId] ?? [];
-          const alreadyExists = existing.find((e) => e.id === msg.id);
-          if (!alreadyExists) {
-            console.log("[realtime] new message from", msg.senderId, ":", msg.content);
-            get().addMessage(matchId, msg);
-          } else {
-            console.log("[realtime] deduped message id", msg.id);
-          }
-        }
-      )
-      .subscribe((status, err) => {
-        console.log("[realtime] channel", `messages:${matchId}`, "status:", status, err ?? "");
-      });
-    return () => { supabase.removeChannel(channel); };
-  },
 }));
 
 // ─── Notification Store ───────────────────────────────────────
@@ -417,7 +244,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ loading: true });
     const { data, error } = await supabase
       .from("notifications")
-      .select("id, type, title, body, read, created_at")
+      .select("id, type, title, body, read, created_at, link_to, reference_id")
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -434,6 +261,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       body: n.body ?? "",
       read: n.read,
       createdAt: n.created_at,
+      linkTo: n.link_to ?? undefined,
+      referenceId: n.reference_id ?? undefined,
     }));
 
     set({
@@ -479,6 +308,51 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   setNotifications: (notifications) =>
     set({ notifications, unreadCount: notifications.filter((n) => !n.read).length }),
 }));
+
+// ─── Notification helper — call from any page after a user action ────────────
+export async function createNotification(
+  userId: string,
+  opts: {
+    type: Notification["type"];
+    title: string;
+    body: string;
+    linkTo?: string;
+    referenceId?: string;
+  }
+) {
+  if (!isSupabaseConfigured) return;
+  try {
+    const { data } = await supabase
+      .from("notifications")
+      .insert({
+        user_id: userId,
+        type: opts.type,
+        title: opts.title,
+        body: opts.body,
+        read: false,
+        link_to: opts.linkTo ?? null,
+        reference_id: opts.referenceId ?? null,
+      })
+      .select("id, type, title, body, read, created_at, link_to, reference_id")
+      .single();
+
+    if (data) {
+      const notif: Notification = {
+        id: data.id,
+        type: data.type as Notification["type"],
+        title: data.title,
+        body: data.body ?? "",
+        read: data.read,
+        createdAt: data.created_at,
+        linkTo: data.link_to ?? undefined,
+        referenceId: data.reference_id ?? undefined,
+      };
+      useNotificationStore.getState().addNotification(notif);
+    }
+  } catch (e) {
+    console.error("createNotification error:", e);
+  }
+}
 
 // ─── Bookings Store ───────────────────────────────────────────
 interface BookingState {

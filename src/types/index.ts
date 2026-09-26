@@ -131,9 +131,13 @@ export type NotificationType =
   | "match"
   | "message"
   | "like"
+  | "booking_submitted"
   | "booking_confirmed"
   | "booking_cancelled"
+  | "booking_updated"
+  | "community_reply"
   | "gem_approved"
+  | "gem_update"
   | "system";
 
 export interface Notification {
@@ -143,6 +147,8 @@ export interface Notification {
   body: string;
   read: boolean;
   createdAt: string;
+  linkTo?: string;
+  referenceId?: string;
 }
 
 export interface Report {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
-import { useAuthStore, useBookingStore } from "../stores";
+import { useAuthStore, useBookingStore, createNotification } from "../stores";
 import { Check, Calendar, Users, MapPin, ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import type { Booking, TripType } from "../types";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
@@ -76,6 +76,14 @@ export default function Booking() {
 
         if (data) {
           addBooking({ ...localBooking, id: data.id, createdAt: data.created_at });
+          // Notify the user their booking was submitted
+          await createNotification(user.id, {
+            type: "booking_submitted",
+            title: "Booking Submitted 📅",
+            body: `Your trip to ${gemName} has been submitted and is pending confirmation.`,
+            linkTo: "/my-bookings",
+            referenceId: data.id,
+          });
         }
       } catch {
         // Fall back to local-only
