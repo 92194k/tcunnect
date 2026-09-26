@@ -464,10 +464,17 @@ const QUICK_REPLIES = ["Hey! 👋", "Sure, when are you free?", "I'd love to! �
 
 // ─── Chat List ────────────────────────────────────────────────────────────────
 function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
-  const { matches } = useMatchStore();
+  const { matches, loadingMatches, loadMatches } = useMatchStore();
   const { messages } = useChatStore();
   const { user } = useAuthStore();
   const [previews, setPreviews] = useState<Record<string, { lastMsg: string; unread: number; ts?: string }>>({});
+
+  // Load matches from Supabase on mount (handles page refresh)
+  useEffect(() => {
+    if (isSupabaseConfigured && user) {
+      loadMatches(user.id);
+    }
+  }, [user?.id]);
 
   // Fetch last message + unread count from Supabase for real matches
   useEffect(() => {
@@ -527,7 +534,11 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
         <p className="text-slate-500 text-sm mt-1">Chat with your travel matches</p>
       </div>
 
-      {allMatches.length === 0 ? (
+      {loadingMatches ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-7 w-7 text-sky-400 animate-spin" />
+        </div>
+      ) : allMatches.length === 0 ? (
         <div className="text-center py-20">
           <div className="text-4xl mb-3">💬</div>
           <h2 className="text-lg font-bold text-slate-900 mb-2">No matches yet</h2>
@@ -535,6 +546,7 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
         </div>
       ) : (
         <div className="space-y-2">
+
           {allMatches.map((m) => {
             const unread = previews[m.id]?.unread ?? 0;
             const ts = previews[m.id]?.ts;
@@ -600,10 +612,61 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   const systemMessage = (location.state as { systemMessage?: string } | null)?.systemMessage ?? null;
 
   const match = matches.find((m) => m.id === matchId);
-  const partner = match?.user;
+  const [partner, setPartner] = useState<import("../types").User | undefined>(match?.user);
 
   const threadMsgs = messages[matchId] ?? [];
   const loadingThread = loadingMessages[matchId] ?? false;
+
+  // Keep partner in sync with Zustand (e.g. after loadMatches resolves)
+  useEffect(() => {
+    if (match?.user) setPartner(match.user);
+  }, [match?.user?.id]);
+
+  // If partner isn't in Zustand yet (direct nav or page refresh), fetch from DB
+  useEffect(() => {
+    if (partner || !isSupabaseConfigured || !user) return;
+    (async () => {
+      const { data: matchRow } = await supabase
+        .from("matches")
+        .select("id, user1_id, user2_id, status, created_at")
+        .eq("id", matchId)
+        .single();
+      if (!matchRow) return;
+      const partnerId = matchRow.user1_id === user.id ? matchRow.user2_id : matchRow.user1_id;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, full_name, profile_photo, location, bio, travel_interests, is_premium, is_verified, email, created_at, age")
+        .eq("id", partnerId)
+        .single();
+      if (!profile) return;
+      const partnerUser: import("../types").User = {
+        id: profile.id as string,
+        email: (profile.email as string) ?? "",
+        fullName: (profile.full_name as string) ?? "",
+        age: profile.age as number | undefined,
+        bio: (profile.bio as string) ?? "",
+        location: (profile.location as string) ?? "",
+        profilePhoto: (profile.profile_photo as string) ?? "",
+        travelInterests: (profile.travel_interests as string[]) ?? [],
+        createdAt: profile.created_at as string,
+        isPremium: Boolean(profile.is_premium),
+        isVerified: Boolean(profile.is_verified),
+      };
+      setPartner(partnerUser);
+      // Also register in match store so chat list and send work correctly
+      const { setMatches, matches: currentMatches } = useMatchStore.getState();
+      if (!currentMatches.find((m) => m.id === matchId)) {
+        setMatches([...currentMatches, {
+          id: matchRow.id,
+          user1Id: matchRow.user1_id,
+          user2Id: matchRow.user2_id,
+          user: partnerUser,
+          createdAt: matchRow.created_at,
+          status: matchRow.status as import("../types").Match["status"],
+        }]);
+      }
+    })();
+  }, [matchId, user?.id, partner]);
 
   // Load messages from Supabase on mount
   useEffect(() => {
@@ -619,10 +682,21 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   }, [matchId, user?.id]);
 
   // Supabase Realtime subscription
+  // Use a ref for user.id to avoid stale closures in the event handler
+  const userIdRef = useRef(user?.id);
+  useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+
   useEffect(() => {
     if (!isSupabaseConfigured || !user) return;
+
+    // Remove any leftover channel with the same name before creating a new one
+    const channelName = `messages_${matchId}`;
+    supabase.getChannels().forEach((ch) => {
+      if (ch.topic === `realtime:${channelName}`) supabase.removeChannel(ch);
+    });
+
     const channel = supabase
-      .channel(`messages_${matchId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -634,7 +708,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
         (payload) => {
           const row = payload.new as Record<string, unknown>;
           // Only add incoming messages (we already add our own optimistically)
-          if (row.sender_id !== user.id) {
+          if (row.sender_id !== userIdRef.current) {
             const msg: Message = {
               id: row.id as string,
               matchId: row.match_id as string,
@@ -652,7 +726,15 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "SUBSCRIBED") {
+          console.log("[Realtime] ✓ subscribed to", channelName);
+        } else if (status === "CHANNEL_ERROR") {
+          console.error("[Realtime] ✗ channel error:", err);
+        } else if (status === "TIMED_OUT") {
+          console.warn("[Realtime] ✗ subscription timed out:", channelName);
+        }
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, [matchId, user?.id]);

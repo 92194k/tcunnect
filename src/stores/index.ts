@@ -188,18 +188,87 @@ export const useAuthStore = create<AuthState>((set) => ({
 interface MatchState {
   matches: Match[];
   newMatch: Match | null;
+  loadingMatches: boolean;
   setMatches: (matches: Match[]) => void;
   addMatch: (match: Match) => void;
   clearNewMatch: () => void;
+  loadMatches: (userId: string) => Promise<void>;
 }
 
-export const useMatchStore = create<MatchState>((set) => ({
+export const useMatchStore = create<MatchState>((set, get) => ({
   matches: [],
   newMatch: null,
+  loadingMatches: false,
   setMatches: (matches) => set({ matches }),
   addMatch: (match) =>
-    set((s) => ({ matches: [...s.matches, match], newMatch: match })),
+    set((s) => {
+      // Avoid duplicates (e.g. if loadMatches already loaded this match)
+      if (s.matches.find((m) => m.id === match.id)) return { newMatch: match };
+      return { matches: [...s.matches, match], newMatch: match };
+    }),
   clearNewMatch: () => set({ newMatch: null }),
+
+  loadMatches: async (userId: string) => {
+    if (!isSupabaseConfigured || !userId) return;
+    set({ loadingMatches: true });
+
+    // 1. Fetch all active matches where current user is a participant
+    const { data: matchRows, error } = await supabase
+      .from("matches")
+      .select("id, user1_id, user2_id, status, created_at")
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+
+    if (error || !matchRows || matchRows.length === 0) {
+      set({ loadingMatches: false });
+      return;
+    }
+
+    // 2. Collect all partner IDs
+    const partnerIds = matchRows.map((m) =>
+      m.user1_id === userId ? m.user2_id : m.user1_id
+    );
+
+    // 3. Fetch partner profiles in one query
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, profile_photo, location, bio, travel_interests, is_premium, is_verified, email, created_at, age")
+      .in("id", partnerIds);
+
+    const profileMap: Record<string, Record<string, unknown>> = {};
+    for (const p of (profiles ?? [])) profileMap[p.id as string] = p as Record<string, unknown>;
+
+    // 4. Build Match objects
+    const matches: Match[] = matchRows.map((m) => {
+      const partnerId = m.user1_id === userId ? m.user2_id : m.user1_id;
+      const profile = profileMap[partnerId];
+      const partner: User = profile
+        ? profileToUser(profile)
+        : {
+            id: partnerId, email: "", fullName: "Traveler", bio: "",
+            location: "", profilePhoto: "", travelInterests: [],
+            createdAt: m.created_at, isPremium: false, isVerified: false,
+          };
+      return {
+        id: m.id,
+        user1Id: m.user1_id,
+        user2Id: m.user2_id,
+        user: partner,
+        createdAt: m.created_at,
+        status: m.status as Match["status"],
+      };
+    });
+
+    // 5. Merge with existing (don't wipe out a match added mid-session)
+    const existing = get().matches;
+    const merged = [...matches];
+    for (const ex of existing) {
+      if (!merged.find((m) => m.id === ex.id)) merged.push(ex);
+    }
+
+    set({ matches: merged, loadingMatches: false });
+  },
 }));
 
 // ─── Chat Store ──────────────────────────────────────────────
