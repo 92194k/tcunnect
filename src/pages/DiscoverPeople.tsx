@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
+import Avatar from "../components/Avatar";
 import TravelMap from "../components/TravelMap";
 import type { MapMarker } from "../components/TravelMap";
 import { useAuthStore, useMatchStore } from "../stores";
@@ -143,25 +144,13 @@ function MatchModal({
 
         {/* Avatars */}
         <div className="flex items-center justify-center gap-4 mb-6">
-          <div className="h-20 w-20 rounded-full overflow-hidden border-4 border-white shadow-lg ring-2 ring-sky-300">
-            {myPhoto ? (
-              <img src={myPhoto} alt="You" className="h-full w-full object-cover" />
-            ) : (
-              <div className="h-full w-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-2xl font-bold">
-                👤
-              </div>
-            )}
-          </div>
+          <Avatar src={myPhoto} name="You"
+            className="h-20 w-20 rounded-full border-4 border-white shadow-lg ring-2 ring-sky-300"
+            textSize="text-2xl" />
           <Heart className="h-8 w-8 text-rose-500 fill-current animate-pulse" />
-          <div className="h-20 w-20 rounded-full overflow-hidden border-4 border-white shadow-lg ring-2 ring-rose-300">
-            {traveler.profilePhoto ? (
-              <img src={traveler.profilePhoto} alt={traveler.fullName} className="h-full w-full object-cover" />
-            ) : (
-              <div className="h-full w-full bg-gradient-to-br from-rose-400 to-rose-600 flex items-center justify-center text-white text-2xl font-bold">
-                {traveler.fullName[0]}
-              </div>
-            )}
-          </div>
+          <Avatar src={traveler.profilePhoto} name={traveler.fullName}
+            className="h-20 w-20 rounded-full border-4 border-white shadow-lg ring-2 ring-rose-300"
+            textSize="text-2xl" />
         </div>
 
         {/* Shared interests */}
@@ -572,17 +561,8 @@ export default function DiscoverPeople() {
                 showConnectionAnim ? "border-rose-300 shadow-rose-100/80" : "border-slate-100 shadow-slate-200/60"
               }`}>
                 <div className="relative h-80">
-                  {currentTraveler.profilePhoto ? (
-                    <img
-                      src={currentTraveler.profilePhoto}
-                      alt={currentTraveler.fullName}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-sky-100 to-slate-200 flex items-center justify-center">
-                      <span className="text-6xl">👤</span>
-                    </div>
-                  )}
+                  <Avatar src={currentTraveler.profilePhoto} name={currentTraveler.fullName}
+                    className="w-full h-full" textSize="text-7xl" />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/10 to-transparent" />
 
                   {currentTraveler.isVerified && (

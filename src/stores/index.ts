@@ -253,7 +253,7 @@ export const useMatchStore = create<MatchState>((set) => ({
           id: partner?.id ?? "",
           fullName: partner?.full_name ?? "Unknown",
           email: "",
-          profilePhoto: partner?.profile_photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(partner?.full_name ?? "?")}&background=0ea5e9&color=fff`,
+          profilePhoto: partner?.profile_photo ?? "",
           location: partner?.location ?? "",
           travelInterests: partner?.travel_interests ?? [],
           age: 0, bio: "", createdAt: row.created_at, isPremium: false, isVerified: false,

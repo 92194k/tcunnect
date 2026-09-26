@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useMatchStore, useChatStore, useAuthStore } from "../stores";
 import { Send, ArrowLeft, MapPin, Smile, Map, Loader2 } from "lucide-react";
+import Avatar from "../components/Avatar";
 
 const QUICK_REPLIES = ["Hey! 👋", "Sure, when are you free?", "I'd love to! 🏖", "Let me check my schedule", "Sounds great!"];
 
@@ -71,8 +72,8 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
               <button key={m.id} onClick={() => onSelectMatch(m.id)}
                 className="w-full flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition text-left">
                 <div className="relative shrink-0">
-                  <img src={m.user.profilePhoto} alt={m.user.fullName}
-                    className="h-14 w-14 rounded-full object-cover bg-slate-100" />
+                  <Avatar src={m.user.profilePhoto} name={m.user.fullName}
+                    className="h-14 w-14 rounded-full" textSize="text-lg" />
                   <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-slate-300 border-2 border-white rounded-full" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -172,8 +173,8 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
         </button>
         {partner ? (
           <>
-            <img src={partner.profilePhoto} alt={partner.fullName}
-              className="h-9 w-9 rounded-full object-cover bg-slate-100" />
+            <Avatar src={partner.profilePhoto} name={partner.fullName}
+              className="h-9 w-9 rounded-full" textSize="text-xs" />
             <div className="flex-1">
               <p className="font-semibold text-slate-900 text-sm">{partner.fullName}</p>
               {partner.location && (
@@ -235,8 +236,8 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
             return (
               <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                 {!isMe && partner && (
-                  <img src={partner.profilePhoto} alt=""
-                    className="h-7 w-7 rounded-full object-cover bg-slate-100 mr-2 self-end shrink-0" />
+                  <Avatar src={partner.profilePhoto} name={partner.fullName}
+                    className="h-7 w-7 rounded-full mr-2 self-end shrink-0" textSize="text-[10px]" />
                 )}
                 <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm ${
                   isMe ? "bg-sky-600 text-white rounded-br-sm" : "bg-white text-slate-800 shadow-sm rounded-bl-sm"
