@@ -36,7 +36,7 @@ export interface Match {
   status: "active" | "blocked" | "archived";
 }
 
-export type MessageType = 'text' | 'gem_card' | 'booking_card' | 'trip_plan';
+export type MessageType = 'text' | 'gem_card' | 'booking_card' | 'trip_plan' | 'image';
 
 export interface Message {
   id: string;

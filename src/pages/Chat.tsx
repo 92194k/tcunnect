@@ -5,7 +5,7 @@ import { useMatchStore, useChatStore, useAuthStore } from "../stores";
 import {
   Send, ArrowLeft, MapPin, Smile, Map, MoreVertical, X,
   Flag, ShieldOff, Loader2, ChevronRight, Bookmark, Calendar,
-  Star, Check,
+  Star, Check, ImagePlus,
 } from "lucide-react";
 import type { Message } from "../types";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
@@ -111,6 +111,17 @@ function RichMessageCard({ msg, onBookTrip }: { msg: Message; onBookTrip?: (gemI
           View Booking <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
+    );
+  }
+  if (msg.messageType === "image") {
+    return (
+      <img
+        src={msg.content}
+        alt="Shared photo"
+        className="rounded-2xl max-w-[240px] max-h-64 object-cover shadow-sm border border-slate-100 cursor-pointer"
+        onClick={() => window.open(msg.content, "_blank")}
+        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+      />
     );
   }
   return <p className="text-sm">{msg.content}</p>;
@@ -411,6 +422,43 @@ function TripSharePanel({
   );
 }
 
+// ─── Photo Upgrade Prompt ─────────────────────────────────────────────────────
+function PhotoUpgradeModal({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        <div className="bg-gradient-to-br from-sky-500 to-violet-600 p-6 text-center">
+          <div className="h-16 w-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <ImagePlus className="h-8 w-8 text-white" />
+          </div>
+          <h2 className="text-white font-bold text-lg">Photo Sharing</h2>
+          <p className="text-white/80 text-sm mt-1">TCUnnect Plus feature</p>
+        </div>
+        <div className="p-5">
+          <p className="text-slate-700 text-sm text-center mb-4">
+            Share travel photos directly in your conversations.
+            Upgrade to <span className="font-bold text-sky-600">TCUnnect Plus</span> to unlock photo messaging.
+          </p>
+          <div className="bg-sky-50 border border-sky-100 rounded-xl px-4 py-3 text-center mb-4">
+            <p className="text-2xl font-bold text-sky-700">₱30</p>
+            <p className="text-xs text-sky-600 font-medium">Lifetime · Founding Explorer</p>
+          </div>
+          <button
+            onClick={() => { onClose(); navigate("/plans"); }}
+            className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 rounded-xl text-sm transition mb-2"
+          >
+            Upgrade to Plus
+          </button>
+          <button onClick={onClose} className="w-full text-slate-500 text-sm py-2 hover:text-slate-700 transition">
+            Maybe later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Quick Replies ────────────────────────────────────────────────────────────
 const QUICK_REPLIES = ["Hey! 👋", "Sure, when are you free?", "I'd love to! 🏖", "Let me check my schedule", "Sounds great!"];
 
@@ -542,9 +590,12 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   const [blockConfirm, setBlockConfirm] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [sending, setSending] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showPhotoUpgrade, setShowPhotoUpgrade] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const systemMessage = (location.state as { systemMessage?: string } | null)?.systemMessage ?? null;
 
@@ -648,6 +699,49 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
       image: gem.image,
       budgetLevel: gem.budgetLevel,
     });
+  };
+
+  const handlePhotoClick = () => {
+    if (!user?.isPremium) {
+      setShowPhotoUpgrade(true);
+    } else {
+      photoInputRef.current?.click();
+    }
+  };
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !partner || !isSupabaseConfigured) return;
+
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+
+    setUploadingPhoto(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `chat/${matchId}/${user.id}_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("chat-images")
+        .upload(path, file, { upsert: false, contentType: file.type });
+
+      if (uploadError) throw new Error(uploadError.message);
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("chat-images")
+        .getPublicUrl(path);
+
+      await storeSend({
+        matchId,
+        senderId: user.id,
+        receiverId: partner.id,
+        content: publicUrl,
+        messageType: "image",
+      });
+    } catch (err) {
+      console.error("Photo upload failed:", err);
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const handleBlock = async () => {
@@ -754,7 +848,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
 
         {threadMsgs.map((msg) => {
           const isMe = user ? msg.senderId === user.id : msg.senderId !== partner?.id;
-          const isCard = msg.messageType && msg.messageType !== "text";
+          const isCard = msg.messageType && msg.messageType !== "text" && msg.messageType !== undefined;
           return (
             <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} group`}>
               {!isMe && partner && (
@@ -819,6 +913,15 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
 
       {/* Input row */}
       <div className="px-4 py-3 bg-white border-t border-slate-100 flex items-center gap-2 relative">
+        {/* Hidden file input for photo upload */}
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handlePhotoSelect}
+        />
+
         <button
           onClick={() => { setShowEmoji(!showEmoji); setShowTripPanel(false); }}
           className={`p-2 transition rounded-lg ${showEmoji ? "text-sky-600 bg-sky-50" : "text-slate-400 hover:text-sky-500"}`}
@@ -831,6 +934,27 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
             onClose={() => setShowEmoji(false)}
           />
         )}
+
+        {/* Photo button */}
+        <button
+          onClick={handlePhotoClick}
+          disabled={uploadingPhoto}
+          title={user?.isPremium ? "Send a photo" : "Photo sharing — Plus only"}
+          className={`p-2 transition rounded-lg relative ${
+            user?.isPremium
+              ? "text-slate-400 hover:text-sky-500"
+              : "text-slate-300 hover:text-slate-400"
+          }`}
+        >
+          {uploadingPhoto
+            ? <Loader2 className="h-5 w-5 animate-spin text-sky-500" />
+            : <ImagePlus className="h-5 w-5" />
+          }
+          {!user?.isPremium && (
+            <span className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-amber-400 rounded-full border-2 border-white" title="Plus only" />
+          )}
+        </button>
+
         <input
           ref={inputRef}
           value={input}
@@ -847,6 +971,11 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </button>
       </div>
+
+      {/* Photo upgrade prompt */}
+      {showPhotoUpgrade && (
+        <PhotoUpgradeModal onClose={() => setShowPhotoUpgrade(false)} />
+      )}
 
       {/* Block confirmation */}
       {blockConfirm && partner && user && (
