@@ -392,27 +392,15 @@ const FLOAT_KEYFRAMES = `
 }
 `;
 
-function DiscoverPeopleSection() {
-  const [profiles, setProfiles] = useState<PublicProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+const FAKE_PROFILES: PublicProfile[] = [
+  { id: "1", full_name: "Mika R.", profile_photo: null, home_city: "Cebu City", travel_style: "Adventure", interests: ["Island hopping", "Diving"] },
+  { id: "2", full_name: "Carlo S.", profile_photo: null, home_city: "Manila", travel_style: "Backpacker", interests: ["Hiking", "Food trips"] },
+  { id: "3", full_name: "Aira T.", profile_photo: null, home_city: "Davao", travel_style: "Explorer", interests: ["Photography", "Culture"] },
+];
 
-  useEffect(() => {
-    async function fetchProfiles() {
-      if (!isSupabaseConfigured) { setLoading(false); return; }
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, profile_photo, home_city, travel_style, interests")
-        .limit(6);
-      console.log("[TCUnnect] profiles fetch:", data, error);
-      if (data && data.length > 0) {
-        // Use any profile that exists, even without a name
-        const valid = data.filter((p) => p.id);
-        setProfiles(valid as PublicProfile[]);
-      }
-      setLoading(false);
-    }
-    fetchProfiles();
-  }, []);
+function DiscoverPeopleSection() {
+  const profiles = FAKE_PROFILES;
+  const loading = false;
 
   function tagsFor(profile: PublicProfile, count = 2): string[] {
     if (profile.interests && Array.isArray(profile.interests) && profile.interests.length > 0) {
