@@ -236,7 +236,7 @@ export default function DiscoverPeople() {
     if (!isSupabaseConfigured) return;
     supabase
       .from("hidden_gems")
-      .select("id, name, location, category")
+      .select("id, name, location, category, images")
       .eq("status", "approved")
       .limit(100)
       .then(({ data }) => {
@@ -245,6 +245,7 @@ export default function DiscoverPeople() {
         for (const gem of data) {
           const coords = geocodeLocation(gem.location ?? "");
           if (!coords) continue;
+          const firstImage = Array.isArray(gem.images) && gem.images[0] ? gem.images[0] : undefined;
           markers.push({
             id: `gem_${gem.id}`,
             lat: coords[0],
@@ -252,6 +253,7 @@ export default function DiscoverPeople() {
             type: "gem",
             label: gem.name ?? "Hidden Gem",
             sublabel: gem.location ?? "",
+            photo: firstImage,
             active: false,
           });
         }

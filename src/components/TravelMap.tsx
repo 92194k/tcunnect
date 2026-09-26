@@ -103,6 +103,7 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
   const mapRef = useRef<ReturnType<typeof window.L.map> | null>(null);
   const markersRef = useRef<Map<string, ReturnType<typeof window.L.marker>>>(new Map());
   const matchLineRef = useRef<ReturnType<typeof window.L.polyline> | null>(null);
+  const gemTooltipRef = useRef<HTMLDivElement | null>(null);
 
   // ── Init map ────────────────────────────────────────────────────
   useEffect(() => {
@@ -131,9 +132,31 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
       mapRef.current = map;
+
+      // ── Gem hover tooltip div (added to map container, positioned absolutely)
+      if (containerRef.current && !gemTooltipRef.current) {
+        const tip = document.createElement("div");
+        tip.style.cssText = [
+          "position:absolute",
+          "z-index:1500",
+          "pointer-events:none",
+          "display:none",
+          "background:#fff",
+          "border-radius:12px",
+          "box-shadow:0 8px 28px rgba(0,0,0,0.22)",
+          "overflow:hidden",
+          "width:170px",
+          "border:2px solid #d1fae5",
+          "transition:opacity .15s",
+        ].join(";");
+        containerRef.current.appendChild(tip);
+        gemTooltipRef.current = tip;
+      }
     });
 
     return () => {
+      gemTooltipRef.current?.remove();
+      gemTooltipRef.current = null;
       matchLineRef.current?.remove();
       matchLineRef.current = null;
       mapRef.current?.remove();
@@ -176,6 +199,30 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
           .addTo(map)
           .bindPopup(popup, { maxWidth: 200 });
         markersRef.current.set(m.id, mk);
+
+        // ── Gem hover image preview (only for gem markers that have a photo)
+        if (m.type === "gem" && m.photo) {
+          const photo = m.photo;
+          const label = m.label;
+          const sublabel = m.sublabel ?? "";
+          mk.on("mouseover", (e: { containerPoint: { x: number; y: number } }) => {
+            const tip = gemTooltipRef.current;
+            if (!tip) return;
+            tip.innerHTML = [
+              `<img src="${photo}" style="width:170px;height:110px;object-fit:cover;display:block"/>`,
+              `<div style="padding:7px 10px 3px;font-size:12px;font-weight:700;color:#064e3b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>`,
+              sublabel ? `<div style="padding:0 10px 7px;font-size:11px;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📍 ${sublabel}</div>` : `<div style="padding-bottom:7px"/>`,
+            ].join("");
+            const x = e.containerPoint.x;
+            const y = e.containerPoint.y;
+            tip.style.left = `${x - 85}px`;
+            tip.style.top  = `${y - 175}px`;
+            tip.style.display = "block";
+          });
+          mk.on("mouseout", () => {
+            if (gemTooltipRef.current) gemTooltipRef.current.style.display = "none";
+          });
+        }
       }
 
       // Auto-open popup for the active marker
