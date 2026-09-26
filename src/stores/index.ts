@@ -215,6 +215,7 @@ interface MatchState {
   setMatches: (matches: Match[]) => void;
   addMatch: (match: Match) => void;
   clearNewMatch: () => void;
+  fetchMatches: (userId: string) => Promise<void>;
 }
 
 export const useMatchStore = create<MatchState>((set) => ({
@@ -224,17 +225,63 @@ export const useMatchStore = create<MatchState>((set) => ({
   addMatch: (match) =>
     set((s) => ({ matches: [...s.matches, match], newMatch: match })),
   clearNewMatch: () => set({ newMatch: null }),
+
+  fetchMatches: async (userId: string) => {
+    if (!isSupabaseConfigured) return;
+    const { data, error } = await supabase
+      .from("matches")
+      .select(`
+        id, created_at, status,
+        user1:profiles!matches_user1_id_fkey(id, full_name, avatar_url, location, travel_interests),
+        user2:profiles!matches_user2_id_fkey(id, full_name, avatar_url, location, travel_interests)
+      `)
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+
+    if (error) { console.error("[fetchMatches]", error); return; }
+
+    const matches: Match[] = (data ?? []).map((row: any) => {
+      const partner = row.user1?.id === userId ? row.user2 : row.user1;
+      return {
+        id: row.id,
+        user1Id: row.user1?.id ?? "",
+        user2Id: row.user2?.id ?? "",
+        status: (row.status ?? "active") as "active" | "blocked" | "archived",
+        user: {
+          id: partner?.id ?? "",
+          fullName: partner?.full_name ?? "Unknown",
+          email: "",
+          profilePhoto: partner?.avatar_url
+            ? `${partner.avatar_url}?t=${Date.now()}`
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(partner?.full_name ?? "?")}&background=0ea5e9&color=fff`,
+          location: partner?.location ?? "",
+          travelInterests: partner?.travel_interests ?? [],
+          age: 0, bio: "", createdAt: row.created_at, isPremium: false, isVerified: false,
+        },
+        createdAt: row.created_at,
+      };
+    });
+    set({ matches });
+  },
 }));
 
 // ─── Chat Store ──────────────────────────────────────────────
 interface ChatState {
   messages: Record<string, Message[]>; // keyed by matchId
+  unreadByMatch: Record<string, number>; // unread counts per match
   addMessage: (matchId: string, message: Message) => void;
   setMessages: (matchId: string, messages: Message[]) => void;
+  fetchMessages: (matchId: string) => Promise<void>;
+  sendMessage: (matchId: string, senderId: string, content: string) => Promise<void>;
+  markMatchRead: (matchId: string, userId: string) => Promise<void>;
+  subscribeToMatch: (matchId: string) => () => void;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   messages: {},
+  unreadByMatch: {},
+
   addMessage: (matchId, message) =>
     set((s) => ({
       messages: {
@@ -242,8 +289,80 @@ export const useChatStore = create<ChatState>((set) => ({
         [matchId]: [...(s.messages[matchId] ?? []), message],
       },
     })),
+
   setMessages: (matchId, messages) =>
     set((s) => ({ messages: { ...s.messages, [matchId]: messages } })),
+
+  fetchMessages: async (matchId: string) => {
+    if (!isSupabaseConfigured) return;
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, match_id, sender_id, content, read, created_at")
+      .eq("match_id", matchId)
+      .order("created_at", { ascending: true });
+
+    if (error) { console.error("[fetchMessages]", error); return; }
+
+    const msgs: Message[] = (data ?? []).map((m: any) => ({
+      id: m.id,
+      matchId: m.match_id,
+      senderId: m.sender_id,
+      content: m.content,
+      read: m.read,
+      timestamp: m.created_at,
+    }));
+    set((s) => ({ messages: { ...s.messages, [matchId]: msgs } }));
+  },
+
+  sendMessage: async (matchId: string, senderId: string, content: string) => {
+    if (!isSupabaseConfigured) {
+      // offline fallback
+      const msg: Message = { id: `local_${Date.now()}`, matchId, senderId, content, read: false, timestamp: new Date().toISOString() };
+      get().addMessage(matchId, msg);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({ match_id: matchId, sender_id: senderId, content })
+      .select("id, match_id, sender_id, content, read, created_at")
+      .single();
+
+    if (error) { console.error("[sendMessage]", error); return; }
+    if (data) {
+      const msg: Message = { id: data.id, matchId: data.match_id, senderId: data.sender_id, content: data.content, read: data.read, timestamp: data.created_at };
+      get().addMessage(matchId, msg);
+    }
+  },
+
+  markMatchRead: async (matchId: string, userId: string) => {
+    if (!isSupabaseConfigured) return;
+    await supabase
+      .from("messages")
+      .update({ read: true })
+      .eq("match_id", matchId)
+      .neq("sender_id", userId)
+      .eq("read", false);
+    set((s) => ({ unreadByMatch: { ...s.unreadByMatch, [matchId]: 0 } }));
+  },
+
+  subscribeToMatch: (matchId: string) => {
+    if (!isSupabaseConfigured) return () => {};
+    const channel = supabase
+      .channel(`messages:${matchId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `match_id=eq.${matchId}` },
+        (payload) => {
+          const m = payload.new as any;
+          const msg: Message = { id: m.id, matchId: m.match_id, senderId: m.sender_id, content: m.content, read: m.read, timestamp: m.created_at };
+          // Only add if not already in store (avoids duplicate from sendMessage optimistic insert)
+          const existing = get().messages[matchId] ?? [];
+          if (!existing.find((e) => e.id === msg.id)) {
+            get().addMessage(matchId, msg);
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  },
 }));
 
 // ─── Notification Store ───────────────────────────────────────
