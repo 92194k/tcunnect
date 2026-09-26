@@ -277,3 +277,23 @@ create policy "Users can submit reports"
 -- Run this in Supabase SQL editor if not already done:
 -- alter publication supabase_realtime add table public.messages;
 -- Without this, subscribeToMatch channel never receives INSERT events.
+
+-- ─── Storage: avatars bucket ───────────────────────────────────────────────
+-- Run this in the Supabase SQL editor if the avatars bucket doesn't exist yet.
+-- The bucket must be public so generated URLs are accessible without auth headers.
+--
+-- insert into storage.buckets (id, name, public)
+-- values ('avatars', 'avatars', true)
+-- on conflict (id) do update set public = true;
+--
+-- create policy "Authenticated users can upload avatars"
+-- on storage.objects for insert to authenticated
+-- with check (bucket_id = 'avatars');
+--
+-- create policy "Authenticated users can update avatars"
+-- on storage.objects for update to authenticated
+-- using (bucket_id = 'avatars');
+--
+-- create policy "Avatars are publicly readable"
+-- on storage.objects for select to public
+-- using (bucket_id = 'avatars');

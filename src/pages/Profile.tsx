@@ -175,8 +175,9 @@ export default function Profile() {
       await updateProfile({ profilePhoto: publicUrl });
       // Force re-render with busted URL locally so uploader sees change immediately
       setUser({ ...user!, profilePhoto: `${publicUrl}?t=${Date.now()}` });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Photo upload failed:", err);
+      alert("Photo upload failed: " + (err?.message ?? String(err)));
     } finally {
       setPhotoUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
