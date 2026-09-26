@@ -6,7 +6,7 @@ import { supabase, isSupabaseConfigured } from "./lib/supabase";
 // Replace this URL with your own photo URL to show it in the hero section.
 // Upload your photo to Supabase Storage or any image host, then paste the URL here.
 // Example: "https://your-bucket.supabase.co/storage/v1/object/public/photos/hero.jpg"
-const HERO_PHOTO_URL = "https://gtmcfsicvndmhqygradn.supabase.co/storage/v1/object/public/photos/239977_691e4d79d9f3a.jpg";
+const HERO_PHOTO_URL = "C:\Users\king leonard\Downloads\TCUnnect\public\Gemini_Generated_Image_efsm2iefsm2iefsm.jpg";
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Types ────────────────────────────────────────────────────────────────────
