@@ -158,6 +158,7 @@ create table if not exists public.hidden_gems (
   rating            numeric(3,1) not null default 0,
   review_count      integer not null default 0,
   tip               text not null default '',
+  photo_source      text not null default '',
   is_featured       boolean not null default false,
   created_at        timestamptz not null default now()
 );

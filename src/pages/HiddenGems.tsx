@@ -21,6 +21,7 @@ interface Gem {
   review_count: number;
   budget_level: string;
   tip: string;
+  photo_source: string;
   is_featured: boolean;
 }
 
@@ -34,6 +35,7 @@ const EMPTY_FORM = {
   rating: "",
   review_count: "",
   tip: "",
+  photo_source: "",
   is_featured: false,
 };
 
@@ -142,6 +144,7 @@ export default function HiddenGems() {
         rating: form.rating ? parseFloat(form.rating) : 0,
         review_count: form.review_count ? parseInt(form.review_count) : 0,
         tip: form.tip.trim(),
+        photo_source: form.photo_source.trim(),
         is_featured: isAdmin ? form.is_featured : false,
         status,
         submitted_by: user?.id ?? null,
@@ -368,6 +371,18 @@ export default function HiddenGems() {
                     placeholder="e.g. Go early morning to avoid crowds"
                     className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
                   />
+                </div>
+
+                {/* Photo Source */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Photo Source / Credit</label>
+                  <input
+                    value={form.photo_source}
+                    onChange={(e) => setForm({ ...form, photo_source: e.target.value })}
+                    placeholder="e.g. Photo by Juan dela Cruz · Unsplash"
+                    className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Credit the photographer or where you found the photo</p>
                 </div>
 
                 {/* ✨ Feature checkbox — ADMIN ONLY */}

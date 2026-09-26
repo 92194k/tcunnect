@@ -28,6 +28,7 @@ interface Gem {
   tip: string;
   best_time_to_visit: string;
   is_featured: boolean;
+  photo_source?: string;
   status?: string;
   submitted_by?: string;
 }
@@ -427,7 +428,7 @@ export default function GemDetail() {
     const { user: authUser } = useAuthStore.getState();
     const { data, error } = await supabase
       .from("hidden_gems")
-      .select("id, name, location, category, images, rating, review_count, budget_level, description, tip, best_time_to_visit, is_featured, status, submitted_by")
+      .select("id, name, location, category, images, rating, review_count, budget_level, description, tip, best_time_to_visit, is_featured, status, submitted_by, photo_source")
       .eq("id", id)
       .single();
 
@@ -578,6 +579,13 @@ export default function GemDetail() {
               </button>
             ))}
           </div>
+        )}
+
+        {/* Photo credit */}
+        {gem.photo_source && (
+          <p className="text-[11px] text-slate-400 mb-4 flex items-center gap-1">
+            <span>📷</span> {gem.photo_source}
+          </p>
         )}
 
         {/* Title */}
