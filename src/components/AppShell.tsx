@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import ScrollArrow from "./ScrollArrow";
+import { isSupabaseConfigured } from "../lib/supabase";
 
 const NAV = [
   { to: "/dashboard", label: "Home", Icon: Home },
@@ -19,7 +20,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { unreadCount } = useNotificationStore();
+  const { unreadCount, fetchNotifications } = useNotificationStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -30,6 +31,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const isActive = (to: string) => location.pathname === to;
+
+  // Fetch real notification count once when the shell mounts (user is logged in)
+  useEffect(() => {
+    if (user && isSupabaseConfigured) {
+      fetchNotifications();
+    }
+  }, [user?.id]);
 
   // Close dropdown on outside click
   useEffect(() => {

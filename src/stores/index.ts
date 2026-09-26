@@ -226,32 +226,83 @@ export const useChatStore = create<ChatState>((set) => ({
 interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
+  loading: boolean;
+  fetchNotifications: () => Promise<void>;
   addNotification: (n: Notification) => void;
   markAsRead: (id: string) => void;
   markAllRead: () => void;
   setNotifications: (notifications: Notification[]) => void;
 }
 
-export const useNotificationStore = create<NotificationState>((set) => ({
+export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
-  unreadCount: 2, // demo unread count
+  unreadCount: 0, // always derived from real data — never hardcoded
+  loading: false,
+
+  fetchNotifications: async () => {
+    if (!isSupabaseConfigured) return;
+    set({ loading: true });
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("id, type, title, body, read, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("fetchNotifications error:", error);
+      set({ loading: false });
+      return;
+    }
+
+    const notifications: Notification[] = (data ?? []).map((n) => ({
+      id: n.id,
+      type: n.type as Notification["type"],
+      title: n.title,
+      body: n.body ?? "",
+      read: n.read,
+      createdAt: n.created_at,
+    }));
+
+    set({
+      notifications,
+      unreadCount: notifications.filter((n) => !n.read).length,
+      loading: false,
+    });
+  },
+
   addNotification: (n) =>
     set((s) => ({
       notifications: [n, ...s.notifications],
-      unreadCount: s.unreadCount + 1,
+      unreadCount: s.unreadCount + (n.read ? 0 : 1),
     })),
-  markAsRead: (id) =>
+
+  markAsRead: async (id) => {
+    // Optimistic update
     set((s) => ({
       notifications: s.notifications.map((n) =>
         n.id === id ? { ...n, read: true } : n
       ),
       unreadCount: Math.max(0, s.unreadCount - 1),
-    })),
-  markAllRead: () =>
+    }));
+    // Persist to Supabase
+    if (isSupabaseConfigured) {
+      await supabase.from("notifications").update({ read: true }).eq("id", id);
+    }
+  },
+
+  markAllRead: async () => {
+    const ids = get().notifications.filter((n) => !n.read).map((n) => n.id);
+    // Optimistic update
     set((s) => ({
       notifications: s.notifications.map((n) => ({ ...n, read: true })),
       unreadCount: 0,
-    })),
+    }));
+    // Persist to Supabase — mark every unread notification for this user
+    if (isSupabaseConfigured && ids.length > 0) {
+      await supabase.from("notifications").update({ read: true }).in("id", ids);
+    }
+  },
+
   setNotifications: (notifications) =>
     set({ notifications, unreadCount: notifications.filter((n) => !n.read).length }),
 }));
