@@ -648,8 +648,9 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
       .order("created_at", { ascending: false })
       .limit(200);
     if (data) {
-      setGems(data as DBGem[]);
-      onBadgeChange((data as DBGem[]).filter(g => g.status === "pending").length);
+      const gems = (data as unknown as DBGem[]);
+      setGems(gems);
+      onBadgeChange(gems.filter(g => g.status === "pending").length);
     }
     setLoading(false);
   };
@@ -873,7 +874,7 @@ function ReportsTab() {
       .order("created_at", { ascending: false })
       .limit(100)
       .then(({ data }) => {
-        if (data) setReports(data as DBReport[]);
+        if (data) setReports(data as unknown as DBReport[]);
         setLoading(false);
       });
   }, []);
@@ -1179,8 +1180,7 @@ export default function AdminDashboard() {
           id:        n.id,
           type:      n.type,
           title:     n.title,
-          message:   n.message,
-          data:      n.data,
+          body:      n.body ?? n.message ?? "",
           read:      n.read ?? false,
           createdAt: n.created_at,
         });
@@ -1325,7 +1325,7 @@ export default function AdminDashboard() {
                             {!n.read && <span className="h-2 w-2 mt-1.5 rounded-full bg-sky-500 flex-shrink-0" />}
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-slate-800">{n.title}</p>
-                              <p className="text-xs text-slate-500 mt-0.5 truncate">{n.message}</p>
+                              <p className="text-xs text-slate-500 mt-0.5 truncate">{n.body}</p>
                               <p className="text-[10px] text-slate-300 mt-1">
                                 {new Date(n.createdAt).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}
                               </p>
