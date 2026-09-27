@@ -68,7 +68,7 @@ export default function Booking() {
             trip_type: tripType,
             date,
             guests,
-            notes: notes || null,
+            notes: notes || "",
             status: "pending",
           })
           .select("id, created_at")
