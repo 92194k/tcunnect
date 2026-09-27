@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
-import { MapPin, Calendar, Users, ChevronRight, Loader2 } from "lucide-react";
+import { MapPin, Calendar, Users, ChevronRight, Loader2, Clock, CheckCircle2, XCircle, Trophy } from "lucide-react";
 import type { Booking, BookingStatus } from "../types";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -21,17 +21,33 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-slate-100 text-slate-500",
 };
 
+const STATUS_INFO: Record<string, { icon: React.ReactNode; label: string; desc: string }> = {
+  pending:   { icon: <Clock className="h-3.5 w-3.5" />,         label: "Pending",   desc: "Waiting for TCUnnect admin confirmation" },
+  confirmed: { icon: <CheckCircle2 className="h-3.5 w-3.5" />,  label: "Confirmed", desc: "Your booking has been confirmed by TCUnnect" },
+  completed: { icon: <Trophy className="h-3.5 w-3.5" />,        label: "Completed", desc: "Trip completed — hope it was amazing!" },
+  cancelled: { icon: <XCircle className="h-3.5 w-3.5" />,       label: "Cancelled", desc: "This booking was cancelled" },
+};
+
 export default function MyBookings() {
   const { user } = useAuthStore();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<BookingStatus | "all">("all");
 
-  useEffect(() => {
-    fetchBookings();
-  }, []);
+  const mapRow = (b: any): Booking => ({
+    id: b.id,
+    userId: b.user_id,
+    gemId: b.gem_id,
+    gemName: b.gem_name,
+    tripType: b.trip_type,
+    date: b.date,
+    guests: b.guests,
+    notes: b.notes ?? "",
+    status: b.status,
+    createdAt: b.created_at,
+  });
 
-  async function fetchBookings() {
+  const fetchBookings = useCallback(async () => {
     setLoading(true);
     if (!isSupabaseConfigured || !user) { setLoading(false); return; }
 
@@ -41,22 +57,33 @@ export default function MyBookings() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (data) {
-      setBookings(data.map((b) => ({
-        id: b.id,
-        userId: b.user_id,
-        gemId: b.gem_id,
-        gemName: b.gem_name,
-        tripType: b.trip_type,
-        date: b.date,
-        guests: b.guests,
-        notes: b.notes ?? "",
-        status: b.status,
-        createdAt: b.created_at,
-      })));
-    }
+    if (data) setBookings(data.map(mapRow));
     setLoading(false);
-  }
+  }, [user]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  // Realtime: update booking cards when admin changes status
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user) return;
+
+    const channel = supabase
+      .channel(`my-bookings-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "bookings", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          setBookings(prev =>
+            prev.map(b => b.id === payload.new.id ? { ...b, status: payload.new.status } : b)
+          );
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   const filtered = activeTab === "all"
     ? bookings
@@ -118,10 +145,18 @@ export default function MyBookings() {
                       <MapPin className="h-3 w-3" /> Trip destination
                     </p>
                   </div>
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full capitalize ${STATUS_STYLES[booking.status]}`}>
-                    {booking.status}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full capitalize ${STATUS_STYLES[booking.status]}`}>
+                      {STATUS_INFO[booking.status]?.icon}
+                      {booking.status}
+                    </span>
+                  </div>
                 </div>
+                {STATUS_INFO[booking.status] && (
+                  <p className="text-[11px] text-slate-400 mb-3 flex items-center gap-1">
+                    {STATUS_INFO[booking.status].desc}
+                  </p>
+                )}
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div className="bg-slate-50 rounded-lg p-2.5 text-center">

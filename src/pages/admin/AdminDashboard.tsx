@@ -764,66 +764,231 @@ function SubscriptionsTab() {
 
 interface RealBooking {
   id: string;
+  user_id: string;
   tourist_name: string | null;
   gem_name: string | null;
+  gem_id: string | null;
   date: string | null;
   trip_type: string | null;
   guests: number | null;
+  notes: string | null;
   status: string;
   created_at: string;
+}
+
+// ─── Booking detail modal ────────────────────────────────────────
+function BookingDetailModal({ booking, onClose }: { booking: RealBooking; onClose: () => void }) {
+  const statusStyle: Record<string, string> = {
+    confirmed: "bg-emerald-100 text-emerald-700",
+    pending:   "bg-amber-100 text-amber-700",
+    cancelled: "bg-red-100 text-red-700",
+    completed: "bg-sky-100 text-sky-700",
+  };
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-slate-900">Booking Details</h2>
+          <button onClick={onClose} className="h-8 w-8 rounded-full hover:bg-slate-100 flex items-center justify-center">
+            <X className="h-4 w-4 text-slate-500" />
+          </button>
+        </div>
+        <div className="space-y-3 text-sm">
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-slate-500">Tourist</span>
+            <span className="font-semibold text-slate-800">{booking.tourist_name ?? "—"}</span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-slate-500">Destination</span>
+            <span className="font-semibold text-slate-800">{booking.gem_name ?? "—"}</span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-slate-500">Trip Date</span>
+            <span className="font-semibold text-slate-800">{booking.date ?? "—"}</span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-slate-500">Trip Type</span>
+            <span className="font-semibold text-slate-800 capitalize">{booking.trip_type ?? "—"}</span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-slate-500">Guests</span>
+            <span className="font-semibold text-slate-800">{booking.guests ?? 1}</span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-slate-500">Status</span>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full capitalize ${statusStyle[booking.status] ?? "bg-slate-100 text-slate-600"}`}>
+              {booking.status}
+            </span>
+          </div>
+          <div className="flex justify-between py-2 border-b border-slate-100">
+            <span className="text-slate-500">Submitted</span>
+            <span className="font-semibold text-slate-800">
+              {new Date(booking.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+          {booking.notes && (
+            <div className="py-2">
+              <p className="text-slate-500 mb-1">Notes</p>
+              <p className="text-slate-700 bg-slate-50 rounded-lg px-3 py-2 text-xs">{booking.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Cancel confirmation modal ───────────────────────────────────
+function CancelModal({ booking, onConfirm, onClose, loading }: {
+  booking: RealBooking;
+  onConfirm: () => void;
+  onClose: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+        <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <XCircle className="h-6 w-6 text-red-500" />
+        </div>
+        <h2 className="text-lg font-bold text-slate-900 text-center mb-1">Cancel Booking?</h2>
+        <p className="text-sm text-slate-500 text-center mb-1">
+          <span className="font-semibold text-slate-700">{booking.tourist_name}</span> — {booking.gem_name}
+        </p>
+        <p className="text-xs text-slate-400 text-center mb-5">This will notify the user that their booking was cancelled.</p>
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 border border-slate-200 text-slate-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-slate-50 transition">
+            Keep Booking
+          </button>
+          <button onClick={onConfirm} disabled={loading}
+            className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+            Cancel It
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function BookingsTab() {
   const [bookings, setBookings]         = useState<RealBooking[]>([]);
   const [loadingBookings, setLoading]   = useState(true);
   const [counts, setCounts]             = useState({ confirmed: 0, pending: 0, cancelled: 0 });
+  const [detailBooking, setDetailBooking] = useState<RealBooking | null>(null);
+  const [cancelBooking, setCancelBooking] = useState<RealBooking | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchBookings() {
-      if (!isSupabaseConfigured) { setLoading(false); return; }
-      const { data } = await supabase
-        .from("bookings")
-        .select(`id, gem_name, date, trip_type, guests, status, created_at, profiles ( full_name )`)
-        .order("created_at", { ascending: false })
-        .limit(200);
+  const recompute = (list: RealBooking[]) => {
+    setCounts({
+      confirmed: list.filter(b => b.status === "confirmed").length,
+      pending:   list.filter(b => b.status === "pending").length,
+      cancelled: list.filter(b => b.status === "cancelled").length,
+    });
+  };
 
-      if (data) {
-        const mapped: RealBooking[] = data.map((b: any) => ({
-          id: b.id,
-          tourist_name: b.profiles?.full_name ?? "—",
-          gem_name:     b.gem_name ?? "—",
-          date:         b.date ?? "—",
-          trip_type:    b.trip_type ?? "—",
-          guests:       b.guests ?? 1,
-          status:       b.status ?? "pending",
-          created_at:   b.created_at,
-        }));
-        setBookings(mapped);
-        setCounts({
-          confirmed: mapped.filter(b => b.status === "confirmed").length,
-          pending:   mapped.filter(b => b.status === "pending").length,
-          cancelled: mapped.filter(b => b.status === "cancelled").length,
+  async function fetchBookings() {
+    if (!isSupabaseConfigured) { setLoading(false); return; }
+    const { data } = await supabase
+      .from("bookings")
+      .select(`id, user_id, gem_id, gem_name, date, trip_type, guests, notes, status, created_at, profiles ( full_name )`)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (data) {
+      const mapped: RealBooking[] = data.map((b: any) => ({
+        id:           b.id,
+        user_id:      b.user_id,
+        tourist_name: b.profiles?.full_name ?? "—",
+        gem_name:     b.gem_name ?? "—",
+        gem_id:       b.gem_id ?? null,
+        date:         b.date ?? "—",
+        trip_type:    b.trip_type ?? "—",
+        guests:       b.guests ?? 1,
+        notes:        b.notes ?? null,
+        status:       b.status ?? "pending",
+        created_at:   b.created_at,
+      }));
+      setBookings(mapped);
+      recompute(mapped);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchBookings(); }, []);
+
+  async function updateStatus(bookingId: string, newStatus: "confirmed" | "cancelled") {
+    setActionLoading(bookingId);
+    const { error } = await supabase
+      .from("bookings")
+      .update({ status: newStatus })
+      .eq("id", bookingId);
+
+    if (error) {
+      console.error("Booking update error:", error);
+      setActionLoading(null);
+      setCancelBooking(null);
+      return;
+    }
+
+    // Update local state immediately
+    const updated = bookings.map(b => b.id === bookingId ? { ...b, status: newStatus } : b);
+    setBookings(updated);
+    recompute(updated);
+
+    // Notify the user
+    const booking = bookings.find(b => b.id === bookingId);
+    if (booking) {
+      const { createNotification } = await import("../../stores");
+      if (newStatus === "confirmed") {
+        await createNotification(booking.user_id, {
+          type: "booking_confirmed",
+          title: "Booking Confirmed! ✅",
+          body: `Your trip to ${booking.gem_name} on ${booking.date} has been confirmed by TCUnnect.`,
+          linkTo: "/my-bookings",
+          referenceId: bookingId,
+        });
+      } else {
+        await createNotification(booking.user_id, {
+          type: "booking_cancelled",
+          title: "Booking Cancelled",
+          body: `Your trip to ${booking.gem_name} on ${booking.date} has been cancelled by TCUnnect.`,
+          linkTo: "/my-bookings",
+          referenceId: bookingId,
         });
       }
-      setLoading(false);
     }
-    fetchBookings();
-  }, []);
+
+    setActionLoading(null);
+    setCancelBooking(null);
+  }
 
   const statusStyle = (s: string) => ({
     confirmed: "bg-emerald-50 text-emerald-700",
     pending:   "bg-amber-50 text-amber-700",
     cancelled: "bg-red-50 text-red-700",
+    completed: "bg-sky-50 text-sky-700",
   }[s] ?? "bg-slate-100 text-slate-600");
 
   return (
     <div className="space-y-4">
+      {detailBooking && <BookingDetailModal booking={detailBooking} onClose={() => setDetailBooking(null)} />}
+      {cancelBooking && (
+        <CancelModal
+          booking={cancelBooking}
+          loading={actionLoading === cancelBooking.id}
+          onConfirm={() => updateStatus(cancelBooking.id, "cancelled")}
+          onClose={() => setCancelBooking(null)}
+        />
+      )}
+
       <div className="grid grid-cols-3 gap-4">
         <StatCard icon={CheckCircle2} label="Confirmed" value={counts.confirmed} color="emerald" />
         <StatCard icon={Clock}        label="Pending"   value={counts.pending}   color="amber" />
         <StatCard icon={XCircle}      label="Cancelled" value={counts.cancelled} color="rose" />
       </div>
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-x-auto">
         {loadingBookings ? (
           <div className="flex justify-center py-12">
             <div className="h-6 w-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
@@ -834,26 +999,66 @@ function BookingsTab() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                {["Tourist", "Destination", "Date", "Type", "Guests", "Status"].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                {["Tourist", "Destination", "Date", "Type", "Guests", "Status", "Actions"].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {bookings.map(b => (
-                <tr key={b.id} className="hover:bg-slate-50/50">
-                  <td className="px-4 py-3 font-medium text-slate-800">{b.tourist_name}</td>
-                  <td className="px-4 py-3 text-slate-600">{b.gem_name}</td>
-                  <td className="px-4 py-3 text-slate-600">{b.date}</td>
-                  <td className="px-4 py-3 text-slate-600 capitalize">{b.trip_type}</td>
-                  <td className="px-4 py-3 text-slate-600">{b.guests}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${statusStyle(b.status)}`}>
-                      {b.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {bookings.map(b => {
+                const isActing = actionLoading === b.id;
+                return (
+                  <tr key={b.id} className="hover:bg-slate-50/50">
+                    <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{b.tourist_name}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{b.gem_name}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{b.date}</td>
+                    <td className="px-4 py-3 text-slate-600 capitalize whitespace-nowrap">{b.trip_type}</td>
+                    <td className="px-4 py-3 text-slate-600 text-center">{b.guests}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${statusStyle(b.status)}`}>
+                        {b.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        {/* View Details — always available */}
+                        <button
+                          onClick={() => setDetailBooking(b)}
+                          title="View Details"
+                          className="flex items-center gap-1 text-xs text-sky-600 hover:text-sky-800 font-medium px-2 py-1 rounded-lg hover:bg-sky-50 transition"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> View
+                        </button>
+
+                        {/* Confirm — only for pending */}
+                        {b.status === "pending" && (
+                          <button
+                            onClick={() => updateStatus(b.id, "confirmed")}
+                            disabled={isActing}
+                            title="Confirm Booking"
+                            className="flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-medium px-2 py-1 rounded-lg hover:bg-emerald-50 transition disabled:opacity-50"
+                          >
+                            {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            Confirm
+                          </button>
+                        )}
+
+                        {/* Cancel — for pending or confirmed */}
+                        {(b.status === "pending" || b.status === "confirmed") && (
+                          <button
+                            onClick={() => setCancelBooking(b)}
+                            disabled={isActing}
+                            title="Cancel Booking"
+                            className="flex items-center gap-1 text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition disabled:opacity-50"
+                          >
+                            <XCircle className="h-3.5 w-3.5" /> Cancel
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
