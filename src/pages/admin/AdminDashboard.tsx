@@ -1621,6 +1621,15 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
     setActing(null);
   };
 
+  const deleteGem = async (gem: DBGem) => {
+    if (!isSupabaseConfigured) return;
+    if (!window.confirm(`Delete "${gem.name}"? This cannot be undone.`)) return;
+    setActing(gem.id);
+    await supabase.from("hidden_gems").delete().eq("id", gem.id);
+    await fetchGems();
+    setActing(null);
+  };
+
   const statusStyle = (s: string) => ({
     approved: "bg-emerald-50 text-emerald-700",
     pending:  "bg-amber-50 text-amber-700",
@@ -1711,6 +1720,10 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
                           Re-approve
                         </button>
                       )}
+                      <button onClick={() => deleteGem(g)} disabled={acting === g.id}
+                        className="text-xs text-rose-500 hover:underline disabled:opacity-50">
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>
