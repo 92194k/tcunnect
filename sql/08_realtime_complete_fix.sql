@@ -186,6 +186,61 @@ CREATE TRIGGER trg_notify_message_receiver
   FOR EACH ROW
   EXECUTE FUNCTION public.fn_notify_message_receiver();
 
+-- ─── STEP 11: Match notification trigger ─────────────────────────────────────
+-- Fires AFTER INSERT on matches (created by handle_mutual_like trigger).
+-- Creates a 'match' notification for BOTH users using their real names.
+-- SECURITY DEFINER so it can insert notifications for any user, bypassing RLS.
+
+CREATE OR REPLACE FUNCTION public.fn_notify_new_match()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user1_name TEXT;
+  v_user2_name TEXT;
+BEGIN
+  SELECT COALESCE(full_name, 'Someone') INTO v_user1_name
+  FROM public.profiles WHERE id = NEW.user1_id;
+
+  SELECT COALESCE(full_name, 'Someone') INTO v_user2_name
+  FROM public.profiles WHERE id = NEW.user2_id;
+
+  -- Notify user1: "You matched with [user2]!"
+  INSERT INTO public.notifications (user_id, type, title, body, read, link_to, reference_id)
+  VALUES (
+    NEW.user1_id,
+    'match',
+    'You matched with ' || v_user2_name || '! 🎉',
+    'You can now message each other',
+    false,
+    '/chat',
+    NEW.id
+  );
+
+  -- Notify user2: "You matched with [user1]!"
+  INSERT INTO public.notifications (user_id, type, title, body, read, link_to, reference_id)
+  VALUES (
+    NEW.user2_id,
+    'match',
+    'You matched with ' || v_user1_name || '! 🎉',
+    'You can now message each other',
+    false,
+    '/chat',
+    NEW.id
+  );
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_notify_new_match ON public.matches;
+CREATE TRIGGER trg_notify_new_match
+  AFTER INSERT ON public.matches
+  FOR EACH ROW
+  EXECUTE FUNCTION public.fn_notify_new_match();
+
 -- ─── DONE ─────────────────────────────────────────────────────────────────────
 -- After running this, your app will have:
 --   ✓ receiver_id, message_type, metadata columns on messages
