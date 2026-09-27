@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import ScrollArrow from "./ScrollArrow";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import type { Notification } from "../types";
 
 const NAV = [
   { to: "/dashboard", label: "Home", Icon: Home },
@@ -20,10 +21,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const { unreadCount, fetchNotifications } = useNotificationStore();
+  const { unreadCount, fetchNotifications, addNotification } = useNotificationStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const notifChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const handleLogout = () => {
     logout();
@@ -32,11 +34,61 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const isActive = (to: string) => location.pathname === to;
 
-  // Fetch real notification count once when the shell mounts (user is logged in)
+  // Fetch existing notifications + subscribe to real-time new ones
   useEffect(() => {
-    if (user && isSupabaseConfigured) {
-      fetchNotifications();
+    if (!user || !isSupabaseConfigured) return;
+
+    // Load existing notifications from DB
+    fetchNotifications();
+
+    // Tear down any previous channel before creating a new one
+    if (notifChannelRef.current) {
+      supabase.removeChannel(notifChannelRef.current);
+      notifChannelRef.current = null;
     }
+
+    // Subscribe: INSERT events on notifications filtered to this user.
+    // The DB trigger fn_notify_message_receiver() creates the row server-side,
+    // so User B's client gets the event without any client-to-server call.
+    const channel = supabase
+      .channel(`notifs_${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          const notif: Notification = {
+            id: row.id as string,
+            type: row.type as Notification["type"],
+            title: row.title as string,
+            body: (row.body as string) ?? "",
+            read: row.read as boolean,
+            createdAt: row.created_at as string,
+            linkTo: (row.link_to as string) ?? undefined,
+            referenceId: (row.reference_id as string) ?? undefined,
+          };
+          addNotification(notif);
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log(`[Realtime] ✓ notifs_${user.id} connected`);
+        }
+      });
+
+    notifChannelRef.current = channel;
+
+    return () => {
+      if (notifChannelRef.current) {
+        supabase.removeChannel(notifChannelRef.current);
+        notifChannelRef.current = null;
+      }
+    };
   }, [user?.id]);
 
   // Close dropdown on outside click
