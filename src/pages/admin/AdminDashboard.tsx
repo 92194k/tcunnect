@@ -2315,6 +2315,7 @@ function ReviewsTab() {
 function ReportsTab() {
   const [reports, setReports]     = useState<DBReport[]>([]);
   const [loading, setLoading]     = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selected, setSelected]   = useState<DBReport | null>(null);
   const [acting, setActing]       = useState(false);
   const [pendingCount, setPendingCount]   = useState(0);
@@ -2323,32 +2324,48 @@ function ReportsTab() {
 
   const fetchReports = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
+    setFetchError(null);
 
-    // Step 1: base query — minimal columns that have always existed
-    // (reported_post_id may not exist if migration 21 hasn't run yet; we get it in step 2)
-    const { data: baseData, error: baseError } = await supabase
+    // Step 1a: try with reported_by (exists after migration 21)
+    let baseResult = await supabase
       .from("reports")
       .select("id, reported_by, reported_user_id, reported_item_type, reported_item_id, match_id, message_content, reason, details, status, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (baseError) {
-      console.error("[Reports] base query error:", baseError);
+    // Step 1b: if reported_by doesn't exist, fall back to reporter_id (original schema)
+    if (baseResult.error && baseResult.error.message.includes("reported_by")) {
+      console.warn("[Reports] falling back to reporter_id column");
+      const fallbackResult = await supabase
+        .from("reports")
+        .select("id, reporter_id, reported_user_id, reported_item_type, reported_item_id, match_id, message_content, reason, details, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      // cast to match type
+      baseResult = { ...fallbackResult, data: fallbackResult.data ? (fallbackResult.data as any[]).map((r: any) => ({ ...r, reported_by: r.reporter_id ?? null })) : null } as typeof baseResult;
+    }
+
+    if (baseResult.error) {
+      console.error("[Reports] base query failed:", baseResult.error);
+      setFetchError(`Could not load reports: ${baseResult.error.message}`);
       setLoading(false);
       return;
     }
-    if (!baseData) { setLoading(false); return; }
+    if (!baseResult.data) { setLoading(false); return; }
 
-    let rows: DBReport[] = baseData as unknown as DBReport[];
+    // normalise reporter column name
+    let rows: DBReport[] = (baseResult.data as any[]).map((r: any) => ({
+      ...r,
+      reported_by: r.reported_by ?? r.reporter_id ?? null,
+    }));
 
-    // Step 2: try enriched query with FK joins; fall back silently if it fails
+    // Step 2: enrich with joined names — fall back silently on error
     const { data: richData } = await supabase
       .from("reports")
       .select(`
         id,
         reporter:profiles!reported_by(full_name, email),
-        reported_user:profiles!reported_user_id(full_name, email, is_admin, account_status),
-        post:posts!reported_post_id(content, created_at)
+        reported_user:profiles!reported_user_id(full_name, email, is_admin, account_status)
       `)
       .order("created_at", { ascending: false })
       .limit(200);
@@ -2356,6 +2373,18 @@ function ReportsTab() {
     if (richData) {
       const richMap = new Map((richData as any[]).map((r: any) => [r.id, r]));
       rows = rows.map(r => ({ ...r, ...(richMap.get(r.id) ?? {}) }));
+    }
+
+    // Step 3: try to get post content — fall back silently if reported_post_id missing
+    const { data: postData } = await supabase
+      .from("reports")
+      .select("id, reported_post_id, post:posts!reported_post_id(content, created_at)")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (postData) {
+      const postMap = new Map((postData as any[]).map((r: any) => [r.id, r]));
+      rows = rows.map(r => ({ ...r, ...(postMap.get(r.id) ?? {}) }));
     }
 
     setReports(rows);
