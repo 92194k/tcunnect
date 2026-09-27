@@ -67,6 +67,8 @@ interface PlatformSettings {
   gcash_number: string;
   maya_number: string;
   account_name: string;
+  gcash_qr_url: string;
+  maya_qr_url: string;
 }
 
 interface DashStats {
@@ -376,7 +378,137 @@ function UsersTab() {
 }
 
 function BusinessesTab() {
-  return <NotImplemented feature="Business management" />;
+  const [loading, setLoading] = useState(true);
+  const [revenue, setRevenue] = useState<{ month: string; amount: number; count: number }[]>([]);
+  const [totals, setTotals]   = useState({ revenue: 0, approved: 0, pending: 0, rejected: 0, convRate: 0 });
+  const [topPlans, setTopPlans] = useState<{ label: string; count: number; revenue: number }[]>([]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) { setLoading(false); return; }
+    Promise.all([
+      supabase.from("payments").select("amount, status, plan_label, created_at"),
+    ]).then(([paymentsRes]) => {
+      const all = (paymentsRes.data ?? []) as { amount: number; status: string; plan_label: string; created_at: string }[];
+
+      // Monthly revenue (approved only, last 6 months)
+      const now   = new Date();
+      const months = Array.from({ length: 6 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+        return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, label: d.toLocaleDateString("en-PH", { month: "short", year: "2-digit" }) };
+      });
+      const byMonth = months.map(m => {
+        const rows = all.filter(p => p.status === "approved" && p.created_at.startsWith(m.key));
+        return { month: m.label, amount: rows.reduce((s, r) => s + (r.amount ?? 0), 0), count: rows.length };
+      });
+      setRevenue(byMonth);
+
+      // Totals
+      const approved = all.filter(p => p.status === "approved");
+      const pending  = all.filter(p => p.status === "pending");
+      const rejected = all.filter(p => p.status === "rejected");
+      const totalRev = approved.reduce((s, p) => s + (p.amount ?? 0), 0);
+      const convRate = all.length > 0 ? Math.round((approved.length / all.length) * 100) : 0;
+      setTotals({ revenue: totalRev, approved: approved.length, pending: pending.length, rejected: rejected.length, convRate });
+
+      // Top plans
+      const planMap: Record<string, { count: number; revenue: number }> = {};
+      for (const p of approved) {
+        if (!planMap[p.plan_label]) planMap[p.plan_label] = { count: 0, revenue: 0 };
+        planMap[p.plan_label].count++;
+        planMap[p.plan_label].revenue += p.amount ?? 0;
+      }
+      setTopPlans(Object.entries(planMap).map(([label, v]) => ({ label, ...v })).sort((a, b) => b.revenue - a.revenue));
+      setLoading(false);
+    });
+  }, []);
+
+  const maxBar = Math.max(...revenue.map(r => r.amount), 1);
+
+  if (loading) return <div className="flex justify-center py-20"><div className="h-6 w-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" /></div>;
+
+  return (
+    <div className="space-y-5">
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={TrendingUp}  label="Total Revenue"      value={`₱${totals.revenue.toLocaleString()}`} sub="From approved payments" color="emerald" />
+        <StatCard icon={CheckCircle2} label="Approved Payments" value={totals.approved} sub={`${totals.convRate}% approval rate`} color="sky" />
+        <StatCard icon={Clock}       label="Pending Payments"   value={totals.pending}  sub="Awaiting verification" color="amber" />
+        <StatCard icon={XCircle}     label="Rejected Payments"  value={totals.rejected} color="rose" />
+      </div>
+
+      {/* Monthly revenue bar chart */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <h3 className="font-semibold text-slate-800 mb-1">Monthly Revenue (Last 6 Months)</h3>
+        <p className="text-xs text-slate-400 mb-5">Approved payments only</p>
+        <div className="flex items-end gap-3 h-40">
+          {revenue.map(r => (
+            <div key={r.month} className="flex-1 flex flex-col items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-slate-500">
+                {r.amount > 0 ? `₱${r.amount >= 1000 ? `${(r.amount/1000).toFixed(1)}k` : r.amount}` : ""}
+              </span>
+              <div className="w-full flex flex-col justify-end" style={{ height: "100px" }}>
+                <div
+                  className="w-full bg-sky-500 rounded-t-lg transition-all"
+                  style={{ height: `${Math.max((r.amount / maxBar) * 96, r.amount > 0 ? 8 : 2)}px` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium">{r.month}</span>
+              {r.count > 0 && <span className="text-[9px] text-slate-300">{r.count} sale{r.count !== 1 ? "s" : ""}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Plans breakdown */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <h3 className="font-semibold text-slate-800 mb-4">Revenue by Plan</h3>
+        {topPlans.length === 0 ? (
+          <p className="text-sm text-slate-400">No approved payments yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {topPlans.map(p => (
+              <div key={p.label} className="flex items-center gap-4">
+                <span className="text-sm text-slate-700 font-medium w-32 truncate">{p.label}</span>
+                <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-full bg-sky-500 rounded-full"
+                    style={{ width: `${Math.round((p.revenue / totals.revenue) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs text-slate-500 w-20 text-right">₱{p.revenue.toLocaleString()}</span>
+                <span className="text-xs text-slate-400 w-16 text-right">{p.count} sale{p.count !== 1 ? "s" : ""}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Payment status breakdown */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+        <h3 className="font-semibold text-slate-800 mb-4">Payment Status Breakdown</h3>
+        <div className="flex gap-4">
+          {[
+            { label: "Approved", value: totals.approved, color: "bg-emerald-500" },
+            { label: "Pending",  value: totals.pending,  color: "bg-amber-400" },
+            { label: "Rejected", value: totals.rejected, color: "bg-red-400" },
+          ].map(s => {
+            const total = totals.approved + totals.pending + totals.rejected;
+            const pct   = total > 0 ? Math.round((s.value / total) * 100) : 0;
+            return (
+              <div key={s.label} className="flex-1 text-center">
+                <div className="text-2xl font-bold text-slate-800">{s.value}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{s.label}</div>
+                <div className="mt-2 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <div className={`h-full ${s.color} rounded-full`} style={{ width: `${pct}%` }} />
+                </div>
+                <div className="text-[10px] text-slate-400 mt-1">{pct}%</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PaymentsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
@@ -1044,13 +1176,74 @@ function ReportsTab() {
   );
 }
 
+function QRUploader({
+  label, currentUrl, storageKey, onUploaded,
+}: { label: string; currentUrl: string; storageKey: string; onUploaded: (url: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setErr("");
+    const ext  = file.name.split(".").pop() ?? "png";
+    const path = `qr/${storageKey}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from("platform-assets")
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) { setErr(upErr.message); setUploading(false); return; }
+    const { data: urlData } = supabase.storage.from("platform-assets").getPublicUrl(path);
+    // append cache-buster so old QR doesn't stick
+    onUploaded(`${urlData.publicUrl}?t=${Date.now()}`);
+    setUploading(false);
+    // reset input so same file can be re-selected
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="text-xs font-semibold text-slate-500 text-center">{label}</p>
+      <div
+        onClick={() => !uploading && fileRef.current?.click()}
+        className={`relative w-28 h-28 rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden cursor-pointer transition
+          ${uploading ? "border-sky-300 bg-sky-50" : "border-slate-200 hover:border-sky-400 hover:bg-sky-50 bg-slate-50"}`}
+      >
+        {currentUrl ? (
+          <img src={currentUrl} alt={label} className="w-full h-full object-contain p-1" />
+        ) : (
+          <div className="flex flex-col items-center gap-1 text-slate-300">
+            <Image className="h-7 w-7" />
+            <span className="text-[10px]">Upload QR</span>
+          </div>
+        )}
+        {uploading && (
+          <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-sky-500" />
+          </div>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      <button type="button" onClick={() => !uploading && fileRef.current?.click()}
+        className="text-[11px] text-sky-600 hover:text-sky-700 font-semibold">
+        {currentUrl ? "Change QR" : "Upload QR"}
+      </button>
+      {err && <p className="text-[10px] text-red-500 text-center">{err}</p>}
+    </div>
+  );
+}
+
 function SettingsTab() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
   const [editingPayment, setEditingPayment] = useState(false);
-  const [draft, setDraft]       = useState<Partial<PlatformSettings>>({});
+  const [draft, setDraft] = useState<Partial<PlatformSettings>>({});
+  // live QR URLs — updated immediately after upload so preview refreshes
+  const [gcashQr, setGcashQr] = useState("");
+  const [mayaQr,  setMayaQr]  = useState("");
 
   const fetchSettings = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
@@ -1058,10 +1251,12 @@ function SettingsTab() {
     if (data) {
       setSettings(data as PlatformSettings);
       setDraft({
-        gcash_number:  data.gcash_number,
-        maya_number:   data.maya_number,
-        account_name:  data.account_name,
+        gcash_number: data.gcash_number,
+        maya_number:  data.maya_number,
+        account_name: data.account_name,
       });
+      setGcashQr(data.gcash_qr_url ?? "");
+      setMayaQr(data.maya_qr_url   ?? "");
     }
     setLoading(false);
   };
@@ -1073,6 +1268,13 @@ function SettingsTab() {
     const newVal = !settings[field];
     setSettings({ ...settings, [field]: newVal });
     await supabase.from("platform_settings").update({ [field]: newVal, updated_at: new Date().toISOString() }).eq("id", true);
+  };
+
+  const saveQr = async (field: "gcash_qr_url" | "maya_qr_url", url: string) => {
+    if (!isSupabaseConfigured) return;
+    if (field === "gcash_qr_url") setGcashQr(url);
+    else setMayaQr(url);
+    await supabase.from("platform_settings").update({ [field]: url, updated_at: new Date().toISOString() }).eq("id", true);
   };
 
   const savePaymentSettings = async () => {
@@ -1088,7 +1290,7 @@ function SettingsTab() {
     setSaving(false);
     setSaved(true);
     setEditingPayment(false);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => setSaved(false), 2500);
   };
 
   if (loading) return <div className="flex justify-center py-20"><div className="h-6 w-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" /></div>;
@@ -1100,7 +1302,7 @@ function SettingsTab() {
   ];
 
   return (
-    <div className="space-y-4 max-w-lg">
+    <div className="space-y-4 max-w-xl">
       {/* Platform toggles */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
         <h3 className="font-semibold text-slate-800">Platform Settings</h3>
@@ -1125,64 +1327,91 @@ function SettingsTab() {
 
       {/* Payment settings */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-slate-800">Payment Settings</h3>
           {saved && (
-            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+            <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
               <Check className="h-3.5 w-3.5" /> Saved
             </span>
           )}
         </div>
-        {editingPayment ? (
-          <div className="space-y-3">
-            {[
-              { label: "GCash Number", key: "gcash_number" as const },
-              { label: "Maya Number",  key: "maya_number"  as const },
-              { label: "Account Name", key: "account_name" as const },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="block text-xs font-medium text-slate-500 mb-1">{f.label}</label>
-                <input
-                  value={draft[f.key] ?? ""}
-                  onChange={e => setDraft({ ...draft, [f.key]: e.target.value })}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none"
-                />
-              </div>
-            ))}
-            <div className="flex gap-2 pt-1">
-              <button onClick={savePaymentSettings} disabled={saving}
-                className="flex items-center gap-1.5 text-sm bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-lg transition">
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Save
-              </button>
-              <button onClick={() => setEditingPayment(false)}
-                className="text-sm text-slate-500 border border-slate-200 px-4 py-2 rounded-lg hover:bg-slate-50">
-                Cancel
-              </button>
-            </div>
+
+        {/* QR codes row */}
+        <div className="mb-5">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Payment QR Codes</p>
+          <div className="flex gap-6 justify-start">
+            <QRUploader
+              label="GCash QR"
+              currentUrl={gcashQr}
+              storageKey="gcash"
+              onUploaded={url => saveQr("gcash_qr_url", url)}
+            />
+            <QRUploader
+              label="Maya QR"
+              currentUrl={mayaQr}
+              storageKey="maya"
+              onUploaded={url => saveQr("maya_qr_url", url)}
+            />
           </div>
-        ) : (
-          <>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">GCash Number</span>
-                <span className="font-medium text-slate-800">{settings.gcash_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Maya Number</span>
-                <span className="font-medium text-slate-800">{settings.maya_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Account Name</span>
-                <span className="font-medium text-slate-800">{settings.account_name}</span>
+          <p className="text-[11px] text-slate-400 mt-3">
+            These QR codes are shown to users on the Premium upgrade page. Upload PNG or JPG.
+          </p>
+        </div>
+
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Account Details</p>
+          {editingPayment ? (
+            <div className="space-y-3">
+              {[
+                { label: "GCash Number", key: "gcash_number" as const, placeholder: "09XX-XXX-XXXX" },
+                { label: "Maya Number",  key: "maya_number"  as const, placeholder: "09XX-XXX-XXXX" },
+                { label: "Account Name", key: "account_name" as const, placeholder: "TCUnnect Official" },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">{f.label}</label>
+                  <input
+                    value={draft[f.key] ?? ""}
+                    onChange={e => setDraft({ ...draft, [f.key]: e.target.value })}
+                    placeholder={f.placeholder}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-sky-500 outline-none"
+                  />
+                </div>
+              ))}
+              <div className="flex gap-2 pt-1">
+                <button onClick={savePaymentSettings} disabled={saving}
+                  className="flex items-center gap-1.5 text-sm bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-lg transition">
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  Save
+                </button>
+                <button onClick={() => setEditingPayment(false)}
+                  className="text-sm text-slate-500 border border-slate-200 px-4 py-2 rounded-lg hover:bg-slate-50 transition">
+                  Cancel
+                </button>
               </div>
             </div>
-            <button onClick={() => setEditingPayment(true)}
-              className="mt-4 text-sm text-sky-600 hover:underline">
-              Edit payment details
-            </button>
-          </>
-        )}
+          ) : (
+            <>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">GCash Number</span>
+                  <span className="font-medium text-slate-800">{settings.gcash_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Maya Number</span>
+                  <span className="font-medium text-slate-800">{settings.maya_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Account Name</span>
+                  <span className="font-medium text-slate-800">{settings.account_name}</span>
+                </div>
+              </div>
+              <button onClick={() => setEditingPayment(true)}
+                className="mt-4 text-sm text-sky-600 hover:underline font-medium">
+                Edit payment details
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
