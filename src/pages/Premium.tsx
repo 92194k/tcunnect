@@ -20,14 +20,14 @@ const USER_FREE = [
   "Browse experiences", "View businesses", "Browse bookings",
 ];
 const USER_PLUS = [
-  "⭐ Priority profile visibility",
-  "💎 Exclusive Hidden Gems",
-  "🗺️ Advanced map filters",
-  "✈️ Mini Trip Planner",
-  "📋 Personalized itineraries",
-  "🔖 Unlimited saved places",
-  "🎒 Extra destination info",
-  "🏆 Founding Explorer badge",
+  "🏆 Founding Explorer badge on your profile",
+  "⭐ Priority visibility in Discover Travelers",
+  "🔍 Advanced traveler matching filters",
+  "📌 Organize saved places into collections",
+  "✈️ Personal trip planning tools",
+  "💬 Priority in-app support",
+  "🎨 Extra profile customization options",
+  "🌟 Stand out with a Plus profile highlight",
 ];
 const BIZ_FREE = [
   "Business profile", "Location on map", "Photos",
@@ -399,7 +399,7 @@ export default function Premium() {
               <p className="text-xs text-slate-500 mt-0.5 line-through">Regular: ₱30/month</p>
             </div>
             <p className="text-xs text-amber-700 font-semibold bg-amber-100 rounded-lg px-3 py-2 mb-4">
-              🏆 Pay once. Enjoy Plus <strong>forever.</strong> Become a Founding Explorer.
+              🏆 Pay once. Enjoy Plus <strong>forever.</strong> Become a Founding Explorer — badge, priority visibility &amp; more.
             </p>
             <FeatureList items={USER_PLUS} checkColor="text-amber-500" />
             <button onClick={() => selectAndPay("plus-lifetime")}

@@ -10,7 +10,7 @@ import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
 import {
   MapPin, Star, ArrowLeft, Heart, Share2, Calendar, Clock,
-  Users, ChevronRight, Loader2, Lock, Utensils, ShoppingBag,
+  Users, ChevronRight, Loader2, Utensils, ShoppingBag,
   Bed, Compass, Sparkles, ExternalLink, Phone, Bookmark,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
@@ -350,42 +350,19 @@ function NearbyGemsSection({ nearbyGems, currentGemId }: { nearbyGems: NearbyGem
   );
 }
 
-function PlusPaywall({ onUpgrade }: { onUpgrade: () => void }) {
+function PlusBanner({ onUpgrade }: { onUpgrade: () => void }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 p-6 mb-6 text-center">
-      <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, #f59e0b 1px, transparent 0)", backgroundSize: "24px 24px" }} />
-      <div className="relative">
-        <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center">
-          <Lock className="h-6 w-6 text-amber-600" />
-        </div>
-        <h3 className="font-bold text-slate-900 text-lg mb-1">Explore This Destination</h3>
-        <p className="text-slate-600 text-sm mb-1">Unlock the full discovery layer — places, food, stays, activities, experiences, and more.</p>
-        <p className="text-xs text-slate-400 mb-5">Available exclusively on <span className="font-bold text-amber-600">TCUnnect Plus</span></p>
-
-        <div className="grid grid-cols-3 gap-2 mb-5 text-xs text-slate-600">
-          {[
-            { icon: "📍", label: "Places to Visit" },
-            { icon: "🎯", label: "Things to Do" },
-            { icon: "🍜", label: "Food & Drinks" },
-            { icon: "🛍", label: "Local Finds" },
-            { icon: "🛏", label: "Where to Stay" },
-            { icon: "✨", label: "Experiences" },
-          ].map((f) => (
-            <div key={f.label} className="bg-white/70 rounded-xl py-2.5 px-1 border border-amber-100">
-              <div className="text-lg mb-1">{f.icon}</div>
-              <p className="font-medium text-[10px] leading-tight">{f.label}</p>
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={onUpgrade}
-          className="w-full bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow-sm"
-        >
-          <Sparkles className="h-4 w-4" /> Upgrade to TCUnnect Plus
-        </button>
-        <p className="text-[10px] text-slate-400 mt-2">Starts at ₱99/month · Cancel anytime</p>
-      </div>
+    <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
+      <Sparkles className="h-4 w-4 text-amber-500 flex-shrink-0" />
+      <p className="text-xs text-amber-800 flex-1">
+        <span className="font-bold">TCUnnect Plus</span> — get a Plus badge, higher profile visibility, and advanced traveler matching.
+      </p>
+      <button
+        onClick={onUpgrade}
+        className="flex-shrink-0 text-[11px] font-bold text-amber-950 bg-amber-300 hover:bg-amber-400 px-3 py-1.5 rounded-full transition"
+      >
+        Learn more
+      </button>
     </div>
   );
 }
@@ -699,28 +676,22 @@ export default function GemDetail() {
           <div className="flex items-center gap-2 mb-1">
             <Sparkles className="h-5 w-5 text-amber-500" />
             <h2 className="text-lg font-bold text-slate-900">Explore This Destination</h2>
-            {isPremium && (
-              <span className="ml-auto text-[10px] font-extrabold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full tracking-wide">
-                PLUS
-              </span>
-            )}
           </div>
           <p className="text-sm text-slate-500 mb-6">
             Everything you need to experience {gem.name} like a local.
           </p>
 
-          {isPremium ? (
-            <>
-              <PlacesSection places={discovery.places} />
-              <ActivitiesSection activities={discovery.activities} />
-              <FoodSection food={discovery.food} />
-              <ProductsSection products={discovery.products} />
-              <StaysSection stays={discovery.stays} />
-              <ExperiencesSection experiences={discovery.experiences} />
-              <NearbyGemsSection nearbyGems={nearbyGems} currentGemId={gem.id} />
-            </>
-          ) : (
-            <PlusPaywall onUpgrade={() => navigate("/premium")} />
+          <PlacesSection places={discovery.places} />
+          <ActivitiesSection activities={discovery.activities} />
+          <FoodSection food={discovery.food} />
+          <ProductsSection products={discovery.products} />
+          <StaysSection stays={discovery.stays} />
+          <ExperiencesSection experiences={discovery.experiences} />
+          <NearbyGemsSection nearbyGems={nearbyGems} currentGemId={gem.id} />
+
+          {/* Optional Plus upsell — shown only to free users */}
+          {!isPremium && (
+            <PlusBanner onUpgrade={() => navigate("/premium")} />
           )}
         </div>
       </div>
