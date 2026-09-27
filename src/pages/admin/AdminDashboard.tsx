@@ -36,8 +36,14 @@ interface DBProfile {
   full_name: string | null;
   email: string | null;
   is_premium: boolean;
+  is_admin: boolean;
+  account_status: string | null;
   created_at: string;
   location: string | null;
+  bio: string | null;
+  age: number | null;
+  university: string | null;
+  avatar_url: string | null;
 }
 
 interface DBGem {
@@ -218,69 +224,199 @@ function DashboardTab({ stats, loading }: { stats: DashStats; loading: boolean }
   );
 }
 
+type ModerationAction = "suspend" | "ban" | "reactivate";
+type ConfirmModal =
+  | { kind: "delete";     userId: string; name: string }
+  | { kind: "suspend";    userId: string; name: string }
+  | { kind: "ban";        userId: string; name: string }
+  | { kind: "reactivate"; userId: string; name: string }
+  | null;
+
 function UsersTab() {
   const [search, setSearch]         = useState("");
   const [users, setUsers]           = useState<DBProfile[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [deleting, setDeleting]     = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState("");
-  const [confirmId, setConfirmId]   = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [confirm, setConfirm]       = useState<ConfirmModal>(null);
+  const [acting, setActing]         = useState<string | null>(null); // userId being acted on
+  const [viewUser, setViewUser]     = useState<DBProfile | null>(null);
   const { user: adminUser }         = useAuthStore();
 
   const fetchUsers = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, is_premium, created_at, location")
+      .select("id, full_name, email, is_premium, is_admin, account_status, created_at, location, bio, age, university, avatar_url")
       .order("created_at", { ascending: false })
       .limit(200);
+    if (error) console.error("[UsersTab]", error);
     if (data) setUsers(data as DBProfile[]);
     setLoading(false);
   };
 
   useEffect(() => { fetchUsers(); }, []);
 
+  // ── Moderation: Suspend / Ban / Reactivate ──────────────────────────────
+  const moderateUser = async (userId: string, action: ModerationAction) => {
+    setConfirm(null);
+    setActionError("");
+    setActing(userId);
+    const newStatus = action === "suspend" ? "suspended" : action === "ban" ? "banned" : "active";
+    const { error } = await supabase
+      .from("profiles")
+      .update({ account_status: newStatus })
+      .eq("id", userId);
+    if (error) {
+      setActionError(`Failed to ${action} user: ${error.message}`);
+    } else {
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, account_status: newStatus } : u));
+      if (viewUser?.id === userId) setViewUser(v => v ? { ...v, account_status: newStatus } : v);
+    }
+    setActing(null);
+  };
+
+  // ── Delete via Edge Function ────────────────────────────────────────────
   const handleDelete = async (userId: string) => {
-    setConfirmId(null);
-    setDeleteError("");
-    setDeleting(userId);
+    setConfirm(null);
+    setActionError("");
+    setActing(userId);
     try {
-      // Call the Edge Function — it runs with the service role key server-side
-      // and handles: auth verification → admin check → auth.admin.deleteUser()
-      // Cascade: auth.users → profiles → likes/matches/messages/notifications/
-      //          bookings/posts/payments/reports/blocks (all ON DELETE CASCADE)
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) throw new Error("Not authenticated");
-
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
           body: JSON.stringify({ userId }),
         }
       );
       const result = await res.json();
-      if (!res.ok || result.error) {
-        throw new Error(result.error ?? "Delete failed");
-      }
-      // Remove from local state
+      if (!res.ok || result.error) throw new Error(result.error ?? "Delete failed");
       setUsers(prev => prev.filter(u => u.id !== userId));
+      if (viewUser?.id === userId) setViewUser(null);
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete user");
+      setActionError(err instanceof Error ? err.message : "Failed to delete user");
     } finally {
-      setDeleting(null);
+      setActing(null);
     }
+  };
+
+  const handleConfirm = () => {
+    if (!confirm) return;
+    if (confirm.kind === "delete")     handleDelete(confirm.userId);
+    else if (confirm.kind === "suspend")    moderateUser(confirm.userId, "suspend");
+    else if (confirm.kind === "ban")        moderateUser(confirm.userId, "ban");
+    else if (confirm.kind === "reactivate") moderateUser(confirm.userId, "reactivate");
+  };
+
+  const canModerate = (u: DBProfile) =>
+    u.id !== adminUser?.id && !u.is_admin;
+
+  const statusBadge = (s: string | null) => {
+    if (s === "suspended") return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Suspended</span>;
+    if (s === "banned")    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Banned</span>;
+    return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Active</span>;
   };
 
   const filtered = users.filter(u =>
     (u.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
     (u.email ?? "").toLowerCase().includes(search.toLowerCase())
   );
+
+  // ── User detail panel ───────────────────────────────────────────────────
+  if (viewUser) {
+    const u = viewUser;
+    const modOk = canModerate(u);
+    const isActing = acting === u.id;
+    return (
+      <div className="space-y-4">
+        <button onClick={() => setViewUser(null)}
+          className="flex items-center gap-1.5 text-sm text-sky-600 hover:underline">
+          ← Back to Users
+        </button>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
+          {/* Header */}
+          <div className="flex items-start gap-4">
+            <div className="h-14 w-14 rounded-full bg-sky-100 flex items-center justify-center text-sky-700 font-bold text-xl flex-shrink-0 overflow-hidden">
+              {u.avatar_url
+                ? <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
+                : (u.full_name ?? "?")[0].toUpperCase()
+              }
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-bold text-slate-900">{u.full_name ?? "Unknown"}</h2>
+                {u.is_admin && <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">ADMIN</span>}
+                {u.is_premium && <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-bold">PLUS</span>}
+                {statusBadge(u.account_status)}
+              </div>
+              <p className="text-sm text-slate-500">{u.email ?? "—"}</p>
+            </div>
+          </div>
+
+          {/* Details */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            {[
+              { label: "Location",   value: u.location },
+              { label: "University", value: u.university },
+              { label: "Age",        value: u.age?.toString() },
+              { label: "Joined",     value: new Date(u.created_at).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" }) },
+            ].map(f => (
+              <div key={f.label}>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{f.label}</p>
+                <p className="text-slate-700">{f.value ?? "—"}</p>
+              </div>
+            ))}
+            {u.bio && (
+              <div className="col-span-2">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Bio</p>
+                <p className="text-slate-700">{u.bio}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Moderation actions */}
+          {modOk && (
+            <div className="border-t border-slate-100 pt-4 space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Moderation</p>
+              <div className="flex flex-wrap gap-2">
+                {u.account_status !== "suspended" && u.account_status !== "banned" && (
+                  <button disabled={isActing} onClick={() => setConfirm({ kind: "suspend", userId: u.id, name: u.full_name ?? "this user" })}
+                    className="px-3 py-2 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-lg disabled:opacity-50 transition">
+                    {isActing ? "…" : "Suspend User"}
+                  </button>
+                )}
+                {u.account_status !== "banned" && (
+                  <button disabled={isActing} onClick={() => setConfirm({ kind: "ban", userId: u.id, name: u.full_name ?? "this user" })}
+                    className="px-3 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition">
+                    {isActing ? "…" : "Ban User"}
+                  </button>
+                )}
+                {(u.account_status === "suspended" || u.account_status === "banned") && (
+                  <button disabled={isActing} onClick={() => setConfirm({ kind: "reactivate", userId: u.id, name: u.full_name ?? "this user" })}
+                    className="px-3 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 transition">
+                    {isActing ? "…" : "Reactivate Account"}
+                  </button>
+                )}
+                <button disabled={isActing} onClick={() => setConfirm({ kind: "delete", userId: u.id, name: u.full_name ?? "this user" })}
+                  className="px-3 py-2 text-xs font-semibold bg-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-700 rounded-lg disabled:opacity-50 transition">
+                  {isActing ? "…" : "Delete Account"}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">Admins cannot be suspended or banned.</p>
+            </div>
+          )}
+          {u.is_admin && (
+            <div className="border-t border-slate-100 pt-4">
+              <p className="text-xs text-slate-400 italic">This is an admin account — moderation actions are not available.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -293,38 +429,56 @@ function UsersTab() {
         <span className="text-sm text-slate-400">{filtered.length} users</span>
       </div>
 
-      {deleteError && (
+      {actionError && (
         <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          {deleteError}
-          <button onClick={() => setDeleteError("")} className="ml-auto text-red-400 hover:text-red-600"><X className="h-4 w-4" /></button>
+          {actionError}
+          <button onClick={() => setActionError("")} className="ml-auto text-red-400 hover:text-red-600"><X className="h-4 w-4" /></button>
         </div>
       )}
 
       {/* Confirm dialog */}
-      {confirmId && (
+      {confirm && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="h-5 w-5 text-red-600" />
+              <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                confirm.kind === "ban" ? "bg-red-100" : confirm.kind === "suspend" ? "bg-amber-100"
+                : confirm.kind === "reactivate" ? "bg-emerald-100" : "bg-red-100"
+              }`}>
+                {confirm.kind === "suspend" ? <Shield className="h-5 w-5 text-amber-600" />
+                 : confirm.kind === "ban" ? <Shield className="h-5 w-5 text-red-600" />
+                 : confirm.kind === "reactivate" ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                 : <Trash2 className="h-5 w-5 text-red-600" />}
               </div>
               <div>
-                <p className="font-semibold text-slate-900">Delete user?</p>
-                <p className="text-xs text-slate-500">This cannot be undone.</p>
+                <p className="font-semibold text-slate-900 capitalize">{confirm.kind} user?</p>
+                <p className="text-xs text-slate-500">{confirm.name}</p>
               </div>
             </div>
             <p className="text-sm text-slate-600 mb-5">
-              All data will be permanently removed: profile, likes, matches, messages, bookings, payments, posts, notifications, and reports.
-            </p>
+              {confirm.kind === "suspend"
+                ? "This user will be temporarily restricted from using TCUnnect. Their data will be kept. You can reactivate them later."
+                : confirm.kind === "ban"
+                ? "This user will be permanently banned from TCUnnect. Their data will be kept but they cannot log in."
+                : confirm.kind === "reactivate"
+                ? "This user's account will be restored to active status."
+                : "All data will be permanently removed: profile, likes, matches, messages, bookings, payments, posts, notifications, and reports."}</p>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmId(null)}
+              <button onClick={() => setConfirm(null)}
                 className="flex-1 border border-slate-200 rounded-lg py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
                 Cancel
               </button>
-              <button onClick={() => handleDelete(confirmId)}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-semibold transition">
-                Delete Permanently
+              <button onClick={handleConfirm}
+                className={`flex-1 text-white rounded-lg py-2 text-sm font-semibold transition ${
+                  confirm.kind === "reactivate" ? "bg-emerald-600 hover:bg-emerald-700"
+                  : confirm.kind === "suspend" ? "bg-amber-500 hover:bg-amber-600"
+                  : "bg-red-600 hover:bg-red-700"
+                }`}>
+                {confirm.kind === "suspend" ? "Yes, Suspend"
+                 : confirm.kind === "ban" ? "Yes, Ban"
+                 : confirm.kind === "reactivate" ? "Yes, Reactivate"
+                 : "Delete Permanently"}
               </button>
             </div>
           </div>
@@ -340,42 +494,69 @@ function UsersTab() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                {["User", "Email", "Plan", "Location", "Joined", ""].map(h => (
+                {["User", "Email", "Plan", "Status", "Joined", "Actions"].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map(u => (
-                <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-slate-800">{u.full_name ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{u.email ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {u.is_premium
-                      ? <Pill text="Plus" color="bg-sky-100 text-sky-700" />
-                      : <Pill text="Free" color="bg-slate-100 text-slate-600" />}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{u.location ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">
-                    {new Date(u.created_at).toLocaleDateString("en-PH", { month: "short", year: "numeric" })}
-                  </td>
-                  <td className="px-4 py-3">
-                    {u.id !== adminUser?.id && (
-                      deleting === u.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+              {filtered.map(u => {
+                const isActing = acting === u.id;
+                const mod = canModerate(u);
+                return (
+                  <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-700 text-xs font-bold flex-shrink-0 overflow-hidden">
+                          {u.avatar_url
+                            ? <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
+                            : (u.full_name ?? "?")[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-800 text-xs">{u.full_name ?? "—"}</p>
+                          {u.is_admin && <span className="text-[9px] text-sky-600 font-bold">ADMIN</span>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">{u.email ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      {u.is_premium
+                        ? <Pill text="Plus" color="bg-sky-100 text-sky-700" />
+                        : <Pill text="Free" color="bg-slate-100 text-slate-600" />}
+                    </td>
+                    <td className="px-4 py-3">{statusBadge(u.account_status)}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">
+                      {new Date(u.created_at).toLocaleDateString("en-PH", { month: "short", year: "numeric" })}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isActing ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
                       ) : (
-                        <button
-                          onClick={() => setConfirmId(u.id)}
-                          title="Delete user"
-                          className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button onClick={() => setViewUser(u)}
+                            className="text-xs text-sky-600 hover:underline font-medium">View</button>
+                          {mod && u.account_status !== "suspended" && u.account_status !== "banned" && (
+                            <button onClick={() => setConfirm({ kind: "suspend", userId: u.id, name: u.full_name ?? "this user" })}
+                              className="text-xs text-amber-600 hover:underline font-medium">Suspend</button>
+                          )}
+                          {mod && u.account_status !== "banned" && (
+                            <button onClick={() => setConfirm({ kind: "ban", userId: u.id, name: u.full_name ?? "this user" })}
+                              className="text-xs text-red-600 hover:underline font-medium">Ban</button>
+                          )}
+                          {mod && (u.account_status === "suspended" || u.account_status === "banned") && (
+                            <button onClick={() => setConfirm({ kind: "reactivate", userId: u.id, name: u.full_name ?? "this user" })}
+                              className="text-xs text-emerald-600 hover:underline font-medium">Reactivate</button>
+                          )}
+                          {mod && (
+                            <button onClick={() => setConfirm({ kind: "delete", userId: u.id, name: u.full_name ?? "this user" })}
+                              className="text-xs text-slate-400 hover:text-red-500 hover:underline font-medium">Delete</button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -2120,10 +2301,11 @@ function ReportsTab() {
   const fetchReports = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
 
-    // Step 1: base query — always works regardless of migration state
+    // Step 1: base query — minimal columns that have always existed
+    // (reported_post_id may not exist if migration 21 hasn't run yet; we get it in step 2)
     const { data: baseData, error: baseError } = await supabase
       .from("reports")
-      .select("id, reported_by, reported_user_id, reported_item_type, reported_item_id, reported_post_id, match_id, message_content, reason, details, status, created_at")
+      .select("id, reported_by, reported_user_id, reported_item_type, reported_item_id, match_id, message_content, reason, details, status, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
