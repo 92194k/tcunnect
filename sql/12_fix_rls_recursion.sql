@@ -117,7 +117,7 @@ DROP POLICY IF EXISTS "admin_reports_update"           ON reports;
 CREATE POLICY "admin_reports_select"
   ON reports FOR SELECT
   TO authenticated
-  USING (reporter_id = auth.uid() OR reported_by = auth.uid() OR auth_is_admin());
+  USING (reported_by = auth.uid() OR auth_is_admin());
 
 CREATE POLICY "admin_reports_update"
   ON reports FOR UPDATE
