@@ -552,10 +552,15 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   addNotification: (n) =>
-    set((s) => ({
-      notifications: [n, ...s.notifications],
-      unreadCount: s.unreadCount + (n.read ? 0 : 1),
-    })),
+    set((s) => {
+      // Deduplicate: createNotification() adds locally AND AppShell's Realtime
+      // subscription fires — guard so the same notification isn't counted twice.
+      if (s.notifications.some((existing) => existing.id === n.id)) return s;
+      return {
+        notifications: [n, ...s.notifications],
+        unreadCount: s.unreadCount + (n.read ? 0 : 1),
+      };
+    }),
 
   markAsRead: async (id) => {
     // Optimistic update

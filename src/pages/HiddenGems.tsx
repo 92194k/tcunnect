@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
-import { useAuthStore } from "../stores";
+import { useAuthStore, createNotification } from "../stores";
 import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check, Image, Link2 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -176,7 +176,7 @@ export default function HiddenGems() {
         finalImageUrl = publicUrl;
       }
 
-      const { error } = await supabase.from("hidden_gems").insert({
+      const { data: gemData, error } = await supabase.from("hidden_gems").insert({
         name: form.name.trim(),
         location: form.location.trim(),
         category: form.category,
@@ -189,12 +189,25 @@ export default function HiddenGems() {
         is_featured: isAdmin ? form.is_featured : false,
         status,
         submitted_by: user?.id ?? null,
-      });
+      }).select("id").single();
 
       if (error) throw new Error(error.message);
 
       setSubmitted(true);
       if (isAdmin) fetchGems();
+
+      // Notify the submitter about their gem submission / direct approval
+      if (user) {
+        await createNotification(user.id, {
+          type: isAdmin ? "gem_approved" : "gem_update",
+          title: isAdmin ? "Gem Added! 🌟" : "Gem Submitted for Review 📍",
+          body: isAdmin
+            ? `${form.name.trim()} is now live on the Hidden Gems map.`
+            : `${form.name.trim()} has been submitted and is pending review by our team.`,
+          linkTo: gemData?.id ? `/gems/${gemData.id}` : "/hidden-gems",
+          referenceId: gemData?.id,
+        });
+      }
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Failed to submit. Please try again.");
     } finally {

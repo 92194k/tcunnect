@@ -241,6 +241,132 @@ CREATE TRIGGER trg_notify_new_match
   FOR EACH ROW
   EXECUTE FUNCTION public.fn_notify_new_match();
 
+-- ─── STEP 12: Booking status change notification trigger ─────────────────────
+-- Fires AFTER UPDATE on bookings when status column changes.
+-- Notifies the booking OWNER of confirmed / cancelled / updated / completed.
+-- SECURITY DEFINER so it runs as DB owner, bypassing RLS.
+
+CREATE OR REPLACE FUNCTION public.fn_notify_booking_status_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_type  TEXT;
+  v_title TEXT;
+  v_body  TEXT;
+BEGIN
+  -- Only act when the status actually changed
+  IF NEW.status = OLD.status THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status = 'confirmed' THEN
+    v_type  := 'booking_confirmed';
+    v_title := 'Booking Confirmed! 🎉';
+    v_body  := 'Your trip to ' || NEW.gem_name || ' has been confirmed. Have a great trip!';
+  ELSIF NEW.status = 'cancelled' THEN
+    v_type  := 'booking_cancelled';
+    v_title := 'Booking Cancelled';
+    v_body  := 'Your booking for ' || NEW.gem_name || ' has been cancelled.';
+  ELSIF NEW.status = 'completed' THEN
+    v_type  := 'booking_updated';
+    v_title := 'Trip Completed 🌟';
+    v_body  := 'Your trip to ' || NEW.gem_name || ' is marked as completed. Hope you had a great time!';
+  ELSE
+    v_type  := 'booking_updated';
+    v_title := 'Booking Updated';
+    v_body  := 'Your booking for ' || NEW.gem_name || ' has been updated (status: ' || NEW.status || ').';
+  END IF;
+
+  INSERT INTO public.notifications (user_id, type, title, body, read, link_to, reference_id)
+  VALUES (
+    NEW.user_id,
+    v_type,
+    v_title,
+    v_body,
+    false,
+    '/my-bookings',
+    NEW.id
+  );
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_notify_booking_status ON public.bookings;
+CREATE TRIGGER trg_notify_booking_status
+  AFTER UPDATE OF status ON public.bookings
+  FOR EACH ROW
+  EXECUTE FUNCTION public.fn_notify_booking_status_change();
+
+-- ─── STEP 13: Hidden gem approved notification trigger ────────────────────────
+-- Fires AFTER UPDATE on hidden_gems when status changes to 'approved'.
+-- Notifies the gem SUBMITTER that their gem went live.
+-- SECURITY DEFINER so it runs as DB owner, bypassing RLS.
+
+CREATE OR REPLACE FUNCTION public.fn_notify_gem_approved()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Only when status changes FROM something else TO 'approved', and submitter exists
+  IF NEW.status = 'approved' AND (OLD.status IS DISTINCT FROM 'approved') AND NEW.submitted_by IS NOT NULL THEN
+    INSERT INTO public.notifications (user_id, type, title, body, read, link_to, reference_id)
+    VALUES (
+      NEW.submitted_by,
+      'gem_approved',
+      'Your gem was approved! 🌟',
+      NEW.name || ' is now live on the Hidden Gems map for everyone to discover.',
+      false,
+      '/gems/' || NEW.id::TEXT,
+      NEW.id
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_notify_gem_approved ON public.hidden_gems;
+CREATE TRIGGER trg_notify_gem_approved
+  AFTER UPDATE OF status ON public.hidden_gems
+  FOR EACH ROW
+  EXECUTE FUNCTION public.fn_notify_gem_approved();
+
+-- ─── STEP 14: Add bookings + hidden_gems to Realtime publication ───────────────
+-- Required so Supabase Realtime carries UPDATE events from these tables
+-- to the DB triggers that fire notifications. The notification row itself
+-- (the INSERT into notifications) is what the client actually subscribes to
+-- via AppShell — but the tables that trigger those inserts need full rows.
+
+ALTER TABLE public.bookings     REPLICA IDENTITY FULL;
+ALTER TABLE public.hidden_gems  REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename  = 'bookings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename  = 'hidden_gems'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.hidden_gems;
+  END IF;
+END $$;
+
 -- ─── DONE ─────────────────────────────────────────────────────────────────────
 -- After running this, your app will have:
 --   ✓ receiver_id, message_type, metadata columns on messages
@@ -249,4 +375,7 @@ CREATE TRIGGER trg_notify_new_match
 --   ✓ Both tables in the supabase_realtime publication
 --   ✓ RLS policies on notifications (read own, update own, service insert)
 --   ✓ Auto-notification trigger: every new message → notification for receiver
+--   ✓ Match notification trigger: both users notified on new match
+--   ✓ Booking status trigger: confirmed/cancelled/updated → notification for owner
+--   ✓ Gem approved trigger: submitter notified when gem goes live
 -- ═══════════════════════════════════════════════════════════════════════════
