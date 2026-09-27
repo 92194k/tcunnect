@@ -158,9 +158,7 @@ function ReportUserModal({
         reported_user_id: reportedUserId,
         reported_item_type: "user",
         reported_item_id: reportedUserId,
-        match_id: matchId,
         reason,
-        details: details.trim() || null,
         status: "pending",
       });
       if (insertErr) {
@@ -252,8 +250,6 @@ function ReportMessageModal({
         reported_user_id: reportedUserId,
         reported_item_type: "message",
         reported_item_id: msg.id,
-        match_id: matchId,
-        message_content: msg.content.slice(0, 500),
         reason,
         status: "pending",
       });
