@@ -179,8 +179,9 @@ export interface Report {
   id: string;
   reportedBy: string;
   reportedUserId?: string;
-  reportedItemType: "Post" | "Comment" | "User" | "Message";
+  reportedItemType: "post" | "user" | "message";
   reportedItemId: string;
+  reportedPostId?: string;
   matchId?: string;
   messageContent?: string;
   reason: string;
@@ -188,6 +189,8 @@ export interface Report {
   status: "pending" | "resolved" | "dismissed";
   createdAt: string;
 }
+
+export type AccountStatus = "active" | "suspended" | "banned";
 
 export interface Block {
   id: string;

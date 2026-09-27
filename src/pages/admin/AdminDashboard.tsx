@@ -54,11 +54,21 @@ interface DBGem {
 
 interface DBReport {
   id: string;
-  reported_by: string | null;
+  reporter_id: string | null;
+  reported_user_id: string | null;
+  reported_item_type: string;
+  reported_item_id: string | null;
+  reported_post_id: string | null;
+  match_id: string | null;
+  message_content: string | null;
   reason: string | null;
+  details: string | null;
   status: string | null;
   created_at: string;
-  profiles?: { full_name: string | null };
+  // joined
+  reporter?: { full_name: string | null; email: string | null };
+  reported_user?: { full_name: string | null; email: string | null; is_admin: boolean; account_status: string };
+  post?: { content: string | null; created_at: string | null } | null;
 }
 
 interface PlatformSettings {
@@ -2097,41 +2107,248 @@ function ReviewsTab() {
   );
 }
 
+// ─── Reports Tab ─────────────────────────────────────────────────────────────
 function ReportsTab() {
-  const [reports, setReports] = useState<DBReport[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [reports, setReports]     = useState<DBReport[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [selected, setSelected]   = useState<DBReport | null>(null);
+  const [acting, setActing]       = useState(false);
+  const [pendingCount, setPendingCount]   = useState(0);
+  const [resolvedCount, setResolvedCount] = useState(0);
+  const [dismissedCount, setDismissedCount] = useState(0);
+
+  const fetchReports = async () => {
+    if (!isSupabaseConfigured) { setLoading(false); return; }
+    const { data } = await supabase
+      .from("reports")
+      .select(`
+        id, reporter_id, reported_user_id, reported_item_type,
+        reported_item_id, reported_post_id, match_id, message_content,
+        reason, details, status, created_at,
+        reporter:profiles!reports_reporter_id_fkey(full_name, email),
+        reported_user:profiles!reports_reported_user_id_fkey(full_name, email, is_admin, account_status),
+        post:posts!reports_reported_post_id_fkey(content, created_at)
+      `)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (data) {
+      const rows = data as unknown as DBReport[];
+      setReports(rows);
+      setPendingCount(rows.filter(r => !r.status || r.status === "pending").length);
+      setResolvedCount(rows.filter(r => r.status === "resolved").length);
+      setDismissedCount(rows.filter(r => r.status === "dismissed").length);
+      // keep selected in sync
+      setSelected(prev => prev ? (rows.find(r => r.id === prev.id) ?? null) : null);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    if (!isSupabaseConfigured) { setLoading(false); return; }
-    supabase
-      .from("reports")
-      .select("id, reported_by, reason, status, created_at, profiles!reports_reported_by_fkey(full_name)")
-      .order("created_at", { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        if (data) setReports(data as unknown as DBReport[]);
-        setLoading(false);
-      });
+    fetchReports();
+    // Realtime: new reports or status changes
+    if (!isSupabaseConfigured) return;
+    const ch = supabase
+      .channel("admin-reports-rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, () => {
+        fetchReports();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   const statusStyle = (s: string | null) => ({
-    pending:  "bg-amber-50 text-amber-700",
-    resolved: "bg-emerald-50 text-emerald-700",
+    pending:   "bg-amber-50 text-amber-700",
+    resolved:  "bg-emerald-50 text-emerald-700",
     dismissed: "bg-slate-100 text-slate-500",
   }[s ?? ""] ?? "bg-amber-50 text-amber-700");
+
+  const typeLabel = (t: string) => ({
+    user:    "User",
+    message: "Message",
+    post:    "Community Post",
+  }[t] ?? t);
+
+  const typeColor = (t: string) => ({
+    user:    "bg-violet-50 text-violet-700",
+    message: "bg-sky-50 text-sky-700",
+    post:    "bg-amber-50 text-amber-700",
+  }[t] ?? "bg-slate-100 text-slate-600");
 
   const updateStatus = async (id: string, status: string) => {
     if (!isSupabaseConfigured) return;
     await supabase.from("reports").update({ status }).eq("id", id);
-    setReports(rs => rs.map(r => r.id === id ? { ...r, status } : r));
+    await fetchReports();
   };
 
+  const moderateUser = async (
+    report: DBReport,
+    action: "suspend" | "ban" | "resolve" | "dismiss"
+  ) => {
+    if (!isSupabaseConfigured || !report.reported_user_id) return;
+    if (action === "suspend" || action === "ban") {
+      const target = report.reported_user;
+      if (target?.is_admin) {
+        alert("Cannot suspend or ban an administrator.");
+        return;
+      }
+      const msg = action === "ban"
+        ? `Are you sure you want to BAN this user? This will permanently restrict their access to TCUnnect.`
+        : `Are you sure you want to SUSPEND this user? They will be temporarily restricted from using TCUnnect.`;
+      if (!window.confirm(msg)) return;
+    }
+    setActing(true);
+    if (action === "suspend") {
+      await supabase.from("profiles").update({ account_status: "suspended" }).eq("id", report.reported_user_id);
+      await supabase.from("reports").update({ status: "resolved" }).eq("id", report.id);
+    } else if (action === "ban") {
+      await supabase.from("profiles").update({ account_status: "banned" }).eq("id", report.reported_user_id);
+      await supabase.from("reports").update({ status: "resolved" }).eq("id", report.id);
+    } else if (action === "resolve") {
+      await supabase.from("reports").update({ status: "resolved" }).eq("id", report.id);
+    } else {
+      await supabase.from("reports").update({ status: "dismissed" }).eq("id", report.id);
+    }
+    setActing(false);
+    await fetchReports();
+  };
+
+  // Detail panel
+  if (selected) {
+    const r = selected;
+    const ru = r.reported_user;
+    const reporter = r.reporter;
+    return (
+      <div className="space-y-4">
+        <button onClick={() => setSelected(null)}
+          className="flex items-center gap-1.5 text-sm text-sky-600 hover:underline">
+          ← Back to Reports
+        </button>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full mr-2 ${typeColor(r.reported_item_type)}`}>
+                {typeLabel(r.reported_item_type)}
+              </span>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${statusStyle(r.status)}`}>
+                {r.status ?? "pending"}
+              </span>
+            </div>
+            <span className="text-xs text-slate-400">
+              {new Date(r.created_at).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}
+            </span>
+          </div>
+
+          {/* Reporter */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Reporter</p>
+            <p className="text-sm font-medium text-slate-800">{reporter?.full_name ?? "Unknown"}</p>
+            <p className="text-xs text-slate-500">{reporter?.email ?? "—"}</p>
+          </div>
+
+          {/* Reported User */}
+          {ru && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Reported User</p>
+              <p className="text-sm font-medium text-slate-800">{ru.full_name ?? "Unknown"}</p>
+              <p className="text-xs text-slate-500">{ru.email ?? "—"}</p>
+              {ru.is_admin && (
+                <span className="inline-block mt-1 text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">ADMIN</span>
+              )}
+              <span className={`inline-block mt-1 ml-1 text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize ${
+                ru.account_status === "banned" ? "bg-red-100 text-red-700"
+                : ru.account_status === "suspended" ? "bg-amber-100 text-amber-700"
+                : "bg-emerald-100 text-emerald-700"
+              }`}>{ru.account_status ?? "active"}</span>
+            </div>
+          )}
+
+          {/* Message content */}
+          {r.reported_item_type === "message" && r.message_content && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Reported Message</p>
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-sm text-slate-700 italic">
+                "{r.message_content}"
+              </div>
+            </div>
+          )}
+
+          {/* Community post content */}
+          {r.reported_item_type === "post" && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Reported Post</p>
+              {r.post ? (
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-sm text-slate-700">
+                  {r.post.content ?? "—"}
+                  {r.post.created_at && (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Posted {new Date(r.post.created_at).toLocaleDateString("en-PH")}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 italic">Post has been deleted.</p>
+              )}
+            </div>
+          )}
+
+          {/* Reason + details */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Reason</p>
+            <p className="text-sm text-slate-800">{r.reason ?? "—"}</p>
+            {r.details && <p className="text-xs text-slate-500 mt-1">{r.details}</p>}
+          </div>
+
+          {/* Actions */}
+          <div className="border-t border-slate-100 pt-4 flex flex-wrap gap-2">
+            {(!r.status || r.status === "pending") && (
+              <>
+                {r.reported_item_type === "user" && ru && !ru.is_admin && (
+                  <>
+                    {ru.account_status !== "suspended" && ru.account_status !== "banned" && (
+                      <button onClick={() => moderateUser(r, "suspend")} disabled={acting}
+                        className="px-3 py-2 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-lg disabled:opacity-50 transition">
+                        {acting ? "…" : "Suspend User"}
+                      </button>
+                    )}
+                    {ru.account_status !== "banned" && (
+                      <button onClick={() => moderateUser(r, "ban")} disabled={acting}
+                        className="px-3 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition">
+                        {acting ? "…" : "Ban User"}
+                      </button>
+                    )}
+                  </>
+                )}
+                <button onClick={() => moderateUser(r, "resolve")} disabled={acting}
+                  className="px-3 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 transition">
+                  {acting ? "…" : "Resolve Report"}
+                </button>
+                <button onClick={() => moderateUser(r, "dismiss")} disabled={acting}
+                  className="px-3 py-2 text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg disabled:opacity-50 transition">
+                  {acting ? "…" : "Dismiss Report"}
+                </button>
+              </>
+            )}
+            {r.status === "resolved" && (
+              <span className="text-xs text-emerald-600 font-semibold">✓ Report resolved</span>
+            )}
+            {r.status === "dismissed" && (
+              <span className="text-xs text-slate-400 font-semibold">Report dismissed</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // List view
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard icon={TrendingUp} label="Total Reports" value={reports.length} color="rose" />
-        <StatCard icon={AlertCircle} label="Pending"
-          value={reports.filter(r => !r.status || r.status === "pending").length} color="amber" />
+      <div className="grid grid-cols-4 gap-3">
+        <StatCard icon={TrendingUp}    label="Total Reports" value={reports.length}  color="rose" />
+        <StatCard icon={AlertCircle}   label="Pending"       value={pendingCount}    color="amber" />
+        <StatCard icon={CheckCircle2}  label="Resolved"      value={resolvedCount}   color="emerald" />
+        <StatCard icon={XCircle}       label="Dismissed"     value={dismissedCount}  color="slate" />
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
@@ -2144,7 +2361,7 @@ function ReportsTab() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                {["Reporter", "Reason", "Date", "Status", "Actions"].map(h => (
+                {["Reporter", "Type", "Reported", "Reason", "Date", "Status", "Actions"].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -2152,8 +2369,18 @@ function ReportsTab() {
             <tbody className="divide-y divide-slate-50">
               {reports.map(r => (
                 <tr key={r.id} className="hover:bg-slate-50/50">
-                  <td className="px-4 py-3 font-medium text-slate-800">{(r as any).profiles?.full_name ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{r.reason ?? "—"}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800 text-xs">
+                    {r.reporter?.full_name ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${typeColor(r.reported_item_type)}`}>
+                      {typeLabel(r.reported_item_type)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600 text-xs">
+                    {r.reported_user?.full_name ?? (r.reported_item_type === "post" ? "Post" : "—")}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600 text-xs max-w-[140px] truncate">{r.reason ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs">
                     {new Date(r.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
                   </td>
@@ -2164,6 +2391,10 @@ function ReportsTab() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
+                      <button onClick={() => setSelected(r)}
+                        className="text-xs text-sky-600 hover:underline font-medium">
+                        View
+                      </button>
                       {(!r.status || r.status === "pending") && (
                         <>
                           <button onClick={() => updateStatus(r.id, "resolved")}
@@ -2455,7 +2686,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab]   = useState<TabId>("dashboard");
   const [showBell, setShowBell]     = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
-  const [badges, setBadges]         = useState({ payments: 0, gems: 0 });
+  const [badges, setBadges]         = useState({ payments: 0, gems: 0, reports: 0 });
   const [dashStats, setDashStats]   = useState<DashStats>({
     users: 0, bookings: 0, revenue: 0, pendingPayments: 0,
     pendingGems: 0, approvedGems: 0, premiumUsers: 0, reports: 0,
@@ -2479,7 +2710,8 @@ export default function AdminDashboard() {
       supabase.from("hidden_gems").select("id", { count: "exact", head: true }).eq("status", "approved"),
       supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_premium", true),
       supabase.from("reports").select("id", { count: "exact", head: true }),
-    ]).then(([users, bookings, revenue, pendPay, pendGems, appGems, prem, reps]) => {
+      supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    ]).then(([users, bookings, revenue, pendPay, pendGems, appGems, prem, reps, pendReps]) => {
       const totalRevenue = (revenue.data ?? []).reduce((sum: number, p: any) => sum + (p.amount ?? 0), 0);
       setDashStats({
         users:           users.count ?? 0,
@@ -2491,7 +2723,7 @@ export default function AdminDashboard() {
         premiumUsers:    prem.count ?? 0,
         reports:         reps.count ?? 0,
       });
-      setBadges({ payments: pendPay.count ?? 0, gems: pendGems.count ?? 0 });
+      setBadges({ payments: pendPay.count ?? 0, gems: pendGems.count ?? 0, reports: pendReps.count ?? 0 });
       setDashLoading(false);
     });
   }, []);
@@ -2521,6 +2753,23 @@ export default function AdminDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
+  // Realtime: keep reports badge live
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const refreshReportsBadge = async () => {
+      const { count } = await supabase
+        .from("reports")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending");
+      setBadges(b => ({ ...b, reports: count ?? 0 }));
+    };
+    const ch = supabase
+      .channel("admin-reports-badge")
+      .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, refreshReportsBadge)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
   // Close bell dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -2534,7 +2783,10 @@ export default function AdminDashboard() {
 
   const TABS = BASE_TABS.map(t => ({
     ...t,
-    badge: t.id === "payments" ? badges.payments : t.id === "gems" ? badges.gems : undefined,
+    badge: t.id === "payments" ? badges.payments
+         : t.id === "gems"     ? badges.gems
+         : t.id === "reports"  ? badges.reports
+         : undefined,
   }));
 
   const renderTab = () => {

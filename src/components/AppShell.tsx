@@ -24,6 +24,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { unreadCount, fetchNotifications, addNotification } = useNotificationStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [accountStatus, setAccountStatus] = useState<"active" | "suspended" | "banned" | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notifChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -31,6 +32,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     logout();
     navigate("/");
   };
+
+  // Check account_status on mount and whenever user changes
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured) return;
+    supabase
+      .from("profiles")
+      .select("account_status")
+      .eq("id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.account_status) {
+          setAccountStatus(data.account_status as "active" | "suspended" | "banned");
+        }
+      });
+  }, [user?.id]);
 
   const isActive = (to: string) => location.pathname === to;
 
@@ -101,6 +117,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Block screen for suspended/banned users (admins bypass this)
+  if (accountStatus && accountStatus !== "active" && !user?.isAdmin) {
+    const isBanned = accountStatus === "banned";
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-sm w-full bg-white rounded-2xl shadow-lg border border-slate-100 p-8 text-center">
+          <div className={`h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4 ${isBanned ? "bg-rose-100" : "bg-amber-100"}`}>
+            <Shield className={`h-8 w-8 ${isBanned ? "text-rose-500" : "text-amber-500"}`} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">
+            {isBanned ? "Account Banned" : "Account Suspended"}
+          </h2>
+          <p className="text-sm text-slate-500 mb-6">
+            {isBanned
+              ? "Your account has been permanently banned for violating our community guidelines. You can no longer access TCUnnect."
+              : "Your account has been temporarily suspended. Please contact support if you believe this was a mistake."}
+          </p>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 rounded-xl transition text-sm"
+          >
+            <LogOut className="h-4 w-4" /> Log Out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

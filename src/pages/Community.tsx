@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import AppShell from "../components/AppShell";
 import { useAuthStore, createNotification } from "../stores";
-import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight } from "lucide-react";
+import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight, Flag, MoreHorizontal } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 interface Comment {
@@ -34,6 +34,83 @@ function timeAgo(ts: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// ─── Report Post Modal ────────────────────────────────────────────────────────
+const POST_REPORT_REASONS = [
+  "Spam",
+  "Harassment or bullying",
+  "Inappropriate content",
+  "Hate or abusive content",
+  "Scam or misleading content",
+  "Other",
+];
+
+function ReportPostModal({ postId, reporterId, onClose }: {
+  postId: string; reporterId: string; onClose: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!reason || !isSupabaseConfigured) return;
+    setSubmitting(true);
+    await supabase.from("reports").insert({
+      reporter_id: reporterId,
+      reported_item_type: "post",
+      reported_item_id: postId,
+      reported_post_id: postId,
+      reason,
+      status: "pending",
+    });
+    setSubmitting(false);
+    setDone(true);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <Flag className="h-4 w-4 text-rose-500" /> Report this post
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+        </div>
+        {done ? (
+          <div className="p-6 text-center">
+            <div className="h-14 w-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-2xl">✓</span>
+            </div>
+            <p className="font-semibold text-slate-900 mb-1">Report Submitted</p>
+            <p className="text-xs text-slate-500 mb-4">Our moderation team will review this post.</p>
+            <button onClick={onClose} className="w-full bg-slate-900 text-white font-semibold py-2.5 rounded-xl text-sm">Done</button>
+          </div>
+        ) : (
+          <div className="p-4 space-y-3">
+            <p className="text-xs text-slate-500">Why are you reporting this?</p>
+            <div className="space-y-1.5">
+              {POST_REPORT_REASONS.map(r => (
+                <button key={r} onClick={() => setReason(r)}
+                  className={`w-full text-left text-xs px-3 py-2.5 rounded-lg border transition ${
+                    reason === r ? "border-rose-400 bg-rose-50 text-rose-700 font-medium" : "border-slate-200 text-slate-600 hover:border-rose-200"
+                  }`}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={handleSubmit} disabled={!reason || submitting}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition flex items-center justify-center gap-1.5">
+                {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Submit Report
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Post Card with Comments ───────────────────────────────────────────────
 function PostCard({
   post,
@@ -52,6 +129,9 @@ function PostCard({
   const [submittingComment, setSubmittingComment] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comment_count);
   const [copied, setCopied] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   async function loadComments() {
     if (!isSupabaseConfigured) return;
@@ -185,8 +265,43 @@ function PostCard({
             <Share2 className="h-3.5 w-3.5" />
             {copied ? "Copied!" : "Share"}
           </button>
+
+          {/* ⋮ More menu */}
+          {user && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setShowMenu((v) => !v)}
+                className="flex items-center justify-center h-7 w-7 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {showMenu && (
+                <>
+                  {/* click-outside overlay */}
+                  <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                  <div className="absolute right-0 bottom-8 z-20 bg-white border border-slate-100 rounded-xl shadow-lg py-1 min-w-[140px]">
+                    <button
+                      onClick={() => { setShowReport(true); setShowMenu(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition"
+                    >
+                      <Flag className="h-3.5 w-3.5" /> Report Post
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Report modal */}
+      {showReport && user && (
+        <ReportPostModal
+          postId={post.id}
+          reporterId={user.id}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       {/* Comments panel */}
       {showComments && (
