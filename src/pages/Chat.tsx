@@ -699,21 +699,31 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
       channelRef.current = null;
     }
 
-    // Use a name unique per user + conversation so channels never collide
-    const channelName = `chat_${matchId}_${user.id}`;
+    // Shared channel name — BOTH users in a conversation subscribe to the same
+    // channel so Broadcast events and postgres_changes flow between them.
+    // The old name `chat_${matchId}_${user.id}` was unique per user — that's
+    // why User B never received User A's messages.
+    const channelName = `match_${matchId}`;
 
     const channel = supabase
       .channel(channelName)
+      // ── 1. Broadcast: instant delivery (sender explicitly sends after DB insert)
+      .on("broadcast", { event: "new_message" }, ({ payload }) => {
+        const msg = payload as Message;
+        if (msg.senderId === userIdRef.current) return; // skip own
+        const currentMsgs = useChatStore.getState().messages[matchIdRef.current] ?? [];
+        if (currentMsgs.some((m) => m.id === msg.id)) return;
+        addMessage(matchIdRef.current, msg);
+        supabase.from("messages").update({ read: true }).eq("id", msg.id);
+      })
+      // ── 2. postgres_changes: fallback catch-all (requires REPLICA IDENTITY FULL
+      //      set via sql/06_notifications_realtime.sql — run that in Supabase)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "messages",
-          // NO server-side filter — requires REPLICA IDENTITY FULL which may not
-          // be set. RLS (receiver_id = auth.uid OR sender_id = auth.uid) already
-          // scopes the stream to this user's messages. We filter by matchId
-          // client-side below so only the open conversation is updated.
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
@@ -723,7 +733,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           // Skip own messages — already added optimistically when sent
           if (row.sender_id === userIdRef.current) return;
 
-          // Dedup guard: addMessage also deduplicates, but check here too
+          // Dedup guard: if Broadcast already delivered this, skip it
           const currentMsgs = useChatStore.getState().messages[matchIdRef.current] ?? [];
           if (currentMsgs.some((m) => m.id === (row.id as string))) return;
 
@@ -782,7 +792,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
     if (!text || !user || !partner) return;
     setSending(true);
 
-    await storeSend({
+    const saved = await storeSend({
       matchId,
       senderId: user.id,
       receiverId: partner.id,
@@ -790,6 +800,16 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
       messageType: msgType,
       metadata: meta,
     });
+
+    // Broadcast to partner immediately via the shared channel.
+    // This is what makes User B see the message instantly without a DB poll.
+    if (channelRef.current && saved && !String(saved.id).startsWith("tmp_")) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "new_message",
+        payload: saved,
+      });
+    }
 
     if (!content) setInput(""); // only clear when sending from input
     setSending(false);
