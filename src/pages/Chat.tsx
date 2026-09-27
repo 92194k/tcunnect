@@ -152,7 +152,7 @@ function ReportUserModal({
     setSubmitting(true);
     if (isSupabaseConfigured) {
       await supabase.from("reports").insert({
-        reporter_id: reporterUserId,
+        reported_by: reporterUserId,
         reported_user_id: reportedUserId,
         reported_item_type: "user",
         reported_item_id: reportedUserId,
@@ -233,7 +233,7 @@ function ReportMessageModal({
     setSubmitting(true);
     if (isSupabaseConfigured) {
       await supabase.from("reports").insert({
-        reporter_id: reporterUserId,
+        reported_by: reporterUserId,
         reported_user_id: reportedUserId,
         reported_item_type: "message",
         reported_item_id: msg.id,

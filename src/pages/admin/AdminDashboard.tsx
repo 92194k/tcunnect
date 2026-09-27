@@ -2125,9 +2125,9 @@ function ReportsTab() {
         id, reported_by, reported_user_id, reported_item_type,
         reported_item_id, reported_post_id, match_id, message_content,
         reason, details, status, created_at,
-        reporter:profiles!reports_reported_by_fkey(full_name, email),
-        reported_user:profiles!reports_reported_user_id_fkey(full_name, email, is_admin, account_status),
-        post:posts!reports_reported_post_id_fkey(content, created_at)
+        reporter:profiles!reported_by(full_name, email),
+        reported_user:profiles!reported_user_id(full_name, email, is_admin, account_status),
+        post:posts!reported_post_id(content, created_at)
       `)
       .order("created_at", { ascending: false })
       .limit(200);
