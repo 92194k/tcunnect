@@ -7,7 +7,7 @@ import {
   BookOpen, BarChart2, Settings, Bell, LogOut, ChevronRight, Check,
   X, Eye, Shield, Clock, TrendingUp, AlertCircle, CheckCircle2,
   XCircle, FileText, RefreshCw, Search, Filter, Download,
-  MessageSquare, Compass, Home, Image, Save, Loader2,
+  MessageSquare, Compass, Home, Image, Save, Loader2, Trash2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -207,22 +207,63 @@ function DashboardTab({ stats, loading }: { stats: DashStats; loading: boolean }
 }
 
 function UsersTab() {
-  const [search, setSearch]   = useState("");
-  const [users, setUsers]     = useState<DBProfile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [search, setSearch]         = useState("");
+  const [users, setUsers]           = useState<DBProfile[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [deleting, setDeleting]     = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [confirmId, setConfirmId]   = useState<string | null>(null);
+  const { user: adminUser }         = useAuthStore();
 
-  useEffect(() => {
+  const fetchUsers = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
-    supabase
+    const { data } = await supabase
       .from("profiles")
       .select("id, full_name, email, is_premium, created_at, location")
       .order("created_at", { ascending: false })
-      .limit(200)
-      .then(({ data }) => {
-        if (data) setUsers(data as DBProfile[]);
-        setLoading(false);
-      });
-  }, []);
+      .limit(200);
+    if (data) setUsers(data as DBProfile[]);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleDelete = async (userId: string) => {
+    setConfirmId(null);
+    setDeleteError("");
+    setDeleting(userId);
+    try {
+      // Call the Edge Function — it runs with the service role key server-side
+      // and handles: auth verification → admin check → auth.admin.deleteUser()
+      // Cascade: auth.users → profiles → likes/matches/messages/notifications/
+      //          bookings/posts/payments/reports/blocks (all ON DELETE CASCADE)
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({ userId }),
+        }
+      );
+      const result = await res.json();
+      if (!res.ok || result.error) {
+        throw new Error(result.error ?? "Delete failed");
+      }
+      // Remove from local state
+      setUsers(prev => prev.filter(u => u.id !== userId));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete user");
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const filtered = users.filter(u =>
     (u.full_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -239,6 +280,45 @@ function UsersTab() {
         </div>
         <span className="text-sm text-slate-400">{filtered.length} users</span>
       </div>
+
+      {deleteError && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          {deleteError}
+          <button onClick={() => setDeleteError("")} className="ml-auto text-red-400 hover:text-red-600"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      {/* Confirm dialog */}
+      {confirmId && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900">Delete user?</p>
+                <p className="text-xs text-slate-500">This cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 mb-5">
+              All data will be permanently removed: profile, likes, matches, messages, bookings, payments, posts, notifications, and reports.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmId(null)}
+                className="flex-1 border border-slate-200 rounded-lg py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
+                Cancel
+              </button>
+              <button onClick={() => handleDelete(confirmId)}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-semibold transition">
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-12">
@@ -248,7 +328,7 @@ function UsersTab() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                {["User", "Email", "Plan", "Location", "Joined"].map(h => (
+                {["User", "Email", "Plan", "Location", "Joined", ""].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -266,6 +346,21 @@ function UsersTab() {
                   <td className="px-4 py-3 text-slate-600">{u.location ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs">
                     {new Date(u.created_at).toLocaleDateString("en-PH", { month: "short", year: "numeric" })}
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.id !== adminUser?.id && (
+                      deleting === u.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                      ) : (
+                        <button
+                          onClick={() => setConfirmId(u.id)}
+                          title="Delete user"
+                          className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )
+                    )}
                   </td>
                 </tr>
               ))}
