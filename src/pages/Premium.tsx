@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { Crown, Check, Upload, X, Loader2, Shield, Building2, Star, Zap, Trophy, Rocket, Flame } from "lucide-react";
 
-const PAYMENT_METHODS = [
-  { id: "gcash", label: "GCash", icon: "💙", number: "09XX XXX XXXX", name: "TCUnnect Travel" },
-  { id: "maya",  label: "Maya",  icon: "💚", number: "09XX XXX XXXX", name: "TCUnnect Travel" },
-];
+interface PaymentMethod {
+  id: string;
+  label: string;
+  icon: string;
+  number: string;
+  name: string;
+}
 
 // ── Feature lists ─────────────────────────────────────────────────
 const USER_FREE = [
@@ -70,11 +74,11 @@ const BIZ_PRO = [
 type Step = "plans" | "payment" | "upload" | "done";
 type PlanId = "plus-lifetime" | "biz-starter" | "biz-founding" | "biz-pro";
 
-const PLAN_INFO: Record<PlanId, { label: string; price: string; color: string; gradient: string }> = {
-  "plus-lifetime": { label: "TCUnnect Plus (Lifetime)", price: "₱30",        color: "text-amber-600",  gradient: "from-amber-500 to-orange-500" },
-  "biz-starter":   { label: "Business Starter (1 mo)", price: "₱99",         color: "text-sky-600",    gradient: "from-sky-500 to-blue-500" },
-  "biz-founding":  { label: "Founding Business",        price: "₱199/month",  color: "text-emerald-600", gradient: "from-emerald-500 to-teal-500" },
-  "biz-pro":       { label: "Business Pro",             price: "₱599/month",  color: "text-violet-600", gradient: "from-violet-500 to-purple-500" },
+const PLAN_INFO: Record<PlanId, { label: string; price: string; amount: number; color: string; gradient: string }> = {
+  "plus-lifetime": { label: "TCUnnect Plus (Lifetime)", price: "₱30",       amount: 30,  color: "text-amber-600",   gradient: "from-amber-500 to-orange-500" },
+  "biz-starter":   { label: "Business Starter (1 mo)", price: "₱99",        amount: 99,  color: "text-sky-600",     gradient: "from-sky-500 to-blue-500" },
+  "biz-founding":  { label: "Founding Business",        price: "₱199/month", amount: 199, color: "text-emerald-600", gradient: "from-emerald-500 to-teal-500" },
+  "biz-pro":       { label: "Business Pro",             price: "₱599/month", amount: 599, color: "text-violet-600",  gradient: "from-violet-500 to-purple-500" },
 };
 
 function FeatureList({ items, checkColor = "text-sky-600" }: { items: string[]; checkColor?: string }) {
@@ -90,7 +94,7 @@ function FeatureList({ items, checkColor = "text-sky-600" }: { items: string[]; 
   );
 }
 
-// ── Countdown timer (mock — replace with real end date) ──────────
+// ── Countdown timer ──────────────────────────────────────────────
 function CountdownBanner() {
   return (
     <div className="bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl p-4 mb-6 flex items-center gap-3 shadow-lg shadow-orange-200">
@@ -105,18 +109,82 @@ function CountdownBanner() {
 
 export default function Premium() {
   const { user } = useAuthStore();
-  const [step, setStep] = useState<Step>("plans");
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>("plus-lifetime");
-  const [paymentMethod, setPaymentMethod] = useState("gcash");
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [step, setStep]                       = useState<Step>("plans");
+  const [selectedPlan, setSelectedPlan]       = useState<PlanId>("plus-lifetime");
+  const [paymentMethod, setPaymentMethod]     = useState("gcash");
+  const [receiptFile, setReceiptFile]         = useState<File | null>(null);
+  const [isProcessing, setIsProcessing]       = useState(false);
+  const [submitError, setSubmitError]         = useState("");
+  const [paymentMethods, setPaymentMethods]   = useState<PaymentMethod[]>([
+    { id: "gcash", label: "GCash", icon: "💙", number: "09XX XXX XXXX", name: "TCUnnect Official" },
+    { id: "maya",  label: "Maya",  icon: "💚", number: "09XX XXX XXXX", name: "TCUnnect Official" },
+  ]);
+
+  // Load real payment numbers from platform_settings
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    supabase
+      .from("platform_settings")
+      .select("gcash_number, maya_number, account_name")
+      .eq("id", true)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setPaymentMethods([
+            { id: "gcash", label: "GCash", icon: "💙", number: data.gcash_number, name: data.account_name },
+            { id: "maya",  label: "Maya",  icon: "💚", number: data.maya_number,  name: data.account_name },
+          ]);
+        }
+      });
+  }, []);
 
   const handleSubmit = async () => {
-    if (!receiptFile) return;
+    if (!receiptFile || !user) return;
     setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    setIsProcessing(false);
-    setStep("done");
+    setSubmitError("");
+
+    try {
+      let receiptUrl: string | null = null;
+
+      // 1. Upload receipt to Supabase Storage
+      if (isSupabaseConfigured) {
+        const ext  = receiptFile.name.split(".").pop() ?? "jpg";
+        const path = `receipts/${user.id}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("payment-receipts")
+          .upload(path, receiptFile, { contentType: receiptFile.type, upsert: true });
+
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from("payment-receipts").getPublicUrl(path);
+          receiptUrl = urlData.publicUrl;
+        }
+        // Continue even if upload fails — admin can still verify manually
+
+        // 2. Insert payment record
+        const plan = PLAN_INFO[selectedPlan];
+        const { error: insertError } = await supabase.from("payments").insert({
+          user_id:    user.id,
+          plan_id:    selectedPlan,
+          plan_label: plan.label,
+          amount:     plan.amount,
+          method:     paymentMethod === "gcash" ? "GCash" : "Maya",
+          receipt_url: receiptUrl,
+          status:     "pending",
+        });
+
+        if (insertError) {
+          setSubmitError("Failed to submit payment. Please try again.");
+          setIsProcessing(false);
+          return;
+        }
+      }
+
+      setIsProcessing(false);
+      setStep("done");
+    } catch {
+      setSubmitError("Something went wrong. Please try again.");
+      setIsProcessing(false);
+    }
   };
 
   const selectAndPay = (plan: PlanId) => {
@@ -151,7 +219,7 @@ export default function Premium() {
   // ── Payment / Upload screen ───────────────────────────────────
   if (step === "payment" || step === "upload") {
     const info = PLAN_INFO[selectedPlan];
-    const pm = PAYMENT_METHODS.find(p => p.id === paymentMethod)!;
+    const pm   = paymentMethods.find(p => p.id === paymentMethod)!;
     const isLifetime = selectedPlan === "plus-lifetime";
 
     return (
@@ -180,7 +248,7 @@ export default function Premium() {
               <h3 className="font-bold text-slate-900 mb-1">Choose Payment</h3>
               <p className="text-slate-500 text-sm mb-4">Send the exact amount to one of these accounts</p>
               <div className="space-y-3 mb-5">
-                {PAYMENT_METHODS.map((p) => (
+                {paymentMethods.map((p) => (
                   <button key={p.id} onClick={() => setPaymentMethod(p.id)}
                     className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition ${
                       paymentMethod === p.id ? "border-sky-500 bg-sky-50" : "border-slate-200 hover:border-sky-200"
@@ -239,6 +307,11 @@ export default function Premium() {
                   <X className="h-3.5 w-3.5" /> Remove
                 </button>
               )}
+              {submitError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
+                  {submitError}
+                </div>
+              )}
               <div className="flex items-start gap-2 bg-slate-50 rounded-xl p-3 mb-5 text-xs text-slate-500">
                 <Shield className="h-4 w-4 shrink-0 mt-0.5 text-slate-400" />
                 Our admin team will verify your receipt within 24 hours and activate your plan.
@@ -288,17 +361,13 @@ export default function Premium() {
 
           {/* TCUnnect Plus — Lifetime */}
           <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-400 p-5 relative overflow-hidden">
-            {/* Promo ribbon */}
             <div className="absolute top-0 right-0 bg-gradient-to-r from-rose-500 to-orange-500 text-white text-[10px] font-black px-3 py-1.5 rounded-bl-xl">
               🎪 LAUNCH DAY ONLY
             </div>
-
             <div className="flex items-center gap-2 mb-1 mt-1">
               <Trophy className="h-4 w-4 text-amber-500" />
               <h3 className="font-bold text-slate-900">TCUnnect Plus</h3>
             </div>
-
-            {/* Pricing */}
             <div className="mb-1">
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl font-black text-amber-600">₱30</span>
@@ -306,15 +375,11 @@ export default function Premium() {
               </div>
               <p className="text-xs text-slate-500 mt-0.5 line-through">Regular: ₱30/month</p>
             </div>
-
             <p className="text-xs text-amber-700 font-semibold bg-amber-100 rounded-lg px-3 py-2 mb-4">
               🏆 Pay once. Enjoy Plus <strong>forever.</strong> Become a Founding Explorer.
             </p>
-
             <FeatureList items={USER_PLUS} checkColor="text-amber-500" />
-
-            <button
-              onClick={() => selectAndPay("plus-lifetime")}
+            <button onClick={() => selectAndPay("plus-lifetime")}
               className="w-full mt-5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-2.5 rounded-xl transition text-sm shadow-md shadow-amber-200">
               Become a Founding Explorer 🏆
             </button>
@@ -329,7 +394,6 @@ export default function Premium() {
         <p className="text-slate-500 text-sm mb-4">Put your business in front of travelers, students, couples, and local explorers.</p>
 
         <div className="grid gap-4 mb-4">
-
           {/* Business Free */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5">
             <div className="flex items-start justify-between mb-3">
@@ -352,9 +416,7 @@ export default function Premium() {
                 <Flame className="h-4 w-4 text-white" />
                 <p className="text-white font-black text-sm">🎪 TECHNOPRENEURSHIP DAY — BUSINESS OFFERS</p>
               </div>
-
               <div className="grid sm:grid-cols-2 gap-4 p-4">
-
                 {/* Business Starter */}
                 <div className="bg-sky-50 rounded-xl border border-sky-200 p-4">
                   <div className="flex items-center gap-2 mb-1">
@@ -367,8 +429,7 @@ export default function Premium() {
                     <span className="text-xs text-sky-500 ml-1">/ 1 month</span>
                   </div>
                   <FeatureList items={BIZ_STARTER} checkColor="text-sky-500" />
-                  <button
-                    onClick={() => selectAndPay("biz-starter")}
+                  <button onClick={() => selectAndPay("biz-starter")}
                     className="w-full mt-4 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 rounded-xl transition text-xs">
                     Get Starter
                   </button>
@@ -393,14 +454,12 @@ export default function Premium() {
                     After 3 months → ₱299/month
                   </p>
                   <FeatureList items={BIZ_PLUS} checkColor="text-emerald-600" />
-                  <button
-                    onClick={() => selectAndPay("biz-founding")}
+                  <button onClick={() => selectAndPay("biz-founding")}
                     className="w-full mt-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-2 rounded-xl transition text-xs shadow-md shadow-emerald-200">
                     Become a Founding Business 🏆
                   </button>
                 </div>
               </div>
-
               <p className="text-xs text-center text-slate-400 pb-3 px-4">
                 🏆 Founding Business slots are <strong>limited</strong>. Only available during today's event.
               </p>
@@ -424,8 +483,7 @@ export default function Premium() {
             </div>
             <p className="text-xs text-slate-500 mb-3">Everything in Business Plus, plus:</p>
             <FeatureList items={BIZ_PRO} checkColor="text-violet-600" />
-            <button
-              onClick={() => selectAndPay("biz-pro")}
+            <button onClick={() => selectAndPay("biz-pro")}
               className="w-full mt-5 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-xl transition text-sm">
               Get Business Pro
             </button>

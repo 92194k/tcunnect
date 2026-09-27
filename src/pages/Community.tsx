@@ -471,6 +471,17 @@ export default function Community() {
 
   const submitPost = async () => {
     if (!content.trim() || !user) return;
+    if (isSupabaseConfigured) {
+      const { data: settings } = await supabase
+        .from("platform_settings")
+        .select("enable_community_posts")
+        .eq("id", true)
+        .single();
+      if (settings && !settings.enable_community_posts) {
+        alert("Community posts are currently disabled by the administrator.");
+        return;
+      }
+    }
     setSubmitting(true);
 
     let imageUrl: string | null = null;
