@@ -93,7 +93,7 @@ function SearchableList<T extends { id: string; name: string }>({
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { user, updateProfile, setOnboardingComplete, onboardingComplete, isLoggedIn } = useAuthStore();
+  const { user, updateProfile, setOnboardingComplete, onboardingComplete, isLoggedIn, loadSession } = useAuthStore();
 
   // If already completed (e.g. returning Google user), skip onboarding
   useEffect(() => {
@@ -173,10 +173,20 @@ export default function Onboarding() {
           : province?.name ?? region?.name ?? "",
         travelInterests: interests,
       });
-      setOnboardingComplete(true);
-      navigate("/dashboard");
+
+      // Re-read from the database to confirm interests were persisted.
+      // loadSession() computes onboardingComplete from REAL DB data, so
+      // if travel_interests was actually saved, the store will show complete
+      // and RequireAuth will let the user through to /dashboard.
+      await loadSession();
+
+      navigate("/dashboard", { replace: true });
     } catch (err) {
-      setSaveError("Something went wrong. Please try again.");
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong saving your profile. Please try again."
+      );
       setSaving(false);
     }
   };

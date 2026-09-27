@@ -168,8 +168,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     if (!isSupabaseConfigured) return;
 
-    // Map camelCase → snake_case for Supabase
-    const row: Record<string, unknown> = {};
+    // Always include id + email so upsert can INSERT if the row doesn't exist yet
+    // (handles the case where the profile trigger failed on signup)
+    const row: Record<string, unknown> = {
+      id:    user.id,
+      email: user.email,
+    };
     if (fields.fullName        !== undefined) row.full_name        = fields.fullName;
     if (fields.bio             !== undefined) row.bio              = fields.bio;
     if (fields.location        !== undefined) row.location         = fields.location;
@@ -179,8 +183,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       row.profile_photo = fields.profilePhoto;
     }
 
-    const { error } = await supabase.from("profiles").update(row).eq("id", user.id);
+    // Use upsert so it works whether the profile row exists or not.
+    // Use .select("id") so we can detect a silent 0-row failure (no rows = save failed).
+    const { data, error } = await supabase
+      .from("profiles")
+      .upsert(row, { onConflict: "id" })
+      .select("id")
+      .single();
+
     if (error) throw new Error(error.message);
+    if (!data) throw new Error("Profile could not be saved — no rows affected. Check Supabase RLS policies.");
   },
 }));
 
