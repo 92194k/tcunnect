@@ -502,34 +502,53 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   fetchNotifications: async () => {
     if (!isSupabaseConfigured) return;
     set({ loading: true });
+
+    // Attempt 1: with link_to + reference_id (requires SQL migration 08)
     const { data, error } = await supabase
       .from("notifications")
       .select("id, type, title, body, read, created_at, link_to, reference_id")
       .order("created_at", { ascending: false })
       .limit(50);
 
-    if (error) {
-      console.error("fetchNotifications error:", error);
+    if (!error && data) {
+      const notifications: Notification[] = data.map((n) => ({
+        id: n.id,
+        type: n.type as Notification["type"],
+        title: n.title,
+        body: n.body ?? "",
+        read: n.read,
+        createdAt: n.created_at,
+        linkTo: n.link_to ?? undefined,
+        referenceId: n.reference_id ?? undefined,
+      }));
+      set({ notifications, unreadCount: notifications.filter((n) => !n.read).length, loading: false });
+      return;
+    }
+
+    // Attempt 2: base columns only (pre-migration fallback)
+    const { data: d2, error: e2 } = await supabase
+      .from("notifications")
+      .select("id, type, title, body, read, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (e2) {
+      console.error("fetchNotifications error:", e2);
       set({ loading: false });
       return;
     }
 
-    const notifications: Notification[] = (data ?? []).map((n) => ({
+    const notifications: Notification[] = (d2 ?? []).map((n) => ({
       id: n.id,
       type: n.type as Notification["type"],
       title: n.title,
       body: n.body ?? "",
       read: n.read,
       createdAt: n.created_at,
-      linkTo: n.link_to ?? undefined,
-      referenceId: n.reference_id ?? undefined,
+      linkTo: undefined,
+      referenceId: undefined,
     }));
-
-    set({
-      notifications,
-      unreadCount: notifications.filter((n) => !n.read).length,
-      loading: false,
-    });
+    set({ notifications, unreadCount: notifications.filter((n) => !n.read).length, loading: false });
   },
 
   addNotification: (n) =>

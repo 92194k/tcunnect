@@ -477,34 +477,97 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
   }, [user?.id]);
 
   // Fetch last message + unread count from Supabase for real matches
+  // Uses a two-attempt approach: new columns first (post-migration), base columns fallback
   useEffect(() => {
     if (!isSupabaseConfigured || !user || matches.length === 0) return;
     const ids = matches.map((m) => m.id);
+
+    const buildMap = (rows: Record<string, unknown>[], hasNewCols: boolean) => {
+      const map: Record<string, { lastMsg: string; unread: number; ts?: string }> = {};
+      for (const row of rows) {
+        const mid = row.match_id as string;
+        if (!map[mid]) {
+          const isCard = hasNewCols && (row.message_type as string) !== "text";
+          map[mid] = {
+            lastMsg: isCard ? "📍 Shared a place" : (row.content as string),
+            unread: 0,
+            ts: row.created_at as string,
+          };
+        }
+        // Count unread only if we know who the receiver is
+        if (!row.read && hasNewCols && (row.receiver_id as string) === user.id) {
+          map[mid].unread = (map[mid].unread ?? 0) + 1;
+        }
+      }
+      return map;
+    };
+
+    // Attempt 1: with new columns (requires SQL migration 08)
     supabase
       .from("messages")
       .select("match_id, content, message_type, created_at, read, receiver_id")
       .in("match_id", ids)
       .order("created_at", { ascending: false })
       .limit(200)
-      .then(({ data }) => {
-        if (!data) return;
-        const map: Record<string, { lastMsg: string; unread: number; ts?: string }> = {};
-        for (const row of data) {
-          const mid = row.match_id as string;
-          if (!map[mid]) {
-            const isCard = row.message_type !== "text";
-            map[mid] = {
-              lastMsg: isCard ? "📍 Shared a place" : (row.content as string),
-              unread: 0,
-              ts: row.created_at as string,
-            };
-          }
-          if (!row.read && row.receiver_id === user.id) {
-            map[mid].unread = (map[mid].unread ?? 0) + 1;
-          }
+      .then(({ data, error }) => {
+        if (!error && data && data.length >= 0) {
+          setPreviews(buildMap(data as Record<string, unknown>[], true));
+        } else {
+          // Attempt 2: base columns only (works before migration)
+          supabase
+            .from("messages")
+            .select("match_id, content, created_at, read")
+            .in("match_id", ids)
+            .order("created_at", { ascending: false })
+            .limit(200)
+            .then(({ data: d2 }) => {
+              if (d2) setPreviews(buildMap(d2 as Record<string, unknown>[], false));
+            });
         }
-        setPreviews(map);
       });
+  }, [matches.length, user?.id]);
+
+  // ── Real-time: update preview when a new message arrives in ANY match ────────
+  // Uses postgres_changes (requires migration 08: REPLICA IDENTITY FULL +
+  // messages in supabase_realtime publication). Falls back gracefully if not yet set up.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user || matches.length === 0) return;
+    const matchIds = new Set(matches.map((m) => m.id));
+
+    const channel = supabase
+      .channel(`chatlist_${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          const mid = row.match_id as string;
+          if (!matchIds.has(mid)) return; // not our conversation
+
+          const isCard = (row.message_type as string) && (row.message_type as string) !== "text";
+          const content = isCard ? "📍 Shared a place" : (row.content as string);
+          const isFromPartner = (row.receiver_id as string) === user.id;
+
+          setPreviews((prev) => {
+            const existing = prev[mid] ?? { lastMsg: "", unread: 0, ts: undefined };
+            return {
+              ...prev,
+              [mid]: {
+                lastMsg: content,
+                unread: isFromPartner ? (existing.unread + 1) : existing.unread,
+                ts: row.created_at as string,
+              },
+            };
+          });
+        }
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          console.log("[ChatList] Realtime connected — previews will update live");
+        }
+      });
+
+    return () => { supabase.removeChannel(channel); };
   }, [matches.length, user?.id]);
 
   const allMatches = matches.map((m) => ({
@@ -551,7 +614,16 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
             const unread = previews[m.id]?.unread ?? 0;
             const ts = previews[m.id]?.ts;
             return (
-              <button key={m.id} onClick={() => onSelectMatch(m.id)}
+              <button key={m.id} onClick={() => {
+                // Clear unread count immediately when conversation is opened
+                if (unread > 0) {
+                  setPreviews((prev) => ({
+                    ...prev,
+                    [m.id]: { ...(prev[m.id] ?? { lastMsg: "", ts: undefined }), unread: 0 },
+                  }));
+                }
+                onSelectMatch(m.id);
+              }}
                 className="w-full flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition text-left">
                 <div className="relative shrink-0">
                   <img src={m.user.profilePhoto} alt={m.user.fullName}
