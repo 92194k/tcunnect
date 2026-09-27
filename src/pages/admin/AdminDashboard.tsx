@@ -2119,12 +2119,28 @@ function ReportsTab() {
 
   const fetchReports = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
-    const { data } = await supabase
+
+    // Step 1: base query — always works regardless of migration state
+    const { data: baseData, error: baseError } = await supabase
+      .from("reports")
+      .select("id, reported_by, reported_user_id, reported_item_type, reported_item_id, reported_post_id, match_id, message_content, reason, details, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (baseError) {
+      console.error("[Reports] base query error:", baseError);
+      setLoading(false);
+      return;
+    }
+    if (!baseData) { setLoading(false); return; }
+
+    let rows: DBReport[] = baseData as unknown as DBReport[];
+
+    // Step 2: try enriched query with FK joins; fall back silently if it fails
+    const { data: richData } = await supabase
       .from("reports")
       .select(`
-        id, reported_by, reported_user_id, reported_item_type,
-        reported_item_id, reported_post_id, match_id, message_content,
-        reason, details, status, created_at,
+        id,
         reporter:profiles!reported_by(full_name, email),
         reported_user:profiles!reported_user_id(full_name, email, is_admin, account_status),
         post:posts!reported_post_id(content, created_at)
@@ -2132,15 +2148,16 @@ function ReportsTab() {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    if (data) {
-      const rows = data as unknown as DBReport[];
-      setReports(rows);
-      setPendingCount(rows.filter(r => !r.status || r.status === "pending").length);
-      setResolvedCount(rows.filter(r => r.status === "resolved").length);
-      setDismissedCount(rows.filter(r => r.status === "dismissed").length);
-      // keep selected in sync
-      setSelected(prev => prev ? (rows.find(r => r.id === prev.id) ?? null) : null);
+    if (richData) {
+      const richMap = new Map((richData as any[]).map((r: any) => [r.id, r]));
+      rows = rows.map(r => ({ ...r, ...(richMap.get(r.id) ?? {}) }));
     }
+
+    setReports(rows);
+    setPendingCount(rows.filter(r => !r.status || r.status === "pending").length);
+    setResolvedCount(rows.filter(r => r.status === "resolved").length);
+    setDismissedCount(rows.filter(r => r.status === "dismissed").length);
+    setSelected(prev => prev ? (rows.find(r => r.id === prev.id) ?? null) : null);
     setLoading(false);
   };
 
