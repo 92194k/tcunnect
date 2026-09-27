@@ -2326,24 +2326,12 @@ function ReportsTab() {
     if (!isSupabaseConfigured) { setLoading(false); return; }
     setFetchError(null);
 
-    // Step 1a: try with reported_by (exists after migration 21)
-    let baseResult = await supabase
+    // Step 1: base columns using reported_by (the actual DB column)
+    const baseResult = await supabase
       .from("reports")
       .select("id, reported_by, reported_user_id, reported_item_type, reported_item_id, match_id, message_content, reason, details, status, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
-
-    // Step 1b: if reported_by doesn't exist, fall back to reporter_id (original schema)
-    if (baseResult.error && baseResult.error.message.includes("reported_by")) {
-      console.warn("[Reports] falling back to reporter_id column");
-      const fallbackResult = await supabase
-        .from("reports")
-        .select("id, reporter_id, reported_user_id, reported_item_type, reported_item_id, match_id, message_content, reason, details, status, created_at")
-        .order("created_at", { ascending: false })
-        .limit(200);
-      // cast to match type
-      baseResult = { ...fallbackResult, data: fallbackResult.data ? (fallbackResult.data as any[]).map((r: any) => ({ ...r, reported_by: r.reporter_id ?? null })) : null } as typeof baseResult;
-    }
 
     if (baseResult.error) {
       console.error("[Reports] base query failed:", baseResult.error);
@@ -2353,11 +2341,7 @@ function ReportsTab() {
     }
     if (!baseResult.data) { setLoading(false); return; }
 
-    // normalise reporter column name
-    let rows: DBReport[] = (baseResult.data as any[]).map((r: any) => ({
-      ...r,
-      reported_by: r.reported_by ?? r.reporter_id ?? null,
-    }));
+    let rows: DBReport[] = (baseResult.data as any[]).map((r: any) => ({ ...r }));
 
     // Step 2: enrich with joined names — fall back silently on error
     const { data: richData } = await supabase

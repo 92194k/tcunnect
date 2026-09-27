@@ -54,14 +54,21 @@ function ReportPostModal({ postId, reporterId, onClose }: {
   const handleSubmit = async () => {
     if (!reason || !isSupabaseConfigured) return;
     setSubmitting(true);
-    await supabase.from("reports").insert({
+    // reported_post_id added by migration 22 — omit if it may not exist yet
+    const payload: Record<string, unknown> = {
       reported_by: reporterId,
       reported_item_type: "post",
       reported_item_id: postId,
-      reported_post_id: postId,
       reason,
       status: "pending",
-    });
+    };
+    // try with reported_post_id first; retry without if column doesn't exist
+    let { error: insertErr } = await supabase.from("reports").insert({ ...payload, reported_post_id: postId });
+    if (insertErr && insertErr.message.includes("reported_post_id")) {
+      const retry = await supabase.from("reports").insert(payload);
+      insertErr = retry.error;
+    }
+    if (insertErr) console.error("[Report Post] insert failed:", insertErr);
     setSubmitting(false);
     setDone(true);
   };

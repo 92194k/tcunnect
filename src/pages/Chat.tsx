@@ -151,7 +151,7 @@ function ReportUserModal({
     if (!reason) return;
     setSubmitting(true);
     if (isSupabaseConfigured) {
-      await supabase.from("reports").insert({
+      const { error: insertErr } = await supabase.from("reports").insert({
         reported_by: reporterUserId,
         reported_user_id: reportedUserId,
         reported_item_type: "user",
@@ -161,6 +161,7 @@ function ReportUserModal({
         details: details.trim() || null,
         status: "pending",
       });
+      if (insertErr) console.error("[Report User] insert failed:", insertErr);
     }
     setSubmitting(false);
     setDone(true);
@@ -232,7 +233,7 @@ function ReportMessageModal({
     if (!reason) return;
     setSubmitting(true);
     if (isSupabaseConfigured) {
-      await supabase.from("reports").insert({
+      const { error: insertErr } = await supabase.from("reports").insert({
         reported_by: reporterUserId,
         reported_user_id: reportedUserId,
         reported_item_type: "message",
@@ -242,6 +243,7 @@ function ReportMessageModal({
         reason,
         status: "pending",
       });
+      if (insertErr) console.error("[Report Message] insert failed:", insertErr);
     }
     setSubmitting(false);
     setDone(true);
