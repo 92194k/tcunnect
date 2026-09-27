@@ -7,7 +7,7 @@ import {
   Flag, ShieldOff, Loader2, ChevronRight, Bookmark, Calendar,
   Star, Check, ImagePlus,
 } from "lucide-react";
-import type { Message } from "../types";
+import type { Message, User, Match } from "../types";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 // ─── Emoji Picker ─────────────────────────────────────────────────────────────
@@ -612,7 +612,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   const systemMessage = (location.state as { systemMessage?: string } | null)?.systemMessage ?? null;
 
   const match = matches.find((m) => m.id === matchId);
-  const [partner, setPartner] = useState<import("../types").User | undefined>(match?.user);
+  const [partner, setPartner] = useState<User | undefined>(match?.user);
 
   const threadMsgs = messages[matchId] ?? [];
   const loadingThread = loadingMessages[matchId] ?? false;
@@ -639,7 +639,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
         .eq("id", partnerId)
         .single();
       if (!profile) return;
-      const partnerUser: import("../types").User = {
+      const partnerUser: User = {
         id: profile.id as string,
         email: (profile.email as string) ?? "",
         fullName: (profile.full_name as string) ?? "",
@@ -662,7 +662,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           user2Id: matchRow.user2_id,
           user: partnerUser,
           createdAt: matchRow.created_at,
-          status: matchRow.status as import("../types").Match["status"],
+          status: matchRow.status as Match["status"],
         }]);
       }
     })();
