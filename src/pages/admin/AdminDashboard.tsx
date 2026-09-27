@@ -1290,8 +1290,261 @@ function FeaturedTab() {
   );
 }
 
+interface DBReview {
+  id: string;
+  user_id: string;
+  booking_id: string;
+  gem_id: string;
+  gem_name: string;
+  rating: number;
+  review_text: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  profiles?: { full_name: string | null; profile_photo: string | null };
+}
+
 function ReviewsTab() {
-  return <NotImplemented feature="Reviews moderation" />;
+  const [reviews, setReviews] = useState<DBReview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewReview, setViewReview] = useState<DBReview | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) { setLoading(false); return; }
+    supabase
+      .from("reviews")
+      .select("id, user_id, booking_id, gem_id, gem_name, rating, review_text, status, created_at, profiles(full_name, profile_photo)")
+      .order("created_at", { ascending: false })
+      .limit(200)
+      .then(({ data }) => {
+        if (data) setReviews(data as unknown as DBReview[]);
+        setLoading(false);
+      });
+  }, []);
+
+  const total = reviews.length;
+  const pending = reviews.filter(r => r.status === "pending").length;
+  const approved = reviews.filter(r => r.status === "approved").length;
+  const rejected = reviews.filter(r => r.status === "rejected").length;
+
+  const filtered = filter === "all" ? reviews : reviews.filter(r => r.status === filter);
+
+  async function updateReview(id: string, status: "approved" | "rejected") {
+    setActionLoading(id + status);
+    const { error } = await supabase.from("reviews").update({ status }).eq("id", id);
+    if (!error) {
+      setReviews(rs => rs.map(r => r.id === id ? { ...r, status } : r));
+      if (viewReview?.id === id) setViewReview(prev => prev ? { ...prev, status } : null);
+
+      // Notify the user
+      const review = reviews.find(r => r.id === id);
+      if (review) {
+        const { createNotification } = await import("../../stores");
+        if (status === "approved") {
+          await createNotification(review.user_id, {
+            type: "review_approved",
+            title: "Review Approved ✅",
+            body: `Your review for "${review.gem_name}" is now live!`,
+            linkTo: `/gems/${review.gem_id}`,
+          });
+        } else {
+          await createNotification(review.user_id, {
+            type: "review_rejected",
+            title: "Review Not Published",
+            body: `Your review for "${review.gem_name}" was not approved for public display.`,
+          });
+        }
+      }
+    }
+    setActionLoading(null);
+  }
+
+  const statusBadge = (s: DBReview["status"]) => ({
+    pending: "bg-amber-50 text-amber-700 border border-amber-200",
+    approved: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    rejected: "bg-red-50 text-red-600 border border-red-200",
+  }[s]);
+
+  function StarRow({ rating }: { rating: number }) {
+    return (
+      <div className="flex gap-0.5">
+        {[1,2,3,4,5].map(s => (
+          <Star key={s} className={`h-3.5 w-3.5 ${s <= rating ? "text-amber-400 fill-current" : "text-slate-200 fill-current"}`} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard icon={Star} label="Total Reviews" value={total} color="sky" />
+        <StatCard icon={Clock} label="Pending" value={pending} color="amber" />
+        <StatCard icon={CheckCircle2} label="Approved" value={approved} color="emerald" />
+        <StatCard icon={XCircle} label="Rejected" value={rejected} color="rose" />
+      </div>
+
+      {/* Filter */}
+      <div className="flex gap-2 flex-wrap">
+        {(["pending", "all", "approved", "rejected"] as const).map(f => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold capitalize transition ${
+              filter === f
+                ? "bg-sky-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="h-6 w-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-sm">No {filter !== "all" ? filter : ""} reviews found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {["Reviewer", "Destination", "Rating", "Preview", "Date", "Status", "Actions"].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {filtered.map(rv => (
+                  <tr key={rv.id} className="hover:bg-slate-50/50">
+                    <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">
+                      {rv.profiles?.full_name ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 max-w-[140px] truncate">{rv.gem_name}</td>
+                    <td className="px-4 py-3"><StarRow rating={rv.rating} /></td>
+                    <td className="px-4 py-3 text-slate-500 max-w-[180px] truncate text-xs">{rv.review_text}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                      {new Date(rv.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${statusBadge(rv.status)}`}>
+                        {rv.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setViewReview(rv)}
+                          className="text-xs text-sky-600 hover:underline"
+                        >View</button>
+                        {rv.status !== "approved" && (
+                          <button
+                            onClick={() => updateReview(rv.id, "approved")}
+                            disabled={actionLoading === rv.id + "approved"}
+                            className="text-xs text-emerald-600 hover:underline disabled:opacity-50"
+                          >Approve</button>
+                        )}
+                        {rv.status !== "rejected" && (
+                          <button
+                            onClick={() => updateReview(rv.id, "rejected")}
+                            disabled={actionLoading === rv.id + "rejected"}
+                            className="text-xs text-red-500 hover:underline disabled:opacity-50"
+                          >Reject</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* View Modal */}
+      {viewReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setViewReview(null)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Review Detail</h3>
+              <button onClick={() => setViewReview(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 rounded-full bg-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center font-bold text-slate-500">
+                  {viewReview.profiles?.profile_photo
+                    ? <img src={viewReview.profiles.profile_photo} alt="" className="h-full w-full object-cover" />
+                    : viewReview.profiles?.full_name?.[0]?.toUpperCase() ?? "?"}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-slate-900">{viewReview.profiles?.full_name ?? "Unknown"}</p>
+                  <p className="text-xs text-slate-500">{new Date(viewReview.created_at).toLocaleString("en-PH")}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Destination</p>
+                <p className="font-medium text-slate-800">{viewReview.gem_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Rating</p>
+                <div className="flex gap-0.5">
+                  {[1,2,3,4,5].map(s => (
+                    <Star key={s} className={`h-4 w-4 ${s <= viewReview.rating ? "text-amber-400 fill-current" : "text-slate-200 fill-current"}`} />
+                  ))}
+                  <span className="ml-1 text-sm font-semibold text-slate-700">{viewReview.rating}/5</span>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Review</p>
+                <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-3">{viewReview.review_text}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Status</p>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${statusBadge(viewReview.status)}`}>
+                  {viewReview.status}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              {viewReview.status !== "approved" && (
+                <button
+                  onClick={() => updateReview(viewReview.id, "approved")}
+                  disabled={!!actionLoading}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-sm transition disabled:opacity-50"
+                >
+                  {actionLoading === viewReview.id + "approved" ? "..." : "Approve"}
+                </button>
+              )}
+              {viewReview.status !== "rejected" && (
+                <button
+                  onClick={() => updateReview(viewReview.id, "rejected")}
+                  disabled={!!actionLoading}
+                  className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 rounded-xl text-sm transition disabled:opacity-50"
+                >
+                  {actionLoading === viewReview.id + "rejected" ? "..." : "Reject"}
+                </button>
+              )}
+              <button
+                onClick={() => setViewReview(null)}
+                className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 rounded-xl text-sm font-medium text-slate-700 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ReportsTab() {

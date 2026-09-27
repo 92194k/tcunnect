@@ -132,6 +132,23 @@ export interface Payment {
   createdAt: string;
 }
 
+export type ReviewStatus = "pending" | "approved" | "rejected";
+
+export interface Review {
+  id: string;
+  userId: string;
+  bookingId: string;
+  gemId: string;
+  gemName: string;
+  rating: number;        // 1–5
+  reviewText: string;
+  status: ReviewStatus;
+  createdAt: string;
+  // joined fields
+  reviewerName?: string;
+  reviewerPhoto?: string;
+}
+
 export type NotificationType =
   | "match"
   | "message"
@@ -143,6 +160,8 @@ export type NotificationType =
   | "community_reply"
   | "gem_approved"
   | "gem_update"
+  | "review_approved"
+  | "review_rejected"
   | "system";
 
 export interface Notification {

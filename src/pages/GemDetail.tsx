@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const CATEGORY_EMOJIS: Record<string, string> = {
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
@@ -27,6 +27,14 @@ interface Gem {
   description: string;
   tip: string;
   is_featured: boolean;
+}
+
+interface GemReview {
+  id: string;
+  rating: number;
+  review_text: string;
+  created_at: string;
+  profiles: { full_name: string | null; profile_photo: string | null } | null;
 }
 
 interface NearbyGem {
@@ -350,6 +358,95 @@ function NearbyGemsSection({ nearbyGems, currentGemId }: { nearbyGems: NearbyGem
   );
 }
 
+function StarDisplay({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) {
+  const sz = size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <Star
+          key={s}
+          className={`${sz} ${s <= rating ? "text-amber-400 fill-current" : "text-slate-200 fill-current"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ReviewsSection({ reviews, loading }: { reviews: GemReview[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Star className="h-5 w-5 text-amber-400 fill-current" />
+          <h2 className="text-lg font-bold text-slate-900">Traveler Reviews</h2>
+        </div>
+        <div className="flex justify-center py-6">
+          <Loader2 className="h-5 w-5 text-sky-400 animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  if (reviews.length === 0) {
+    return (
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Star className="h-5 w-5 text-amber-400 fill-current" />
+          <h2 className="text-lg font-bold text-slate-900">Traveler Reviews</h2>
+        </div>
+        <div className="bg-slate-50 rounded-xl p-6 text-center">
+          <p className="text-slate-400 text-sm">No reviews yet — be the first to review after your trip!</p>
+        </div>
+      </div>
+    );
+  }
+
+  const avg = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Star className="h-5 w-5 text-amber-400 fill-current" />
+          <h2 className="text-lg font-bold text-slate-900">Traveler Reviews</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <StarDisplay rating={Math.round(avg)} size="md" />
+          <span className="text-sm font-bold text-slate-800">{avg.toFixed(1)}</span>
+          <span className="text-sm text-slate-400">({reviews.length})</span>
+        </div>
+      </div>
+      <div className="space-y-4">
+        {reviews.map((rv) => (
+          <div key={rv.id} className="bg-white border border-slate-100 rounded-xl p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
+                {rv.profiles?.profile_photo ? (
+                  <img src={rv.profiles.profile_photo} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-slate-400 text-sm font-bold">
+                    {rv.profiles?.full_name?.[0]?.toUpperCase() ?? "?"}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                  <p className="font-semibold text-slate-900 text-sm">{rv.profiles?.full_name ?? "Traveler"}</p>
+                  <span className="text-[11px] text-slate-400">
+                    {new Date(rv.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                </div>
+                <StarDisplay rating={rv.rating} />
+                <p className="text-sm text-slate-600 mt-2 leading-relaxed">{rv.review_text}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PlusBanner({ onUpgrade }: { onUpgrade: () => void }) {
   return (
     <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
@@ -383,12 +480,29 @@ export default function GemDetail() {
   const [saved, setSaved] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [savingLoading, setSavingLoading] = useState(false);
+  const [reviews, setReviews] = useState<GemReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   const isPremium = user?.isPremium ?? false;
+
+  const fetchReviews = useCallback(async (id: string) => {
+    if (!isSupabaseConfigured) return;
+    setReviewsLoading(true);
+    const { data } = await supabase
+      .from("reviews")
+      .select("id, rating, review_text, created_at, profiles(full_name, profile_photo)")
+      .eq("gem_id", id)
+      .eq("status", "approved")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (data) setReviews(data as unknown as GemReview[]);
+    setReviewsLoading(false);
+  }, []);
 
   useEffect(() => {
     if (!gemId) return;
     fetchGem(gemId);
+    fetchReviews(gemId);
     if (user && isSupabaseConfigured) {
       supabase
         .from("saved_places")
@@ -688,12 +802,17 @@ export default function GemDetail() {
           <StaysSection stays={discovery.stays} />
           <ExperiencesSection experiences={discovery.experiences} />
           <NearbyGemsSection nearbyGems={nearbyGems} currentGemId={gem.id} />
-
-          {/* Optional Plus upsell — shown only to free users */}
-          {!isPremium && (
-            <PlusBanner onUpgrade={() => navigate("/premium")} />
-          )}
         </div>
+
+        {/* ─── REVIEWS ───────────────────────────────────────────── */}
+        <div className="border-t border-slate-100 pt-8">
+          <ReviewsSection reviews={reviews} loading={reviewsLoading} />
+        </div>
+
+        {/* Optional Plus upsell — shown only to free users */}
+        {!isPremium && (
+          <PlusBanner onUpgrade={() => navigate("/premium")} />
+        )}
       </div>
     </AppShell>
   );
