@@ -41,12 +41,12 @@ export default function SignUp() {
     if (form.password !== form.confirm) return setError("Passwords do not match.");
     try {
       if (isSupabaseConfigured) {
-        const { data: settings } = await supabase
+        const { data: settings, error: settingsError } = await supabase
           .from("platform_settings")
           .select("allow_user_registrations")
           .eq("id", true)
           .single();
-        if (settings && !settings.allow_user_registrations) {
+        if (!settingsError && settings && settings.allow_user_registrations === false) {
           return setError("New registrations are currently disabled. Please try again later.");
         }
       }
