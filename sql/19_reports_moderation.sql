@@ -55,13 +55,13 @@ DROP POLICY IF EXISTS "Admins can update report status" ON public.reports;
 CREATE POLICY "reports_insert_own"
   ON public.reports FOR INSERT
   TO authenticated
-  WITH CHECK (reporter_id = auth.uid());
+  WITH CHECK (reported_by = auth.uid());
 
 -- Users: read only their own reports
 CREATE POLICY "reports_select_own"
   ON public.reports FOR SELECT
   TO authenticated
-  USING (reporter_id = auth.uid());
+  USING (reported_by = auth.uid());
 
 -- Admins: read all reports
 CREATE POLICY "reports_select_admin"

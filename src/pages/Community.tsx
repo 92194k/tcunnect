@@ -55,7 +55,7 @@ function ReportPostModal({ postId, reporterId, onClose }: {
     if (!reason || !isSupabaseConfigured) return;
     setSubmitting(true);
     await supabase.from("reports").insert({
-      reporter_id: reporterId,
+      reported_by: reporterId,
       reported_item_type: "post",
       reported_item_id: postId,
       reported_post_id: postId,

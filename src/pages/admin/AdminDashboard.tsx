@@ -54,7 +54,7 @@ interface DBGem {
 
 interface DBReport {
   id: string;
-  reporter_id: string | null;
+  reported_by: string | null;
   reported_user_id: string | null;
   reported_item_type: string;
   reported_item_id: string | null;
@@ -2122,10 +2122,10 @@ function ReportsTab() {
     const { data } = await supabase
       .from("reports")
       .select(`
-        id, reporter_id, reported_user_id, reported_item_type,
+        id, reported_by, reported_user_id, reported_item_type,
         reported_item_id, reported_post_id, match_id, message_content,
         reason, details, status, created_at,
-        reporter:profiles!reports_reporter_id_fkey(full_name, email),
+        reporter:profiles!reports_reported_by_fkey(full_name, email),
         reported_user:profiles!reports_reported_user_id_fkey(full_name, email, is_admin, account_status),
         post:posts!reports_reported_post_id_fkey(content, created_at)
       `)
