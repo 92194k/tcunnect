@@ -244,13 +244,36 @@ function UsersTab() {
 
   const fetchUsers = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
-    const { data, error } = await supabase
+
+    // Step 1: base query — columns that have always existed since day 1
+    const { data: baseData, error: baseError } = await supabase
       .from("profiles")
-      .select("id, full_name, email, is_premium, is_admin, account_status, created_at, location, bio, age, university, avatar_url")
+      .select("id, full_name, email, is_premium, created_at, location")
       .order("created_at", { ascending: false })
       .limit(200);
-    if (error) console.error("[UsersTab]", error);
-    if (data) setUsers(data as DBProfile[]);
+
+    if (baseError) {
+      console.error("[UsersTab] base query failed:", baseError);
+      setLoading(false);
+      return;
+    }
+    if (!baseData) { setLoading(false); return; }
+
+    let rows: DBProfile[] = baseData as unknown as DBProfile[];
+
+    // Step 2: try to enrich with columns added by migration 21 — fail silently
+    const { data: extraData } = await supabase
+      .from("profiles")
+      .select("id, is_admin, account_status, bio, age, university, avatar_url")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (extraData) {
+      const extraMap = new Map((extraData as any[]).map((r: any) => [r.id, r]));
+      rows = rows.map(r => ({ ...r, ...(extraMap.get(r.id) ?? {}) }));
+    }
+
+    setUsers(rows);
     setLoading(false);
   };
 
