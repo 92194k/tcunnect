@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore, createNotification } from "../stores";
-import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check, Image, Link2 } from "lucide-react";
+import { MapPin, Search, Star, Bookmark, Loader2, X, Plus, Check, Image, Link2, Calendar } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const CATEGORIES = ["All", "Beach", "Mountain", "Nature", "Heritage", "Cafe", "Waterfalls", "City", "Food"];
@@ -472,6 +472,12 @@ export default function HiddenGems() {
             <p className="text-slate-500 text-sm mt-1">Discover underrated destinations across the Philippines</p>
           </div>
           <div className="flex items-center gap-2">
+            <Link
+              to="/my-bookings"
+              className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-sky-400 text-slate-700 hover:text-sky-700 text-sm font-semibold px-4 py-2 rounded-full transition"
+            >
+              <Calendar className="h-4 w-4" /> My Bookings
+            </Link>
             <Link
               to="/saved-places"
               className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-sky-400 text-slate-700 hover:text-sky-700 text-sm font-semibold px-4 py-2 rounded-full transition"
