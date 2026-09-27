@@ -418,10 +418,10 @@ function PaymentsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) 
       user_id: payment.user_id,
       type: "system",
       title: action === "approved" ? "Payment Approved! 🎉" : "Payment Rejected",
-      message: action === "approved"
+      body: action === "approved"
         ? `Your ${payment.plan_label} payment has been verified. Your plan is now active!`
         : `Your ${payment.plan_label} payment was rejected. Please contact support if you believe this is an error.`,
-      data: { payment_id: payment.id, plan_id: payment.plan_id },
+      reference_id: payment.id,
     });
     await fetchPayments();
     setSelected(prev => prev?.id === payment.id ? { ...prev, status: action } : prev);
