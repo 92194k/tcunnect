@@ -146,10 +146,12 @@ function ReportUserModal({
   const [details, setDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!reason) return;
     setSubmitting(true);
+    setSubmitError(null);
     if (isSupabaseConfigured) {
       const { error: insertErr } = await supabase.from("reports").insert({
         reported_by: reporterUserId,
@@ -161,7 +163,12 @@ function ReportUserModal({
         details: details.trim() || null,
         status: "pending",
       });
-      if (insertErr) console.error("[Report User] insert failed:", insertErr);
+      if (insertErr) {
+        console.error("[Report User] insert failed:", insertErr);
+        setSubmitError(insertErr.message);
+        setSubmitting(false);
+        return;
+      }
     }
     setSubmitting(false);
     setDone(true);
@@ -205,6 +212,11 @@ function ReportUserModal({
               <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={3} placeholder="Tell us more about what happened..."
                 className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-400 outline-none resize-none" />
             </div>
+            {submitError && (
+              <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs text-rose-700">
+                <strong>Submit failed:</strong> {submitError}
+              </div>
+            )}
             <div className="flex gap-2">
               <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">Cancel</button>
               <button onClick={handleSubmit} disabled={!reason || submitting}
@@ -228,10 +240,12 @@ function ReportMessageModal({
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!reason) return;
     setSubmitting(true);
+    setSubmitError(null);
     if (isSupabaseConfigured) {
       const { error: insertErr } = await supabase.from("reports").insert({
         reported_by: reporterUserId,
@@ -243,7 +257,12 @@ function ReportMessageModal({
         reason,
         status: "pending",
       });
-      if (insertErr) console.error("[Report Message] insert failed:", insertErr);
+      if (insertErr) {
+        console.error("[Report Message] insert failed:", insertErr);
+        setSubmitError(insertErr.message);
+        setSubmitting(false);
+        return;
+      }
     }
     setSubmitting(false);
     setDone(true);
@@ -285,6 +304,11 @@ function ReportMessageModal({
                 ))}
               </div>
             </div>
+            {submitError && (
+              <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs text-rose-700">
+                <strong>Submit failed:</strong> {submitError}
+              </div>
+            )}
             <div className="flex gap-2">
               <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">Cancel</button>
               <button onClick={handleSubmit} disabled={!reason || submitting}

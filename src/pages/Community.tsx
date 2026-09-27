@@ -50,11 +50,13 @@ function ReportPostModal({ postId, reporterId, onClose }: {
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!reason || !isSupabaseConfigured) return;
     setSubmitting(true);
-    // reported_post_id added by migration 22 — omit if it may not exist yet
+    setSubmitError(null);
+    // reported_post_id added by migration 22 — omit if column doesn't exist yet
     const payload: Record<string, unknown> = {
       reported_by: reporterId,
       reported_item_type: "post",
@@ -62,13 +64,18 @@ function ReportPostModal({ postId, reporterId, onClose }: {
       reason,
       status: "pending",
     };
-    // try with reported_post_id first; retry without if column doesn't exist
+    // try with reported_post_id; retry without if that column doesn't exist yet
     let { error: insertErr } = await supabase.from("reports").insert({ ...payload, reported_post_id: postId });
     if (insertErr && insertErr.message.includes("reported_post_id")) {
       const retry = await supabase.from("reports").insert(payload);
       insertErr = retry.error;
     }
-    if (insertErr) console.error("[Report Post] insert failed:", insertErr);
+    if (insertErr) {
+      console.error("[Report Post] insert failed:", insertErr);
+      setSubmitError(insertErr.message);
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(false);
     setDone(true);
   };
@@ -104,6 +111,11 @@ function ReportPostModal({ postId, reporterId, onClose }: {
                 </button>
               ))}
             </div>
+            {submitError && (
+              <div className="bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs text-rose-700">
+                <strong>Submit failed:</strong> {submitError}
+              </div>
+            )}
             <div className="flex gap-2 pt-1">
               <button onClick={onClose} className="flex-1 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition">Cancel</button>
               <button onClick={handleSubmit} disabled={!reason || submitting}
