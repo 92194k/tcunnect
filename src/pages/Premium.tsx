@@ -10,6 +10,7 @@ interface PaymentMethod {
   icon: string;
   number: string;
   name: string;
+  qrUrl?: string;
 }
 
 // ── Feature lists ─────────────────────────────────────────────────
@@ -125,14 +126,14 @@ export default function Premium() {
     if (!isSupabaseConfigured) return;
     supabase
       .from("platform_settings")
-      .select("gcash_number, maya_number, account_name")
+      .select("gcash_number, maya_number, account_name, gcash_qr_url, maya_qr_url")
       .eq("id", true)
       .single()
       .then(({ data }) => {
         if (data) {
           setPaymentMethods([
-            { id: "gcash", label: "GCash", icon: "💙", number: data.gcash_number, name: data.account_name },
-            { id: "maya",  label: "Maya",  icon: "💚", number: data.maya_number,  name: data.account_name },
+            { id: "gcash", label: "GCash", icon: "💙", number: data.gcash_number, name: data.account_name, qrUrl: data.gcash_qr_url || "" },
+            { id: "maya",  label: "Maya",  icon: "💚", number: data.maya_number,  name: data.account_name, qrUrl: data.maya_qr_url  || "" },
           ]);
         }
       });
@@ -263,11 +264,33 @@ export default function Premium() {
                   </button>
                 ))}
               </div>
+              {/* QR Code for selected payment method */}
+              {pm.qrUrl && (
+                <div className="flex flex-col items-center bg-white border-2 border-slate-200 rounded-2xl p-5 mb-5">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">
+                    {pm.label} QR Code — Scan to Pay
+                  </p>
+                  <img
+                    src={pm.qrUrl}
+                    alt={`${pm.label} QR code`}
+                    className="w-52 h-52 object-contain rounded-xl border border-slate-100"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <p className="text-xs text-slate-500 mt-3 text-center">
+                    Scan with your <strong>{pm.label}</strong> app · Pay <strong>{info.price.replace("/month", "")}</strong>
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">To: {pm.name}</p>
+                </div>
+              )}
+
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
                 <p className="text-sm font-bold text-amber-800 mb-2">How to pay:</p>
                 <ol className="text-xs text-amber-700 space-y-1 list-decimal pl-4">
                   <li>Open your {pm.label} app</li>
-                  <li>Send <strong>{info.price.replace("/month", "")}</strong> to <strong>{pm.number}</strong></li>
+                  {pm.qrUrl
+                    ? <li>Scan the QR code above <strong>or</strong> send to <strong>{pm.number}</strong></li>
+                    : <li>Send <strong>{info.price.replace("/month", "")}</strong> to <strong>{pm.number}</strong></li>
+                  }
                   <li>Screenshot your receipt</li>
                   <li>Upload it on the next screen</li>
                 </ol>
