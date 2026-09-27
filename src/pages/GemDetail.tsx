@@ -1,10 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-
-const CATEGORY_EMOJIS: Record<string, string> = {
-  Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
-  Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
-};
-
 import { useParams, Link, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
@@ -14,6 +8,13 @@ import {
   Bed, Compass, Sparkles, ExternalLink, Phone, Bookmark,
 } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+  Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
+  Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
+};
 
 interface Gem {
   id: string;
@@ -29,14 +30,6 @@ interface Gem {
   is_featured: boolean;
 }
 
-interface GemReview {
-  id: string;
-  rating: number;
-  review_text: string;
-  created_at: string;
-  profiles: { full_name: string | null; profile_photo: string | null } | null;
-}
-
 interface NearbyGem {
   id: string;
   name: string;
@@ -46,121 +39,36 @@ interface NearbyGem {
   rating: number;
 }
 
-// ─── Static discovery data (future: pull from Supabase) ───────────────────────
-// Each section is keyed by gem category so discovery feels relevant.
-// For now we use curated placeholder data; real business listings come later.
-
-const DISCOVERY_DATA: Record<string, {
-  places: { name: string; desc: string; distance: string; tag: string }[];
-  activities: { name: string; desc: string; duration: string; tag: string }[];
-  food: { name: string; desc: string; type: string; price: string }[];
-  products: { name: string; desc: string; where: string }[];
-  stays: { name: string; desc: string; price: string; type: string }[];
-  experiences: { name: string; desc: string; price: string; action: "Book Now" | "Inquire" | "View Details" | "Get Directions" }[];
-}> = {
-  Beach: {
-    places: [
-      { name: "Coral Garden Viewpoint", desc: "Crystal-clear waters teeming with marine life. Great for snorkeling at low tide.", distance: "0.8 km", tag: "🐠 Snorkel Spot" },
-      { name: "Sunset Bluff", desc: "The best vantage point for the most dramatic sunsets on the island.", distance: "1.5 km", tag: "🌅 Sunset Spot" },
-      { name: "Hidden Lagoon", desc: "A secluded lagoon only accessible by a short hike through coconut groves.", distance: "2.1 km", tag: "🏝 Secluded" },
-    ],
-    activities: [
-      { name: "Island Hopping Tour", desc: "Explore 3–5 surrounding islands with a local bangka crew.", duration: "Full day", tag: "⛵ Boat Tour" },
-      { name: "Snorkel & Freedive", desc: "Guided underwater adventure over pristine coral reefs.", duration: "3–4 hrs", tag: "🤿 Water Activity" },
-      { name: "Kayak Rental", desc: "Paddle at your own pace along the coastline.", duration: "Flexible", tag: "🚣 Self-Guided" },
-    ],
-    food: [
-      { name: "Kubo sa Dalampasigan", desc: "Fresh catch grilled to order. The garlic shrimp is a must-try.", type: "Seafood Grill", price: "₱300–₱600 / person" },
-      { name: "Sari-Sari Smoothie Bar", desc: "Cold coconut shakes and local fruit blends. Perfect after a swim.", type: "Drinks & Snacks", price: "₱80–₱150" },
-      { name: "Lola Elena's Karinderya", desc: "Home-cooked Filipino food. Try the kare-kare on weekends.", type: "Filipino", price: "₱120–₱250 / meal" },
-    ],
-    products: [
-      { name: "Woven Banig Mats", desc: "Handwoven by local weavers. Doubles as a beach blanket.", where: "Barangay Crafts Market" },
-      { name: "Dried Danggit & Tuyô", desc: "Local sun-dried fish — great pasalubong for the family.", where: "Bayside Tiangge" },
-      { name: "Shell & Sea Glass Jewelry", desc: "Handcrafted by coastal artisans using natural materials.", where: "Port Gift Shop" },
-    ],
-    stays: [
-      { name: "Beachfront Glamping", desc: "Tent cabins right on the sand with full amenities.", price: "From ₱2,500/night", type: "🏕 Glamping" },
-      { name: "Nipa Hut Guesthouse", desc: "Cozy traditional-style rooms steps from the water.", price: "From ₱900/night", type: "🏡 Guesthouse" },
-      { name: "Budget Hostel — The Hammock", desc: "Dorms and private rooms for solo travelers. Great common area.", price: "From ₱450/night", type: "🛏 Hostel" },
-    ],
-    experiences: [
-      { name: "Sunrise Paddleboard Session", desc: "Greet the morning on the water with a local instructor.", price: "₱750/person", action: "Book Now" },
-      { name: "Seaweed Farm Visit", desc: "Learn how local communities cultivate seaweed sustainably.", price: "Free (donation)", action: "Get Directions" },
-      { name: "Coastal Cleanup & Dive", desc: "Give back to the reef — guided cleanup with free dive rental.", price: "₱500/person", action: "Inquire" },
-    ],
-  },
-  Mountain: {
-    places: [
-      { name: "Summit Viewdeck", desc: "360° views of the valley and neighboring peaks on clear mornings.", distance: "At peak", tag: "🏔 Viewpoint" },
-      { name: "Mossy Forest Trail", desc: "A surreal cloud-forest zone accessible from the mid-trail junction.", distance: "3.2 km in", tag: "🌿 Trail" },
-      { name: "Cold Spring Basin", desc: "A natural cold pool at the base of the mountain. Post-hike essential.", distance: "0.5 km", tag: "💧 Swimming Hole" },
-    ],
-    activities: [
-      { name: "Guided Summit Trek", desc: "With a certified local guide who knows every shortcut and story.", duration: "6–8 hrs", tag: "🥾 Hiking" },
-      { name: "Birdwatching at Dawn", desc: "Spot endemic species at sunrise with a birding enthusiast guide.", duration: "3–4 hrs", tag: "🦅 Wildlife" },
-      { name: "Mountain Biking Trail", desc: "Intermediate trail with epic views. Bike rental available at trailhead.", duration: "2–3 hrs", tag: "🚵 Biking" },
-    ],
-    food: [
-      { name: "Amá's Halo-Halo Hut", desc: "Legendary roadside stop with towering halo-halo and hot lugaw.", type: "Snacks & Sweets", price: "₱80–₱180" },
-      { name: "Mountain View Eatery", desc: "Piping hot bulalo and grilled corn while overlooking the valley.", type: "Filipino / Comfort Food", price: "₱250–₱500 / meal" },
-      { name: "Café Altitude", desc: "Specialty coffee made with locally grown beans. Good WiFi.", type: "Café", price: "₱120–₱250" },
-    ],
-    products: [
-      { name: "Local Strawberry Jam", desc: "Made fresh from highland farms. No preservatives.", where: "Farmers' Roadside Stalls" },
-      { name: "Hand-Knit Blankets & Scarves", desc: "Indigenous weave patterns in wool and cotton blends.", where: "Village Weavers Coop" },
-      { name: "Root Crop Snack Bags", desc: "Dried camote, gabi, and cassava chips — best trail snack.", where: "Mountaintop Pasalubong Shop" },
-    ],
-    stays: [
-      { name: "Firepit Glamping Pod", desc: "Heated pods with mountain views and a private fire pit.", price: "From ₱3,200/night", type: "🏕 Glamping" },
-      { name: "Pine Lodge Guesthouse", desc: "Log cabin vibes with hot showers and hearty breakfasts included.", price: "From ₱1,400/night", type: "🏡 Guesthouse" },
-      { name: "Camp Base Hostel", desc: "The go-to for hikers — wake-up calls, packed lunches, gear storage.", price: "From ₱600/night", type: "🛏 Hostel" },
-    ],
-    experiences: [
-      { name: "Overnight Camping Package", desc: "Tent, meals, and a guide from base to summit and back.", price: "₱1,800/person", action: "Book Now" },
-      { name: "Coffee Farm Tour", desc: "See how highland beans are grown, harvested, and roasted.", price: "₱350/person", action: "Inquire" },
-      { name: "Waterfall Photography Walk", desc: "A slow-paced scenic walk with a local photographer/guide.", price: "₱600/person", action: "Book Now" },
-    ],
-  },
-  default: {
-    places: [
-      { name: "Town Plaza & Heritage Church", desc: "The heart of the community — centuries of Filipino history in one square.", distance: "Town center", tag: "🏛 Heritage" },
-      { name: "Local Market (Palengke)", desc: "Vibrant morning market with fresh produce, snacks, and local color.", distance: "0.5 km", tag: "🛒 Market" },
-      { name: "Nature Walk Trailhead", desc: "A pleasant walk through local flora with views of the surrounding area.", distance: "1.2 km", tag: "🌿 Trail" },
-    ],
-    activities: [
-      { name: "Cultural Walking Tour", desc: "A local guide brings the history of the area to life on foot.", duration: "2–3 hrs", tag: "🚶 Walking Tour" },
-      { name: "Cooking Class: Filipino Classics", desc: "Learn to make adobo, sinigang, or native kakanin from a local cook.", duration: "2–3 hrs", tag: "🍳 Cooking" },
-      { name: "Tricycle City Hop", desc: "Get around like a local — hire a tricycle for a self-paced circuit.", duration: "Flexible", tag: "🛺 Local Transport" },
-    ],
-    food: [
-      { name: "Lutong Bahay Carinderia", desc: "Home-style Filipino cooking. The daily specials are always the best bet.", type: "Filipino Home Cooking", price: "₱100–₱200 / meal" },
-      { name: "Buko Pie & Pasalubong Corner", desc: "Famous local pastries and native sweets to bring home.", type: "Bakery / Pasalubong", price: "₱50–₱200" },
-      { name: "Merienda Spot by the Park", desc: "Kwek-kwek, fishballs, and cold gulaman. A classic Filipino afternoon snack run.", type: "Street Food", price: "₱20–₱80" },
-    ],
-    products: [
-      { name: "Bayong & Woven Bags", desc: "Traditional Filipino bags hand-woven from buri or rattan.", where: "Municipal Crafts Center" },
-      { name: "Native Delicacies Sampler", desc: "Assorted local kakanin and sweets — the perfect pasalubong set.", where: "Palengke / Market Stalls" },
-      { name: "Handmade Pottery", desc: "Earthenware crafted by local potters using traditional methods.", where: "Artisan Village" },
-    ],
-    stays: [
-      { name: "Heritage Pension House", desc: "Charming old-style rooms in a well-preserved colonial building.", price: "From ₱900/night", type: "🏡 Pension House" },
-      { name: "Family Inn & Breakfast", desc: "Homey and affordable. Breakfast is included and genuinely good.", price: "From ₱750/night", type: "🏡 Inn" },
-      { name: "Budget Guesthouse", desc: "Clean, simple, well-located. Great for budget travelers.", price: "From ₱450/night", type: "🛏 Guesthouse" },
-    ],
-    experiences: [
-      { name: "Local Family Homestay", desc: "Live with a Filipino family for a day or weekend. Immersive and heartwarming.", price: "From ₱1,200/night", action: "Inquire" },
-      { name: "Jeepney Art Workshop", desc: "Paint a mini-jeepney with a local folk artist. Great for kids too.", price: "₱400/person", action: "Book Now" },
-      { name: "Fiesta & Festival Events", desc: "Check if a local fiesta or festival is happening during your visit.", price: "Usually free", action: "View Details" },
-    ],
-  },
-};
-
-function getDiscoveryData(category: string) {
-  return DISCOVERY_DATA[category] ?? DISCOVERY_DATA.default;
+interface GemReview {
+  id: string;
+  rating: number;
+  review_text: string;
+  created_at: string;
+  profiles: { full_name: string | null; profile_photo: string | null } | null;
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────────
+// Matches gem_content_items table columns
+interface ContentItem {
+  id: string;
+  section: "places" | "activities" | "food" | "products" | "stays" | "experiences";
+  sort_order: number;
+  name: string;
+  description: string;
+  // places
+  distance: string | null;
+  tag: string | null;
+  // activities
+  duration: string | null;
+  // food / stays / experiences
+  category_label: string | null;
+  price_range: string | null;
+  // products
+  seller: string | null;
+  // experiences
+  action_type: string | null;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function SectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle?: string }) {
   return (
@@ -176,21 +84,28 @@ function SectionHeader({ icon, title, subtitle }: { icon: React.ReactNode; title
   );
 }
 
-function PlacesSection({ places }: { places: typeof DISCOVERY_DATA.Beach.places }) {
+// ─── Discovery Sub-components (data-driven) ────────────────────────────────────
+
+function PlacesSection({ items }: { items: ContentItem[] }) {
+  if (items.length === 0) return null;
   return (
     <div className="mb-6">
       <SectionHeader icon={<MapPin className="h-4 w-4" />} title="Places to Visit" subtitle="Nearby spots worth exploring" />
       <div className="space-y-3">
-        {places.map((place) => (
-          <div key={place.name} className="bg-slate-50 rounded-xl p-4 flex gap-3 items-start">
-            <span className="text-xl flex-shrink-0">{place.tag.split(" ")[0]}</span>
+        {items.map((item) => (
+          <div key={item.id} className="bg-slate-50 rounded-xl p-4 flex gap-3 items-start">
+            <span className="text-xl flex-shrink-0">{item.tag?.split(" ")[0] ?? "📍"}</span>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="font-semibold text-slate-900 text-sm">{place.name}</p>
-                <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full flex-shrink-0">📍 {place.distance}</span>
+                <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                {item.distance && (
+                  <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full flex-shrink-0">📍 {item.distance}</span>
+                )}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{place.desc}</p>
-              <span className="inline-block mt-1.5 text-[10px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">{place.tag}</span>
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{item.description}</p>
+              {item.tag && (
+                <span className="inline-block mt-1.5 text-[10px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">{item.tag}</span>
+              )}
             </div>
           </div>
         ))}
@@ -199,19 +114,22 @@ function PlacesSection({ places }: { places: typeof DISCOVERY_DATA.Beach.places 
   );
 }
 
-function ActivitiesSection({ activities }: { activities: typeof DISCOVERY_DATA.Beach.activities }) {
+function ActivitiesSection({ items }: { items: ContentItem[] }) {
+  if (items.length === 0) return null;
   return (
     <div className="mb-6">
       <SectionHeader icon={<Compass className="h-4 w-4" />} title="Things to Do" subtitle="Activities for every kind of traveler" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {activities.map((act) => (
-          <div key={act.name} className="bg-slate-50 rounded-xl p-4">
+        {items.map((item) => (
+          <div key={item.id} className="bg-slate-50 rounded-xl p-4">
             <div className="flex items-center justify-between gap-2 mb-1">
-              <p className="font-semibold text-slate-900 text-sm">{act.name}</p>
-              <span className="text-[10px] text-slate-400 flex-shrink-0">⏱ {act.duration}</span>
+              <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+              {item.duration && <span className="text-[10px] text-slate-400 flex-shrink-0">⏱ {item.duration}</span>}
             </div>
-            <p className="text-xs text-slate-500 leading-relaxed">{act.desc}</p>
-            <span className="inline-block mt-2 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">{act.tag}</span>
+            <p className="text-xs text-slate-500 leading-relaxed">{item.description}</p>
+            {item.tag && (
+              <span className="inline-block mt-2 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">{item.tag}</span>
+            )}
           </div>
         ))}
       </div>
@@ -219,21 +137,26 @@ function ActivitiesSection({ activities }: { activities: typeof DISCOVERY_DATA.B
   );
 }
 
-function FoodSection({ food }: { food: typeof DISCOVERY_DATA.Beach.food }) {
+function FoodSection({ items }: { items: ContentItem[] }) {
+  if (items.length === 0) return null;
   return (
     <div className="mb-6">
       <SectionHeader icon={<Utensils className="h-4 w-4" />} title="Food & Drinks" subtitle="Local flavors you shouldn't miss" />
       <div className="space-y-3">
-        {food.map((item) => (
-          <div key={item.name} className="border border-slate-100 bg-white rounded-xl p-4">
+        {items.map((item) => (
+          <div key={item.id} className="border border-slate-100 bg-white rounded-xl p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
-                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">{item.type}</span>
+                {item.category_label && (
+                  <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">{item.category_label}</span>
+                )}
               </div>
-              <span className="text-xs font-semibold text-emerald-700 flex-shrink-0">{item.price}</span>
+              {item.price_range && (
+                <span className="text-xs font-semibold text-emerald-700 flex-shrink-0">{item.price_range}</span>
+              )}
             </div>
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">{item.desc}</p>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">{item.description}</p>
           </div>
         ))}
       </div>
@@ -241,18 +164,21 @@ function FoodSection({ food }: { food: typeof DISCOVERY_DATA.Beach.food }) {
   );
 }
 
-function ProductsSection({ products }: { products: typeof DISCOVERY_DATA.Beach.products }) {
+function ProductsSection({ items }: { items: ContentItem[] }) {
+  if (items.length === 0) return null;
   return (
     <div className="mb-6">
       <SectionHeader icon={<ShoppingBag className="h-4 w-4" />} title="Products & Local Finds" subtitle="Take a piece of the Philippines home" />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {products.map((p) => (
-          <div key={p.name} className="bg-slate-50 rounded-xl p-4">
-            <p className="font-semibold text-slate-900 text-sm">{p.name}</p>
-            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{p.desc}</p>
-            <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-              <MapPin className="h-3 w-3" /> {p.where}
-            </p>
+        {items.map((item) => (
+          <div key={item.id} className="bg-slate-50 rounded-xl p-4">
+            <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.description}</p>
+            {item.seller && (
+              <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> {item.seller}
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -260,21 +186,26 @@ function ProductsSection({ products }: { products: typeof DISCOVERY_DATA.Beach.p
   );
 }
 
-function StaysSection({ stays }: { stays: typeof DISCOVERY_DATA.Beach.stays }) {
+function StaysSection({ items }: { items: ContentItem[] }) {
+  if (items.length === 0) return null;
   return (
     <div className="mb-6">
       <SectionHeader icon={<Bed className="h-4 w-4" />} title="Where to Stay" subtitle="Rest well before the next adventure" />
       <div className="space-y-3">
-        {stays.map((stay) => (
-          <div key={stay.name} className="border border-slate-100 bg-white rounded-xl p-4">
+        {items.map((item) => (
+          <div key={item.id} className="border border-slate-100 bg-white rounded-xl p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-semibold text-slate-900 text-sm">{stay.name}</p>
-                <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{stay.type}</span>
+                <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                {item.category_label && (
+                  <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{item.category_label}</span>
+                )}
               </div>
-              <span className="text-xs font-semibold text-sky-700 flex-shrink-0">{stay.price}</span>
+              {item.price_range && (
+                <span className="text-xs font-semibold text-sky-700 flex-shrink-0">{item.price_range}</span>
+              )}
             </div>
-            <p className="text-xs text-slate-500 mt-2 leading-relaxed">{stay.desc}</p>
+            <p className="text-xs text-slate-500 mt-2 leading-relaxed">{item.description}</p>
           </div>
         ))}
       </div>
@@ -282,17 +213,18 @@ function StaysSection({ stays }: { stays: typeof DISCOVERY_DATA.Beach.stays }) {
   );
 }
 
-function ExperiencesSection({ experiences }: { experiences: typeof DISCOVERY_DATA.Beach.experiences }) {
+function ExperiencesSection({ items }: { items: ContentItem[] }) {
+  if (items.length === 0) return null;
   const actionStyle: Record<string, string> = {
-    "Book Now": "bg-sky-600 hover:bg-sky-700 text-white",
-    "Inquire": "bg-slate-800 hover:bg-slate-900 text-white",
-    "View Details": "border border-slate-300 hover:bg-slate-50 text-slate-700",
-    "Get Directions": "border border-sky-300 hover:bg-sky-50 text-sky-700",
+    "Book Now":      "bg-sky-600 hover:bg-sky-700 text-white",
+    "Inquire":       "bg-slate-800 hover:bg-slate-900 text-white",
+    "View Details":  "border border-slate-300 hover:bg-slate-50 text-slate-700",
+    "Get Directions":"border border-sky-300 hover:bg-sky-50 text-sky-700",
   };
   const actionIcon: Record<string, React.ReactNode> = {
-    "Book Now": <ChevronRight className="h-3.5 w-3.5" />,
-    "Inquire": <Phone className="h-3.5 w-3.5" />,
-    "View Details": <ExternalLink className="h-3.5 w-3.5" />,
+    "Book Now":       <ChevronRight className="h-3.5 w-3.5" />,
+    "Inquire":        <Phone className="h-3.5 w-3.5" />,
+    "View Details":   <ExternalLink className="h-3.5 w-3.5" />,
     "Get Directions": <MapPin className="h-3.5 w-3.5" />,
   };
 
@@ -300,20 +232,25 @@ function ExperiencesSection({ experiences }: { experiences: typeof DISCOVERY_DAT
     <div className="mb-6">
       <SectionHeader icon={<Sparkles className="h-4 w-4" />} title="Experiences" subtitle="Unforgettable moments, only here" />
       <div className="space-y-3">
-        {experiences.map((exp) => (
-          <div key={exp.name} className="bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100 rounded-xl p-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div className="flex-1">
-                <p className="font-semibold text-slate-900 text-sm">{exp.name}</p>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">{exp.desc}</p>
-                <p className="text-xs font-bold text-emerald-700 mt-2">{exp.price}</p>
+        {items.map((item) => {
+          const action = item.action_type ?? "Inquire";
+          return (
+            <div key={item.id} className="bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100 rounded-xl p-4">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex-1">
+                  <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.description}</p>
+                  {item.price_range && (
+                    <p className="text-xs font-bold text-emerald-700 mt-2">{item.price_range}</p>
+                  )}
+                </div>
+                <button className={`flex-shrink-0 flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-full transition ${actionStyle[action] ?? actionStyle["Inquire"]}`}>
+                  {actionIcon[action] ?? actionIcon["Inquire"]} {action}
+                </button>
               </div>
-              <button className={`flex-shrink-0 flex items-center gap-1 text-xs font-bold px-3 py-2 rounded-full transition ${actionStyle[exp.action]}`}>
-                {actionIcon[exp.action]} {exp.action}
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -358,15 +295,14 @@ function NearbyGemsSection({ nearbyGems, currentGemId }: { nearbyGems: NearbyGem
   );
 }
 
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+
 function StarDisplay({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) {
   const sz = size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((s) => (
-        <Star
-          key={s}
-          className={`${sz} ${s <= rating ? "text-amber-400 fill-current" : "text-slate-200 fill-current"}`}
-        />
+        <Star key={s} className={`${sz} ${s <= rating ? "text-amber-400 fill-current" : "text-slate-200 fill-current"}`} />
       ))}
     </div>
   );
@@ -480,6 +416,8 @@ export default function GemDetail() {
   const [saved, setSaved] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [savingLoading, setSavingLoading] = useState(false);
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [contentLoading, setContentLoading] = useState(false);
   const [reviews, setReviews] = useState<GemReview[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
@@ -499,10 +437,23 @@ export default function GemDetail() {
     setReviewsLoading(false);
   }, []);
 
+  const fetchContentItems = useCallback(async (id: string) => {
+    if (!isSupabaseConfigured) return;
+    setContentLoading(true);
+    const { data } = await supabase
+      .from("gem_content_items")
+      .select("*")
+      .eq("gem_id", id)
+      .order("sort_order", { ascending: true });
+    if (data) setContentItems(data as ContentItem[]);
+    setContentLoading(false);
+  }, []);
+
   useEffect(() => {
     if (!gemId) return;
     fetchGem(gemId);
     fetchReviews(gemId);
+    fetchContentItems(gemId);
     if (user && isSupabaseConfigured) {
       supabase
         .from("saved_places")
@@ -544,7 +495,6 @@ export default function GemDetail() {
 
   async function fetchNearbyGems(currentGem: Gem) {
     if (!isSupabaseConfigured) return;
-    // Fetch other approved gems in the same location or category
     const { data } = await supabase
       .from("hidden_gems")
       .select("id, name, location, category, images, rating")
@@ -552,7 +502,6 @@ export default function GemDetail() {
       .or(`location.ilike.%${currentGem.location.split(",")[0].trim()}%,category.eq.${currentGem.category}`)
       .neq("id", currentGem.id)
       .limit(8);
-
     if (data) setNearbyGems(data as NearbyGem[]);
   }
 
@@ -584,9 +533,7 @@ export default function GemDetail() {
     if (navigator.share) {
       try {
         await navigator.share({ title: gem?.name ?? "Hidden Gem", text: gem?.description?.slice(0, 100), url });
-      } catch {
-        /* cancelled */
-      }
+      } catch { /* cancelled */ }
     } else {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -623,7 +570,21 @@ export default function GemDetail() {
   }
 
   const images = gem.images?.length ? gem.images : [];
-  const discovery = getDiscoveryData(gem.category);
+
+  // Group content by section
+  const bySection = (section: ContentItem["section"]) =>
+    contentItems.filter(i => i.section === section);
+
+  const places      = bySection("places");
+  const activities  = bySection("activities");
+  const food        = bySection("food");
+  const products    = bySection("products");
+  const stays       = bySection("stays");
+  const experiences = bySection("experiences");
+
+  const hasDiscovery = !contentLoading &&
+    (places.length + activities.length + food.length +
+     products.length + stays.length + experiences.length) > 0;
 
   return (
     <AppShell>
@@ -639,11 +600,7 @@ export default function GemDetail() {
         {/* Hero Image */}
         <div className="relative rounded-2xl overflow-hidden mb-4 h-72 lg:h-96 bg-slate-100">
           {images.length > 0 ? (
-            <img
-              src={images[activeImg]}
-              alt={gem.name}
-              className="w-full h-full object-cover"
-            />
+            <img src={images[activeImg]} alt={gem.name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-7xl">
               {CATEGORY_EMOJIS[gem.category] ?? "📍"}
@@ -653,27 +610,15 @@ export default function GemDetail() {
 
           {/* Action buttons */}
           <div className="absolute top-4 right-4 flex gap-2 z-10">
-            <button
-              onClick={() => setLiked(!liked)}
-              className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow"
-            >
+            <button onClick={() => setLiked(!liked)} className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow">
               <Heart className={`h-4 w-4 ${liked ? "fill-rose-500 text-rose-500" : "text-slate-500"}`} />
             </button>
-            <button
-              onClick={handleSave}
-              disabled={savingLoading}
-              title={saved ? "Remove from Saved Places" : "Save to My Places"}
-              className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow"
-            >
+            <button onClick={handleSave} disabled={savingLoading} title={saved ? "Remove from Saved Places" : "Save to My Places"} className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow">
               {savingLoading
                 ? <Loader2 className="h-4 w-4 text-slate-400 animate-spin" />
                 : <Bookmark className={`h-4 w-4 ${saved ? "fill-emerald-500 text-emerald-500" : "text-slate-500"}`} />}
             </button>
-            <button
-              onClick={handleShare}
-              title={copied ? "Copied!" : "Share"}
-              className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow"
-            >
+            <button onClick={handleShare} title={copied ? "Copied!" : "Share"} className="h-9 w-9 bg-white/90 rounded-full flex items-center justify-center shadow">
               <Share2 className={`h-4 w-4 ${copied ? "text-sky-500" : "text-slate-500"}`} />
             </button>
           </div>
@@ -684,9 +629,7 @@ export default function GemDetail() {
               {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
             </span>
             {gem.is_featured && (
-              <span className="bg-amber-400 text-amber-950 text-xs font-extrabold px-3 py-1 rounded-full">
-                ✨ Featured
-              </span>
+              <span className="bg-amber-400 text-amber-950 text-xs font-extrabold px-3 py-1 rounded-full">✨ Featured</span>
             )}
           </div>
         </div>
@@ -698,9 +641,7 @@ export default function GemDetail() {
               <button
                 key={i}
                 onClick={() => setActiveImg(i)}
-                className={`h-16 w-20 rounded-lg overflow-hidden border-2 transition ${
-                  activeImg === i ? "border-sky-500" : "border-transparent"
-                }`}
+                className={`h-16 w-20 rounded-lg overflow-hidden border-2 transition ${activeImg === i ? "border-sky-500" : "border-transparent"}`}
               >
                 <img src={img} alt="" className="h-full w-full object-cover" />
               </button>
@@ -786,23 +727,35 @@ export default function GemDetail() {
         </div>
 
         {/* ─── DESTINATION DISCOVERY ─────────────────────────────────── */}
-        <div className="border-t border-slate-100 pt-8">
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="h-5 w-5 text-amber-500" />
-            <h2 className="text-lg font-bold text-slate-900">Explore This Destination</h2>
+        {contentLoading ? (
+          <div className="border-t border-slate-100 pt-8 flex justify-center py-8">
+            <Loader2 className="h-6 w-6 text-sky-400 animate-spin" />
           </div>
-          <p className="text-sm text-slate-500 mb-6">
-            Everything you need to experience {gem.name} like a local.
-          </p>
+        ) : hasDiscovery ? (
+          <div className="border-t border-slate-100 pt-8">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="h-5 w-5 text-amber-500" />
+              <h2 className="text-lg font-bold text-slate-900">Explore This Destination</h2>
+            </div>
+            <p className="text-sm text-slate-500 mb-6">
+              Everything you need to experience {gem.name} like a local.
+            </p>
 
-          <PlacesSection places={discovery.places} />
-          <ActivitiesSection activities={discovery.activities} />
-          <FoodSection food={discovery.food} />
-          <ProductsSection products={discovery.products} />
-          <StaysSection stays={discovery.stays} />
-          <ExperiencesSection experiences={discovery.experiences} />
-          <NearbyGemsSection nearbyGems={nearbyGems} currentGemId={gem.id} />
-        </div>
+            <PlacesSection items={places} />
+            <ActivitiesSection items={activities} />
+            <FoodSection items={food} />
+            <ProductsSection items={products} />
+            <StaysSection items={stays} />
+            <ExperiencesSection items={experiences} />
+            <NearbyGemsSection nearbyGems={nearbyGems} currentGemId={gem.id} />
+          </div>
+        ) : (
+          nearbyGems.length > 0 && (
+            <div className="border-t border-slate-100 pt-8">
+              <NearbyGemsSection nearbyGems={nearbyGems} currentGemId={gem.id} />
+            </div>
+          )
+        )}
 
         {/* ─── REVIEWS ───────────────────────────────────────────── */}
         <div className="border-t border-slate-100 pt-8">

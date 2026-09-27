@@ -1067,10 +1067,525 @@ function BookingsTab() {
   );
 }
 
+// ─── Gem Content Item Types ───────────────────────────────────────────────────
+type ContentSection = "places" | "activities" | "food" | "products" | "stays" | "experiences";
+
+interface ContentItemDraft {
+  _key: string; // local draft key
+  id?: string;  // set if persisted
+  section: ContentSection;
+  sort_order: number;
+  name: string;
+  description: string;
+  distance: string;
+  tag: string;
+  duration: string;
+  category_label: string;
+  price_range: string;
+  seller: string;
+  action_type: string;
+}
+
+function emptyItem(section: ContentSection, idx: number): ContentItemDraft {
+  return {
+    _key: `${section}_${Date.now()}_${idx}`,
+    section,
+    sort_order: idx,
+    name: "",
+    description: "",
+    distance: "",
+    tag: "",
+    duration: "",
+    category_label: "",
+    price_range: "",
+    seller: "",
+    action_type: "Inquire",
+  };
+}
+
+interface GemFormState {
+  name: string;
+  location: string;
+  category: string;
+  budget_level: string;
+  description: string;
+  tip: string;
+  images: string;       // comma-separated
+  status: string;
+  is_featured: boolean;
+}
+
+const EMPTY_GEM_FORM: GemFormState = {
+  name: "", location: "", category: "Mountain", budget_level: "₱₱",
+  description: "", tip: "", images: "", status: "approved", is_featured: false,
+};
+
+// ─── Gem Editor Modal ─────────────────────────────────────────────────────────
+
+function GemEditorModal({
+  gemId,
+  onClose,
+  onSaved,
+}: {
+  gemId: string | null; // null = create new
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"basic" | ContentSection>("basic");
+  const [form, setForm] = useState<GemFormState>(EMPTY_GEM_FORM);
+  const [items, setItems] = useState<Record<ContentSection, ContentItemDraft[]>>({
+    places: [], activities: [], food: [], products: [], stays: [], experiences: [],
+  });
+  const [loading, setLoading] = useState(!!gemId);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load existing gem + content items when editing
+  useEffect(() => {
+    if (!gemId || !isSupabaseConfigured) { setLoading(false); return; }
+    (async () => {
+      const [gemRes, contentRes] = await Promise.all([
+        supabase.from("hidden_gems")
+          .select("name, location, category, budget_level, description, tip, images, status, is_featured")
+          .eq("id", gemId).single(),
+        supabase.from("gem_content_items")
+          .select("*")
+          .eq("gem_id", gemId)
+          .order("sort_order", { ascending: true }),
+      ]);
+      if (gemRes.data) {
+        const g = gemRes.data as any;
+        setForm({
+          name: g.name ?? "",
+          location: g.location ?? "",
+          category: g.category ?? "Mountain",
+          budget_level: g.budget_level ?? "₱₱",
+          description: g.description ?? "",
+          tip: g.tip ?? "",
+          images: (g.images ?? []).join(", "),
+          status: g.status ?? "approved",
+          is_featured: g.is_featured ?? false,
+        });
+      }
+      if (contentRes.data) {
+        const grouped: Record<ContentSection, ContentItemDraft[]> = {
+          places: [], activities: [], food: [], products: [], stays: [], experiences: [],
+        };
+        (contentRes.data as any[]).forEach((row, i) => {
+          const s = row.section as ContentSection;
+          grouped[s].push({
+            _key: row.id,
+            id: row.id,
+            section: s,
+            sort_order: row.sort_order ?? i,
+            name: row.name ?? "",
+            description: row.description ?? "",
+            distance: row.distance ?? "",
+            tag: row.tag ?? "",
+            duration: row.duration ?? "",
+            category_label: row.category_label ?? "",
+            price_range: row.price_range ?? "",
+            seller: row.seller ?? "",
+            action_type: row.action_type ?? "Inquire",
+          });
+        });
+        setItems(grouped);
+      }
+      setLoading(false);
+    })();
+  }, [gemId]);
+
+  function updateItem(section: ContentSection, key: string, field: keyof ContentItemDraft, value: string) {
+    setItems(prev => ({
+      ...prev,
+      [section]: prev[section].map(it => it._key === key ? { ...it, [field]: value } : it),
+    }));
+  }
+
+  function addItem(section: ContentSection) {
+    setItems(prev => ({
+      ...prev,
+      [section]: [...prev[section], emptyItem(section, prev[section].length)],
+    }));
+  }
+
+  function removeItem(section: ContentSection, key: string) {
+    setItems(prev => ({ ...prev, [section]: prev[section].filter(it => it._key !== key) }));
+  }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.location.trim() || !form.category || !form.description.trim()) {
+      setError("Gem Name, Location, Category, and Description are required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+
+    const imageArr = form.images.split(",").map(s => s.trim()).filter(Boolean);
+    const gemPayload = {
+      name: form.name.trim(),
+      location: form.location.trim(),
+      category: form.category,
+      budget_level: form.budget_level,
+      description: form.description.trim(),
+      tip: form.tip.trim(),
+      images: imageArr,
+      status: form.status,
+      is_featured: form.is_featured,
+    };
+
+    let finalGemId = gemId;
+
+    if (gemId) {
+      const { error: ue } = await supabase.from("hidden_gems").update(gemPayload).eq("id", gemId);
+      if (ue) { setError(ue.message); setSaving(false); return; }
+    } else {
+      const { data, error: ie } = await supabase.from("hidden_gems").insert(gemPayload).select("id").single();
+      if (ie || !data) { setError(ie?.message ?? "Insert failed"); setSaving(false); return; }
+      finalGemId = data.id;
+    }
+
+    // Replace all content items: delete existing then insert new
+    if (finalGemId) {
+      await supabase.from("gem_content_items").delete().eq("gem_id", finalGemId);
+
+      const allItems: any[] = [];
+      (Object.keys(items) as ContentSection[]).forEach(section => {
+        items[section].forEach((it, idx) => {
+          if (!it.name.trim()) return; // skip blank items
+          allItems.push({
+            gem_id: finalGemId,
+            section,
+            sort_order: idx,
+            name: it.name.trim(),
+            description: it.description.trim(),
+            distance: it.distance.trim() || null,
+            tag: it.tag.trim() || null,
+            duration: it.duration.trim() || null,
+            category_label: it.category_label.trim() || null,
+            price_range: it.price_range.trim() || null,
+            seller: it.seller.trim() || null,
+            action_type: it.action_type || null,
+          });
+        });
+      });
+
+      if (allItems.length > 0) {
+        const { error: ci } = await supabase.from("gem_content_items").insert(allItems);
+        if (ci) { setError(ci.message); setSaving(false); return; }
+      }
+    }
+
+    setSaving(false);
+    onSaved();
+  }
+
+  const SECTIONS: { key: ContentSection; label: string }[] = [
+    { key: "places",      label: "Places to Visit" },
+    { key: "activities",  label: "Things to Do" },
+    { key: "food",        label: "Food & Drinks" },
+    { key: "products",    label: "Products & Local Finds" },
+    { key: "stays",       label: "Where to Stay" },
+    { key: "experiences", label: "Experiences" },
+  ];
+
+  const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400";
+  const labelCls = "text-xs font-semibold text-slate-600 mb-1 block";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-4"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <h2 className="font-bold text-slate-900 text-lg">{gemId ? "Edit Destination" : "Add New Destination"}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <div className="h-6 w-6 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            {/* Tab Bar */}
+            <div className="flex overflow-x-auto border-b border-slate-100 px-6 gap-1 pt-2">
+              <button
+                onClick={() => setActiveTab("basic")}
+                className={`text-xs font-semibold px-3 py-2 rounded-t-lg whitespace-nowrap transition ${activeTab === "basic" ? "bg-sky-50 text-sky-700 border border-b-white border-slate-200" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                Basic Info
+              </button>
+              {SECTIONS.map(s => (
+                <button
+                  key={s.key}
+                  onClick={() => setActiveTab(s.key)}
+                  className={`text-xs font-semibold px-3 py-2 rounded-t-lg whitespace-nowrap transition ${activeTab === s.key ? "bg-sky-50 text-sky-700 border border-b-white border-slate-200" : "text-slate-500 hover:text-slate-700"}`}
+                >
+                  {s.label}
+                  {items[s.key].length > 0 && (
+                    <span className="ml-1 bg-sky-100 text-sky-700 text-[10px] px-1.5 rounded-full">{items[s.key].length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="px-6 py-5 max-h-[60vh] overflow-y-auto space-y-4">
+              {/* ── Basic Info ── */}
+              {activeTab === "basic" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Gem Name *</label>
+                      <input className={inputCls} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Mt. Daraitan" />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Location *</label>
+                      <input className={inputCls} value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))} placeholder="e.g. Tanay, Rizal" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Category *</label>
+                      <select className={inputCls} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                        {["Beach","Mountain","Nature","Food","Heritage","Cafe","Waterfalls","City"].map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Budget Level</label>
+                      <select className={inputCls} value={form.budget_level} onChange={e => setForm(f => ({ ...f, budget_level: e.target.value }))}>
+                        <option value="₱">₱ Budget</option>
+                        <option value="₱₱">₱₱ Mid-range</option>
+                        <option value="₱₱₱">₱₱₱ Premium</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Description *</label>
+                    <textarea className={`${inputCls} resize-none`} rows={4} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe this destination..." />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Insider Tip</label>
+                    <input className={inputCls} value={form.tip} onChange={e => setForm(f => ({ ...f, tip: e.target.value }))} placeholder="e.g. Best visited at dawn for sunrise views" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Image URLs (comma-separated)</label>
+                    <textarea className={`${inputCls} resize-none`} rows={2} value={form.images} onChange={e => setForm(f => ({ ...f, images: e.target.value }))} placeholder="https://..., https://..." />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelCls}>Status</label>
+                      <select className={inputCls} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                        <option value="approved">Approved (Public)</option>
+                        <option value="pending">Pending</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 pt-5">
+                      <input type="checkbox" id="is_featured" checked={form.is_featured} onChange={e => setForm(f => ({ ...f, is_featured: e.target.checked }))} className="h-4 w-4 rounded" />
+                      <label htmlFor="is_featured" className="text-sm text-slate-700">Feature this gem ✨</label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Places to Visit ── */}
+              {activeTab === "places" && (
+                <ContentItemList
+                  items={items.places}
+                  onAdd={() => addItem("places")}
+                  onRemove={key => removeItem("places", key)}
+                  onUpdate={(key, field, val) => updateItem("places", key, field, val)}
+                  fields={[
+                    { key: "name", label: "Place Name *", placeholder: "e.g. Summit Viewdeck" },
+                    { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
+                    { key: "distance", label: "Distance", placeholder: "e.g. 1.5 km" },
+                    { key: "tag", label: "Type Tag", placeholder: "e.g. 🏔 Viewpoint" },
+                  ]}
+                  addLabel="+ Add Place"
+                />
+              )}
+
+              {/* ── Things to Do ── */}
+              {activeTab === "activities" && (
+                <ContentItemList
+                  items={items.activities}
+                  onAdd={() => addItem("activities")}
+                  onRemove={key => removeItem("activities", key)}
+                  onUpdate={(key, field, val) => updateItem("activities", key, field, val)}
+                  fields={[
+                    { key: "name", label: "Activity Name *", placeholder: "e.g. Guided Summit Trek" },
+                    { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
+                    { key: "duration", label: "Duration", placeholder: "e.g. 6–8 hrs" },
+                    { key: "tag", label: "Type Tag", placeholder: "e.g. 🥾 Hiking" },
+                  ]}
+                  addLabel="+ Add Activity"
+                />
+              )}
+
+              {/* ── Food & Drinks ── */}
+              {activeTab === "food" && (
+                <ContentItemList
+                  items={items.food}
+                  onAdd={() => addItem("food")}
+                  onRemove={key => removeItem("food", key)}
+                  onUpdate={(key, field, val) => updateItem("food", key, field, val)}
+                  fields={[
+                    { key: "name", label: "Name *", placeholder: "e.g. Mountain View Eatery" },
+                    { key: "category_label", label: "Category", placeholder: "e.g. Filipino / Comfort Food" },
+                    { key: "price_range", label: "Price Range", placeholder: "e.g. ₱250–₱500 / meal" },
+                    { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
+                  ]}
+                  addLabel="+ Add Food & Drink"
+                />
+              )}
+
+              {/* ── Products & Local Finds ── */}
+              {activeTab === "products" && (
+                <ContentItemList
+                  items={items.products}
+                  onAdd={() => addItem("products")}
+                  onRemove={key => removeItem("products", key)}
+                  onUpdate={(key, field, val) => updateItem("products", key, field, val)}
+                  fields={[
+                    { key: "name", label: "Product / Find Name *", placeholder: "e.g. Local Strawberry Jam" },
+                    { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
+                    { key: "seller", label: "Seller / Store", placeholder: "e.g. Farmers' Roadside Stalls" },
+                  ]}
+                  addLabel="+ Add Local Find"
+                />
+              )}
+
+              {/* ── Where to Stay ── */}
+              {activeTab === "stays" && (
+                <ContentItemList
+                  items={items.stays}
+                  onAdd={() => addItem("stays")}
+                  onRemove={key => removeItem("stays", key)}
+                  onUpdate={(key, field, val) => updateItem("stays", key, field, val)}
+                  fields={[
+                    { key: "name", label: "Accommodation Name *", placeholder: "e.g. Pine Lodge Guesthouse" },
+                    { key: "category_label", label: "Type", placeholder: "e.g. 🏡 Guesthouse" },
+                    { key: "price_range", label: "Price", placeholder: "e.g. From ₱1,400/night" },
+                    { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
+                  ]}
+                  addLabel="+ Add Accommodation"
+                />
+              )}
+
+              {/* ── Experiences ── */}
+              {activeTab === "experiences" && (
+                <ContentItemList
+                  items={items.experiences}
+                  onAdd={() => addItem("experiences")}
+                  onRemove={key => removeItem("experiences", key)}
+                  onUpdate={(key, field, val) => updateItem("experiences", key, field, val)}
+                  fields={[
+                    { key: "name", label: "Experience Name *", placeholder: "e.g. Coffee Farm Tour" },
+                    { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
+                    { key: "price_range", label: "Price", placeholder: "e.g. ₱350/person" },
+                    { key: "action_type", label: "Action Button", select: ["Book Now","Inquire","View Details","Get Directions"] },
+                  ]}
+                  addLabel="+ Add Experience"
+                />
+              )}
+            </div>
+
+            {/* Footer */}
+            {error && <p className="px-6 pb-2 text-xs text-red-500">{error}</p>}
+            <div className="flex gap-3 px-6 py-4 border-t border-slate-100">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold py-2.5 rounded-xl text-sm transition disabled:opacity-50"
+              >
+                {saving ? "Saving…" : gemId ? "Save Changes" : "Create Destination"}
+              </button>
+              <button onClick={onClose} className="px-5 py-2.5 border border-slate-200 hover:bg-slate-50 rounded-xl text-sm font-medium text-slate-700 transition">
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Content Item List (reusable within GemEditorModal) ───────────────────────
+interface FieldDef {
+  key: keyof ContentItemDraft;
+  label: string;
+  placeholder?: string;
+  multiline?: boolean;
+  select?: string[];
+}
+
+function ContentItemList({
+  items,
+  onAdd,
+  onRemove,
+  onUpdate,
+  fields,
+  addLabel,
+}: {
+  items: ContentItemDraft[];
+  onAdd: () => void;
+  onRemove: (key: string) => void;
+  onUpdate: (key: string, field: keyof ContentItemDraft, value: string) => void;
+  fields: FieldDef[];
+  addLabel: string;
+}) {
+  const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400";
+  const labelCls = "text-xs font-semibold text-slate-600 mb-1 block";
+
+  return (
+    <div className="space-y-4">
+      {items.length === 0 && (
+        <p className="text-sm text-slate-400 text-center py-4">No items yet. Click below to add one.</p>
+      )}
+      {items.map((item, idx) => (
+        <div key={item._key} className="bg-slate-50 rounded-xl p-4 space-y-3 relative">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold text-slate-500">Item #{idx + 1}</span>
+            <button onClick={() => onRemove(item._key)} className="text-xs text-red-400 hover:text-red-600">✕ Remove</button>
+          </div>
+          {fields.map(f => (
+            <div key={String(f.key)}>
+              <label className={labelCls}>{f.label}</label>
+              {f.select ? (
+                <select className={inputCls} value={String(item[f.key] ?? "")} onChange={e => onUpdate(item._key, f.key, e.target.value)}>
+                  {f.select.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              ) : f.multiline ? (
+                <textarea className={`${inputCls} resize-none`} rows={2} value={String(item[f.key] ?? "")} placeholder={f.placeholder} onChange={e => onUpdate(item._key, f.key, e.target.value)} />
+              ) : (
+                <input className={inputCls} value={String(item[f.key] ?? "")} placeholder={f.placeholder} onChange={e => onUpdate(item._key, f.key, e.target.value)} />
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+      <button
+        onClick={onAdd}
+        className="w-full border-2 border-dashed border-slate-200 hover:border-sky-300 text-slate-500 hover:text-sky-600 font-semibold py-3 rounded-xl text-sm transition"
+      >
+        {addLabel}
+      </button>
+    </div>
+  );
+}
+
+// ─── GemsTab ──────────────────────────────────────────────────────────────────
 function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
-  const [gems, setGems]       = useState<DBGem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [acting, setActing]   = useState<string | null>(null);
+  const [gems, setGems]           = useState<DBGem[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [acting, setActing]       = useState<string | null>(null);
+  const [editorGemId, setEditorGemId] = useState<string | "new" | null>(null);
 
   const fetchGems = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
@@ -1114,6 +1629,22 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
 
   return (
     <div className="space-y-4">
+      {editorGemId !== null && (
+        <GemEditorModal
+          gemId={editorGemId === "new" ? null : editorGemId}
+          onClose={() => setEditorGemId(null)}
+          onSaved={() => { setEditorGemId(null); fetchGems(); }}
+        />
+      )}
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold text-slate-800">Hidden Gems</h2>
+        <button
+          onClick={() => setEditorGemId("new")}
+          className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+        >
+          <span className="text-base leading-none">+</span> Add New Destination
+        </button>
+      </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex justify-center py-12">
@@ -1150,6 +1681,12 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setEditorGemId(g.id)}
+                        className="text-xs text-sky-600 hover:underline font-medium"
+                      >
+                        Edit
+                      </button>
                       {g.status === "pending" && (
                         <>
                           <button onClick={() => updateStatus(g, "approved")} disabled={acting === g.id}

@@ -16,6 +16,8 @@ const ICON_MAP: Record<NotificationType, React.ReactNode> = {
   community_reply:    <MessageCircle className="h-4 w-4 text-violet-500" />,
   gem_approved:       <Star className="h-4 w-4 text-emerald-500" />,
   gem_update:         <MapPin className="h-4 w-4 text-sky-500" />,
+  review_approved:    <Star className="h-4 w-4 text-emerald-500" />,
+  review_rejected:    <Star className="h-4 w-4 text-rose-500" />,
   system:             <Bell className="h-4 w-4 text-slate-500" />,
 };
 
@@ -30,6 +32,8 @@ const BG_MAP: Record<NotificationType, string> = {
   community_reply:    "bg-violet-50",
   gem_approved:       "bg-emerald-50",
   gem_update:         "bg-sky-50",
+  review_approved:    "bg-emerald-50",
+  review_rejected:    "bg-rose-50",
   system:             "bg-slate-50",
 };
 
