@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores";
+import { supabase } from "../../lib/supabase";
 import { Compass, MapPin, ArrowRight, ArrowLeft, Check, Camera, Search, Plus, X } from "lucide-react";
 import type { TravelInterest } from "../../types";
 import {
@@ -102,6 +103,8 @@ export default function Onboarding() {
     }
   }, [isLoggedIn, onboardingComplete, navigate]);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Keep the original File so we can upload it to Storage in finish()
+  const photoFileRef = useRef<File | null>(null);
 
   const [step, setStep] = useState(1);
   const [photoPreview, setPhotoPreview] = useState<string>(user?.profilePhoto ?? "");
@@ -125,6 +128,9 @@ export default function Onboarding() {
   const handlePhoto = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Store the File so finish() can upload it to Supabase Storage
+    photoFileRef.current = file;
+    // Show a local preview immediately using a data URL
     const reader = new FileReader();
     reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
     reader.readAsDataURL(file);
@@ -164,9 +170,25 @@ export default function Onboarding() {
     setSaving(true);
     setSaveError("");
     try {
+      // ── Upload avatar to Supabase Storage if user selected a new file ──
+      let resolvedPhotoUrl = user.profilePhoto ?? ""; // keep existing if no new file
+      const avatarFile = photoFileRef.current;
+      if (avatarFile) {
+        // Store under avatars/<userId>/<timestamp>.<ext> so old files don't block upsert
+        const ext = avatarFile.name.split(".").pop() ?? "jpg";
+        const path = `${user.id}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("avatars")
+          .upload(path, avatarFile, { upsert: true, contentType: avatarFile.type });
+        if (uploadError) throw new Error(`Avatar upload failed: ${uploadError.message}`);
+        // Get the permanent public URL (bucket is public)
+        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
+        resolvedPhotoUrl = urlData.publicUrl;
+      }
+
       await updateProfile({
         fullName: fullName.trim() || user.fullName,
-        profilePhoto: photoPreview,
+        profilePhoto: resolvedPhotoUrl,
         bio,
         location: city?.name
           ? `${city.name}, ${province?.name ?? ""}`
