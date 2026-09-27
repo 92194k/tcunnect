@@ -308,12 +308,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadingMessages: {},
 
   addMessage: (matchId, message) =>
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [matchId]: [...(s.messages[matchId] ?? []), message],
-      },
-    })),
+    set((s) => {
+      const existing = s.messages[matchId] ?? [];
+      // Deduplicate: skip if a message with this ID already exists
+      if (existing.some((m) => m.id === message.id)) return s;
+      return {
+        messages: {
+          ...s.messages,
+          [matchId]: [...existing, message],
+        },
+      };
+    }),
 
   setMessages: (matchId, messages) =>
     set((s) => ({ messages: { ...s.messages, [matchId]: messages } })),

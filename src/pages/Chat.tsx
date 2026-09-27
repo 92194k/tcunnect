@@ -681,19 +681,26 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
     markConversationRead(matchId, user.id);
   }, [matchId, user?.id]);
 
-  // Supabase Realtime subscription
-  // Use a ref for user.id to avoid stale closures in the event handler
+  // Refs to keep stable values inside the Realtime callback without re-subscribing
   const userIdRef = useRef(user?.id);
+  const matchIdRef = useRef(matchId);
   useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+  useEffect(() => { matchIdRef.current = matchId; }, [matchId]);
+
+  // Track the active channel so cleanup is always on the exact object we created
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !user) return;
 
-    // Remove any leftover channel with the same name before creating a new one
-    const channelName = `messages_${matchId}`;
-    supabase.getChannels().forEach((ch) => {
-      if (ch.topic === `realtime:${channelName}`) supabase.removeChannel(ch);
-    });
+    // Always tear down the previous channel before creating a new one
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    // Use a name unique per user + conversation so channels never collide
+    const channelName = `chat_${matchId}_${user.id}`;
 
     const channel = supabase
       .channel(channelName)
@@ -703,40 +710,58 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `match_id=eq.${matchId}`,
+          // NO server-side filter — requires REPLICA IDENTITY FULL which may not
+          // be set. RLS (receiver_id = auth.uid OR sender_id = auth.uid) already
+          // scopes the stream to this user's messages. We filter by matchId
+          // client-side below so only the open conversation is updated.
         },
         (payload) => {
           const row = payload.new as Record<string, unknown>;
-          // Only add incoming messages (we already add our own optimistically)
-          if (row.sender_id !== userIdRef.current) {
-            const msg: Message = {
-              id: row.id as string,
-              matchId: row.match_id as string,
-              senderId: row.sender_id as string,
-              receiverId: row.receiver_id as string,
-              content: row.content as string,
-              messageType: (row.message_type as Message["messageType"]) ?? "text",
-              metadata: (row.metadata as Record<string, unknown>) ?? undefined,
-              timestamp: row.created_at as string,
-              read: false,
-            };
-            addMessage(matchId, msg);
-            // Auto-mark as read since we're viewing this conversation
-            supabase.from("messages").update({ read: true }).eq("id", msg.id);
-          }
+
+          // Skip messages from other conversations (client-side guard)
+          if (row.match_id !== matchIdRef.current) return;
+          // Skip own messages — already added optimistically when sent
+          if (row.sender_id === userIdRef.current) return;
+
+          // Dedup guard: addMessage also deduplicates, but check here too
+          const currentMsgs = useChatStore.getState().messages[matchIdRef.current] ?? [];
+          if (currentMsgs.some((m) => m.id === (row.id as string))) return;
+
+          const msg: Message = {
+            id: row.id as string,
+            matchId: row.match_id as string,
+            senderId: row.sender_id as string,
+            receiverId: row.receiver_id as string,
+            content: row.content as string,
+            messageType: (row.message_type as Message["messageType"]) ?? "text",
+            metadata: (row.metadata as Record<string, unknown>) ?? undefined,
+            timestamp: row.created_at as string,
+            read: false,
+          };
+
+          addMessage(matchIdRef.current, msg);
+          // Auto-mark as read — we're actively viewing this conversation
+          supabase.from("messages").update({ read: true }).eq("id", msg.id);
         }
       )
       .subscribe((status, err) => {
         if (status === "SUBSCRIBED") {
-          console.log("[Realtime] ✓ subscribed to", channelName);
+          console.log(`[Realtime] ✓ ${channelName} connected`);
         } else if (status === "CHANNEL_ERROR") {
-          console.error("[Realtime] ✗ channel error:", err);
+          console.error(`[Realtime] ✗ ${channelName} error:`, err);
         } else if (status === "TIMED_OUT") {
-          console.warn("[Realtime] ✗ subscription timed out:", channelName);
+          console.warn(`[Realtime] ✗ ${channelName} timed out`);
         }
       });
 
-    return () => { supabase.removeChannel(channel); };
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, [matchId, user?.id]);
 
   // Auto-scroll to bottom
