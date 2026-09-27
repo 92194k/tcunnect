@@ -326,19 +326,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadMessages: async (matchId) => {
     if (!isSupabaseConfigured) return;
     set((s) => ({ loadingMessages: { ...s.loadingMessages, [matchId]: true } }));
+
+    // Try full select first (works after SQL migration 07 adds the new columns)
     const { data, error } = await supabase
       .from("messages")
       .select("id, match_id, sender_id, receiver_id, content, message_type, metadata, read, created_at")
       .eq("match_id", matchId)
       .order("created_at", { ascending: true })
       .limit(200);
+
     if (!error && data) {
       const msgs = data.map(rowToMessage);
       set((s) => ({
         messages: { ...s.messages, [matchId]: msgs },
         loadingMessages: { ...s.loadingMessages, [matchId]: false },
       }));
+      return;
+    }
+
+    // Fallback: select only guaranteed base columns (works before SQL migration 07)
+    const { data: d2, error: e2 } = await supabase
+      .from("messages")
+      .select("id, match_id, sender_id, content, read, created_at")
+      .eq("match_id", matchId)
+      .order("created_at", { ascending: true })
+      .limit(200);
+
+    if (!e2 && d2) {
+      const msgs = d2.map((row) => ({
+        id: row.id as string,
+        matchId: row.match_id as string,
+        senderId: row.sender_id as string,
+        receiverId: undefined,
+        content: row.content as string,
+        messageType: "text" as Message["messageType"],
+        metadata: undefined,
+        timestamp: row.created_at as string,
+        read: row.read as boolean,
+      }));
+      set((s) => ({
+        messages: { ...s.messages, [matchId]: msgs },
+        loadingMessages: { ...s.loadingMessages, [matchId]: false },
+      }));
     } else {
+      console.error("[TCUnnect] loadMessages failed:", e2?.message);
       set((s) => ({ loadingMessages: { ...s.loadingMessages, [matchId]: false } }));
     }
   },
@@ -357,7 +388,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       read: false,
     };
 
-    // Optimistic add
+    // Optimistic add — user sees their own message instantly
     set((s) => ({
       messages: {
         ...s.messages,
@@ -368,6 +399,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!isSupabaseConfigured) return optimistic;
 
     try {
+      // ── Attempt 1: Full insert (works after SQL migration 07) ──────────────
       const { data, error } = await supabase
         .from("messages")
         .insert({
@@ -381,21 +413,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .select("id, match_id, sender_id, receiver_id, content, message_type, metadata, read, created_at")
         .single();
 
-      if (data && !error) {
+      if (!error && data) {
         const saved = rowToMessage(data);
-        // Replace optimistic message with real one
         set((s) => ({
           messages: {
             ...s.messages,
-            [matchId]: (s.messages[matchId] ?? []).map((m) =>
-              m.id === tempId ? saved : m
-            ),
+            [matchId]: (s.messages[matchId] ?? []).map((m) => m.id === tempId ? saved : m),
           },
         }));
         return saved;
       }
-    } catch {
-      // Keep the optimistic message on error
+
+      // ── Attempt 2: Base columns only (works before SQL migration 07) ───────
+      // This keeps real-time working even if the DB schema hasn't been updated yet.
+      console.warn("[TCUnnect] Full insert failed, falling back to base columns:", error?.message);
+      const { data: d2, error: e2 } = await supabase
+        .from("messages")
+        .insert({ match_id: matchId, sender_id: senderId, content })
+        .select("id, match_id, sender_id, content, read, created_at")
+        .single();
+
+      if (!e2 && d2) {
+        // Build the full Message using DB result + our local params
+        const saved: Message = {
+          id: d2.id as string,
+          matchId: d2.match_id as string,
+          senderId: d2.sender_id as string,
+          receiverId,
+          content: d2.content as string,
+          messageType: (messageType as Message["messageType"]) ?? "text",
+          metadata,
+          timestamp: d2.created_at as string,
+          read: false,
+        };
+        set((s) => ({
+          messages: {
+            ...s.messages,
+            [matchId]: (s.messages[matchId] ?? []).map((m) => m.id === tempId ? saved : m),
+          },
+        }));
+        return saved;
+      }
+
+      console.error("[TCUnnect] Both insert attempts failed:", e2?.message);
+    } catch (e) {
+      console.error("[TCUnnect] sendMessage exception:", e);
     }
     return optimistic;
   },
