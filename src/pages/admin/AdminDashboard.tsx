@@ -1419,13 +1419,14 @@ interface GemFormState {
   description: string;
   tip: string;
   images: string;       // comma-separated
+  source: string;       // photo credits / attribution
   status: string;
   is_featured: boolean;
 }
 
 const EMPTY_GEM_FORM: GemFormState = {
   name: "", location: "", category: "Mountain", budget_level: "₱₱",
-  description: "", tip: "", images: "", status: "approved", is_featured: false,
+  description: "", tip: "", images: "", source: "", status: "approved", is_featured: false,
 };
 
 // ─── Gem Editor Modal ─────────────────────────────────────────────────────────
@@ -1455,7 +1456,7 @@ function GemEditorModal({
     (async () => {
       const [gemRes, contentRes] = await Promise.all([
         supabase.from("hidden_gems")
-          .select("name, location, category, budget_level, description, tip, images, status, is_featured")
+          .select("name, location, category, budget_level, description, tip, images, source, status, is_featured")
           .eq("id", gemId).single(),
         supabase.from("gem_content_items")
           .select("*")
@@ -1472,6 +1473,7 @@ function GemEditorModal({
           description: g.description ?? "",
           tip: g.tip ?? "",
           images: (g.images ?? []).join(", "),
+          source: g.source ?? "",
           status: g.status ?? "approved",
           is_featured: g.is_featured ?? false,
         });
@@ -1567,6 +1569,7 @@ function GemEditorModal({
       description: form.description.trim(),
       tip: form.tip.trim(),
       images: imageArr,
+      source: form.source.trim() || null,
       status: form.status,
       is_featured: form.is_featured,
     };
@@ -1744,14 +1747,17 @@ function GemEditorModal({
                         ))}
                       </div>
                     )}
-                    {/* Manual URL input (labeled Source) */}
+                    <p className="text-[10px] text-slate-400 mt-1">Hover a thumbnail to remove it.</p>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Photo Credits / Source</label>
                     <input
-                      className={`${inputCls} text-xs font-mono`}
-                      value={form.images}
-                      onChange={e => setForm(f => ({ ...f, images: e.target.value }))}
-                      placeholder="Or paste image URL(s) here, comma-separated"
+                      className={inputCls}
+                      value={form.source}
+                      onChange={e => setForm(f => ({ ...f, source: e.target.value }))}
+                      placeholder="e.g. Photo by Juan dela Cruz · Source: Rappler"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Upload files above or paste direct URLs below. Hover thumbnails to remove.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Attribution shown under the destination's photos.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
