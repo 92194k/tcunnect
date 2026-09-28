@@ -2326,10 +2326,12 @@ function ReportsTab() {
     if (!isSupabaseConfigured) { setLoading(false); return; }
     setFetchError(null);
 
-    // Step 1: base columns using reported_by (the actual DB column)
+    // Step 1: safe base columns — only columns guaranteed to exist in the live DB.
+    // Do NOT include reported_user_id / reported_post_id / match_id / message_content / details
+    // here; they are added as silent enrichment below so a missing column never blocks the list.
     const baseResult = await supabase
       .from("reports")
-      .select("id, reported_by, reported_user_id, reported_item_type, reported_item_id, match_id, message_content, reason, details, status, created_at")
+      .select("id, reported_by, reported_item_type, reported_item_id, reason, status, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -2343,7 +2345,19 @@ function ReportsTab() {
 
     let rows: DBReport[] = (baseResult.data as any[]).map((r: any) => ({ ...r }));
 
-    // Step 2: enrich with joined names — fall back silently on error
+    // Step 2: newer optional columns (reported_user_id, reported_post_id) — silently ignored if missing
+    const { data: extraCols } = await supabase
+      .from("reports")
+      .select("id, reported_user_id, reported_post_id")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (extraCols) {
+      const extraMap = new Map((extraCols as any[]).map((r: any) => [r.id, r]));
+      rows = rows.map(r => ({ ...r, ...(extraMap.get(r.id) ?? {}) }));
+    }
+
+    // Step 3: enrich with joined profile names — silently ignored on error
     const { data: richData } = await supabase
       .from("reports")
       .select(`
@@ -2359,7 +2373,7 @@ function ReportsTab() {
       rows = rows.map(r => ({ ...r, ...(richMap.get(r.id) ?? {}) }));
     }
 
-    // Step 3: try to get post content — fall back silently if reported_post_id missing
+    // Step 4: try to get post content — silently ignored if reported_post_id missing
     const { data: postData } = await supabase
       .from("reports")
       .select("id, reported_post_id, post:posts!reported_post_id(content, created_at)")
@@ -2372,6 +2386,7 @@ function ReportsTab() {
     }
 
     setReports(rows);
+    // treat null/undefined status as "pending" (same logic as the badge query)
     setPendingCount(rows.filter(r => !r.status || r.status === "pending").length);
     setResolvedCount(rows.filter(r => r.status === "resolved").length);
     setDismissedCount(rows.filter(r => r.status === "dismissed").length);
@@ -2945,7 +2960,7 @@ export default function AdminDashboard() {
       supabase.from("hidden_gems").select("id", { count: "exact", head: true }).eq("status", "approved"),
       supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_premium", true),
       supabase.from("reports").select("id", { count: "exact", head: true }),
-      supabase.from("reports").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("reports").select("id", { count: "exact", head: true }).or("status.is.null,status.eq.pending"),
     ]).then(([users, bookings, revenue, pendPay, pendGems, appGems, prem, reps, pendReps]) => {
       const totalRevenue = (revenue.data ?? []).reduce((sum: number, p: any) => sum + (p.amount ?? 0), 0);
       setDashStats({
@@ -2988,16 +3003,19 @@ export default function AdminDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // Realtime: keep reports badge live
+  // Realtime: keep reports badge live — count pending + null-status rows together
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     const refreshReportsBadge = async () => {
+      // Count rows where status IS NULL or status = 'pending' (same logic as Reports tab pendingCount)
       const { count } = await supabase
         .from("reports")
         .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
+        .or("status.is.null,status.eq.pending");
       setBadges(b => ({ ...b, reports: count ?? 0 }));
     };
+    // Run once immediately so badge is correct on load
+    refreshReportsBadge();
     const ch = supabase
       .channel("admin-reports-badge")
       .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, refreshReportsBadge)
