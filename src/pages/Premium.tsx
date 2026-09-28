@@ -441,12 +441,24 @@ export default function Premium() {
 
           {step === "upload" && (
             <>
-              <h3 className="font-bold text-slate-900 mb-1">Upload Receipt</h3>
-              <p className="text-slate-500 text-sm mb-5">Screenshot of your {pm.label} transaction — we'll scan it automatically</p>
+              {/* Step header */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="h-8 w-8 rounded-full bg-sky-100 flex items-center justify-center shrink-0">
+                  <span className="text-sky-700 font-black text-sm">3</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base leading-tight">Upload your receipt</h3>
+                  <p className="text-xs text-slate-400">We'll scan it automatically to fill in your details</p>
+                </div>
+              </div>
 
-              {/* File upload zone */}
-              <label className={`block w-full border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition mb-4 ${
-                receiptFile ? "border-emerald-400 bg-emerald-50" : "border-slate-200 hover:border-sky-300 hover:bg-sky-50"
+              {/* Upload zone */}
+              <label className={`relative flex flex-col items-center justify-center w-full min-h-[140px] rounded-2xl border-2 border-dashed cursor-pointer transition-all mb-3 ${
+                isScanning
+                  ? "border-sky-300 bg-sky-50"
+                  : receiptFile
+                  ? "border-emerald-400 bg-emerald-50"
+                  : "border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50"
               }`}>
                 <input
                   type="file"
@@ -454,148 +466,173 @@ export default function Premium() {
                   onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
                   className="sr-only"
                 />
-                {receiptFile ? (
-                  <div>
-                    {isScanning ? (
-                      <>
-                        <ScanLine className="h-8 w-8 text-sky-500 mx-auto mb-2 animate-pulse" />
-                        <p className="text-sm font-semibold text-sky-700">Scanning receipt...</p>
-                        <p className="text-xs text-sky-500 mt-1">Extracting Reference ID, amount, and date</p>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-                        <p className="text-sm font-semibold text-emerald-700">{receiptFile.name}</p>
-                        <p className="text-xs text-emerald-500 mt-1">
-                          {ocrResult ? "Receipt scanned" : "Tap to change"}
-                        </p>
-                      </>
-                    )}
+
+                {isScanning ? (
+                  <div className="flex flex-col items-center gap-2 py-6">
+                    <div className="h-10 w-10 rounded-full bg-sky-100 flex items-center justify-center">
+                      <ScanLine className="h-5 w-5 text-sky-600 animate-pulse" />
+                    </div>
+                    <p className="text-sm font-semibold text-sky-700">Scanning receipt…</p>
+                    <p className="text-xs text-sky-400">Extracting Ref No., amount &amp; date</p>
+                  </div>
+                ) : receiptFile ? (
+                  <div className="flex flex-col items-center gap-2 py-6 px-4">
+                    <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <Check className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <p className="text-sm font-semibold text-emerald-700 text-center break-all max-w-[220px]">
+                      {receiptFile.name}
+                    </p>
+                    <p className="text-[11px] text-emerald-500">
+                      {ocrResult ? "Scanned ✓ — tap to change" : "Tap to change"}
+                    </p>
                   </div>
                 ) : (
-                  <div>
-                    <Upload className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-slate-600">Tap to upload receipt</p>
-                    <p className="text-xs text-slate-400 mt-1">PNG, JPG, or screenshot — auto-scanned</p>
+                  <div className="flex flex-col items-center gap-2 py-6">
+                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
+                      <Upload className="h-5 w-5 text-slate-400" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-600">Tap to upload receipt</p>
+                    <p className="text-xs text-slate-400">PNG · JPG · Screenshot</p>
                   </div>
                 )}
               </label>
+
+              {/* Remove link */}
               {receiptFile && !isScanning && (
-                <button onClick={() => handleFileChange(null)} className="flex items-center gap-1 text-xs text-slate-400 mb-4">
-                  <X className="h-3.5 w-3.5" /> Remove
+                <button
+                  onClick={() => handleFileChange(null)}
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 transition mb-4"
+                >
+                  <X className="h-3.5 w-3.5" /> Remove file
                 </button>
               )}
 
-              {/* OCR result card */}
+              {/* OCR scan results */}
               {ocrResult && !isScanning && (
-                <div className={`rounded-xl border p-4 mb-4 ${
+                <div className={`rounded-2xl border p-4 mb-4 ${
                   ocrResult.confidence >= 0.5
                     ? "border-emerald-200 bg-emerald-50"
                     : "border-amber-200 bg-amber-50"
                 }`}>
                   <div className="flex items-center gap-2 mb-3">
                     {ocrResult.confidence >= 0.5
-                      ? <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                      : <AlertCircle className="h-4 w-4 text-amber-600" />
+                      ? <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      : <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
                     }
-                    <p className={`text-xs font-bold ${ocrResult.confidence >= 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
-                      {ocrResult.confidence >= 0.5 ? "Receipt scanned successfully" : "Partial scan — please verify"}
-                    </p>
+                    <span className={`text-xs font-bold ${ocrResult.confidence >= 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
+                      {ocrResult.confidence >= 0.5 ? "Receipt read successfully" : "Partial scan — please verify below"}
+                    </span>
                   </div>
-                  <div className="space-y-1.5 text-xs">
+                  <div className="grid grid-cols-3 gap-2">
                     {ocrResult.method && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Method</span>
-                        <span className="font-medium text-slate-800">{ocrResult.method}</span>
+                      <div className="bg-white rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Method</p>
+                        <p className="text-sm font-bold text-slate-800 mt-0.5">{ocrResult.method}</p>
                       </div>
                     )}
-                    {ocrResult.amount && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Amount</span>
-                        <span className="font-medium text-slate-800">₱{ocrResult.amount.toFixed(2)}</span>
+                    {ocrResult.amount != null && (
+                      <div className="bg-white rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Amount</p>
+                        <p className="text-sm font-bold text-slate-800 mt-0.5">₱{ocrResult.amount.toFixed(2)}</p>
                       </div>
                     )}
                     {ocrResult.date && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Date</span>
-                        <span className="font-medium text-slate-800">
-                          {new Date(ocrResult.date).toLocaleDateString("en-PH", { dateStyle: "medium" })}
-                        </span>
+                      <div className="bg-white rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wide">Date</p>
+                        <p className="text-sm font-bold text-slate-800 mt-0.5">
+                          {new Date(ocrResult.date).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
+                        </p>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* OCR error */}
+              {/* OCR warning (partial / failed) */}
               {ocrError && !isScanning && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
-                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700">{ocrError}</p>
+                <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl mb-4">
+                  <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700 leading-relaxed">{ocrError}</p>
                 </div>
               )}
 
-              {/* Reference ID field — always shown after file selected */}
+              {/* Reference ID input — shown once file is selected */}
               {receiptFile && !isScanning && (
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Reference ID <span className="text-red-500">*</span>
-                    {ocrResult?.referenceId && (
-                      <span className="ml-2 text-emerald-600 font-normal">auto-filled from receipt</span>
+                <div className="mb-5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Reference ID <span className="text-red-500">*</span>
+                    </label>
+                    {ocrResult?.referenceId && referenceIdInput && (
+                      <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
+                        <ScanLine className="h-3 w-3" /> Auto-filled from receipt
+                      </span>
                     )}
-                  </label>
+                  </div>
                   <div className="relative">
                     <input
                       type="text"
+                      inputMode="numeric"
                       value={referenceIdInput}
                       onChange={e => setReferenceIdInput(e.target.value)}
-                      placeholder={paymentMethod === "gcash" ? "13-digit GCash Ref No." : "Maya transaction reference"}
-                      className={`w-full border rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 ${
+                      placeholder={paymentMethod === "gcash" ? "e.g. 1234567890123" : "Maya transaction reference"}
+                      className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-mono tracking-wider focus:outline-none transition ${
                         referenceIdInput
-                          ? "border-emerald-400 bg-emerald-50/50 focus:ring-emerald-300"
-                          : "border-slate-200 focus:ring-sky-300"
+                          ? "border-emerald-400 bg-white text-slate-800"
+                          : "border-slate-200 bg-white text-slate-800 focus:border-sky-400"
                       }`}
                     />
                     {referenceIdInput && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                      <CheckCircle2 className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
                     )}
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
                     {paymentMethod === "gcash"
-                      ? "Found in your GCash receipt as \"Ref No.\". It's a 13-digit number."
-                      : "Found in your Maya receipt as \"Reference\" or \"Transaction ID\"."}
+                      ? "Your 13-digit GCash Ref No. — shown on your transaction receipt as \"Ref No.\""
+                      : "Your Maya transaction reference — shown on your receipt as \"Reference\" or \"Transaction ID\""}
                   </p>
                 </div>
               )}
 
               {/* Submit error */}
               {submitError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  {submitError}
+                <div className="flex items-start gap-2.5 mb-4 p-3.5 bg-red-50 border border-red-200 rounded-2xl">
+                  <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700 leading-relaxed">{submitError}</p>
                 </div>
               )}
 
-              <div className="flex items-start gap-2 bg-slate-50 rounded-xl p-3 mb-5 text-xs text-slate-500">
-                <Shield className="h-4 w-4 shrink-0 mt-0.5 text-slate-400" />
-                Our admin team will verify your receipt within 24 hours and activate your plan.
+              {/* Admin note */}
+              <div className="flex items-start gap-2.5 bg-slate-50 border border-slate-100 rounded-xl p-3.5 mb-5">
+                <Shield className="h-4 w-4 shrink-0 mt-0.5 text-slate-300" />
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Our admin team will verify your receipt within <strong>24 hours</strong> and activate your plan. You'll get a notification when it's done.
+                </p>
               </div>
 
+              {/* CTA */}
               <button
                 onClick={handleSubmit}
                 disabled={!receiptFile || isProcessing || isScanning || !referenceIdInput.trim()}
-                className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2"
+                className="w-full bg-sky-600 hover:bg-sky-700 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm shadow-md shadow-sky-200"
               >
                 {isProcessing
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</>
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</>
                   : isScanning
-                  ? <><ScanLine className="h-4 w-4 animate-pulse" /> Scanning...</>
-                  : "Submit Receipt"}
+                  ? <><ScanLine className="h-4 w-4 animate-pulse" /> Scanning receipt…</>
+                  : <>Submit Receipt <span className="opacity-70">→</span></>}
               </button>
+
               {!referenceIdInput.trim() && receiptFile && !isScanning && (
-                <p className="text-center text-xs text-slate-400 mt-2">Enter Reference ID to continue</p>
+                <p className="text-center text-[11px] text-slate-400 mt-2">
+                  Enter your Reference ID above to continue
+                </p>
               )}
-              <button onClick={() => setStep("payment")} className="w-full text-slate-400 text-sm py-2 mt-2">← Back</button>
+
+              <button onClick={() => setStep("payment")} className="w-full text-slate-400 text-xs py-3 mt-1 hover:text-slate-600 transition">
+                ← Back to payment details
+              </button>
             </>
           )}
         </div>
