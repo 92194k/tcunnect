@@ -1392,6 +1392,8 @@ interface ContentItemDraft {
   price_range: string;
   seller: string;
   action_type: string;
+  image_url: string;
+  image_source: string;
 }
 
 function emptyItem(section: ContentSection, idx: number): ContentItemDraft {
@@ -1408,6 +1410,8 @@ function emptyItem(section: ContentSection, idx: number): ContentItemDraft {
     price_range: "",
     seller: "",
     action_type: "Inquire",
+    image_url: "",
+    image_source: "",
   };
 }
 
@@ -1498,6 +1502,8 @@ function GemEditorModal({
             price_range: row.price_range ?? "",
             seller: row.seller ?? "",
             action_type: row.action_type ?? "Inquire",
+            image_url: row.image_url ?? "",
+            image_source: row.image_source ?? "",
           });
         });
         setItems(grouped);
@@ -1606,6 +1612,8 @@ function GemEditorModal({
             price_range: it.price_range.trim() || null,
             seller: it.seller.trim() || null,
             action_type: it.action_type || null,
+            image_url: it.image_url.trim() || null,
+            image_source: it.image_source.trim() || null,
           });
         });
       });
@@ -1788,6 +1796,8 @@ function GemEditorModal({
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
                     { key: "distance", label: "Distance", placeholder: "e.g. 1.5 km" },
                     { key: "tag", label: "Type Tag", placeholder: "e.g. 🏔 Viewpoint" },
+                    { key: "image_url", label: "Photo URL", placeholder: "https://... (paste image link)" },
+                    { key: "image_source", label: "Photo Credit / Source URL", placeholder: "e.g. https://unsplash.com/..." },
                   ]}
                   addLabel="+ Add Place"
                 />

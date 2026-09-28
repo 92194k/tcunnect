@@ -57,6 +57,8 @@ interface ContentItem {
   // places
   distance: string | null;
   tag: string | null;
+  image_url: string | null;
+  image_source: string | null;
   // activities
   duration: string | null;
   // food / stays / experiences
@@ -93,19 +95,59 @@ function PlacesSection({ items }: { items: ContentItem[] }) {
       <SectionHeader icon={<MapPin className="h-4 w-4" />} title="Places to Visit" subtitle="Nearby spots worth exploring" />
       <div className="space-y-3">
         {items.map((item) => (
-          <div key={item.id} className="bg-slate-50 rounded-xl p-4 flex gap-3 items-start">
-            <span className="text-xl flex-shrink-0">{item.tag?.split(" ")[0] ?? "📍"}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
-                {item.distance && (
-                  <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full flex-shrink-0">📍 {item.distance}</span>
+          <div key={item.id} className="bg-slate-50 rounded-xl overflow-hidden">
+            {/* Photo */}
+            {item.image_url && (
+              <div className="relative h-40 w-full overflow-hidden bg-slate-200">
+                <img
+                  src={item.image_url}
+                  alt={item.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+                {/* Source credit overlay */}
+                {item.image_source && (
+                  <a
+                    href={item.image_source.startsWith("http") ? item.image_source : `https://${item.image_source}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute bottom-1.5 right-2 text-[10px] text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-2 py-0.5 rounded-full transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    📷 Photo credit
+                  </a>
                 )}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{item.description}</p>
-              {item.tag && (
-                <span className="inline-block mt-1.5 text-[10px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">{item.tag}</span>
+            )}
+            <div className="p-4 flex gap-3 items-start">
+              {!item.image_url && (
+                <span className="text-xl flex-shrink-0">{item.tag?.split(" ")[0] ?? "📍"}</span>
               )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                  {item.distance && (
+                    <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full flex-shrink-0">📍 {item.distance}</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{item.description}</p>
+                <div className="flex items-center gap-2 flex-wrap mt-1.5">
+                  {item.tag && (
+                    <span className="text-[10px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">{item.tag}</span>
+                  )}
+                  {/* Visible source credit below card (when no photo, or as backup) */}
+                  {item.image_source && !item.image_url && (
+                    <a
+                      href={item.image_source.startsWith("http") ? item.image_source : `https://${item.image_source}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-slate-400 hover:text-sky-600 underline underline-offset-2 transition-colors"
+                    >
+                      📷 {item.image_source}
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         ))}
