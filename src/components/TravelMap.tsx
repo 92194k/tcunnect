@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface MapMarker {
   id: string;
@@ -68,12 +68,21 @@ function injectMatchLineCSS() {
   document.head.appendChild(s);
 }
 
+// ── Colour palette — distinct per type ───────────────────────────────────────
+const TYPE_COLORS = {
+  user:     { normal: "#2563eb", active: "#1d4ed8", glow: "rgba(37,99,235,0.35)",  bg: "#dbeafe" }, // blue
+  featured: { normal: "#d97706", active: "#b45309", glow: "rgba(217,119,6,0.35)",  bg: "#fef3c7" }, // amber
+  gem:      { normal: "#059669", active: "#047857", glow: "rgba(5,150,105,0.35)",  bg: "#d1fae5" }, // emerald
+} as const;
+
 function makeIcon(type: "user" | "featured" | "gem", active = false, photo?: string) {
-  // ── User marker: show avatar photo (or fallback emoji) in a circle ──
+  const c = TYPE_COLORS[type];
+
+  // ── User marker: avatar circle ────────────────────────────────────────────
   if (type === "user") {
     const size = active ? 50 : 42;
-    const ring  = active ? "#0284c7" : "#0ea5e9";
-    const glow  = active ? `,0 0 0 3px rgba(2,132,199,0.35)` : "";
+    const ring = active ? c.active : c.normal;
+    const glow = active ? `,0 0 0 3px ${c.glow}` : "";
     const inner = photo
       ? `<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block"/>`
       : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${size * 0.42}px;line-height:1">👤</div>`;
@@ -84,7 +93,7 @@ function makeIcon(type: "user" | "featured" | "gem", active = false, photo?: str
         border:3px solid ${ring};
         box-shadow:0 4px 14px rgba(0,0,0,0.38)${glow};
         overflow:hidden;
-        background:#e0f2fe;
+        background:${c.bg};
         transition:all .2s;
       ">${inner}</div>`;
     return window.L.divIcon({
@@ -96,12 +105,11 @@ function makeIcon(type: "user" | "featured" | "gem", active = false, photo?: str
     });
   }
 
-  // ── Gem / Featured: teardrop pin pointing straight down ──
+  // ── Gem / Featured: teardrop pin pointing straight down ──────────────────
   const cfg = {
-    featured: { bg: active ? "#d97706" : "#f59e0b", emoji: "⭐", size: 40 },
-    gem:      { bg: active ? "#059669" : "#10b981", emoji: "💎", size: 38 },
-    // user fallback (won't be reached, kept for TS exhaustiveness)
-    user:     { bg: "#0ea5e9", emoji: "👤", size: 38 },
+    featured: { bg: active ? TYPE_COLORS.featured.active : TYPE_COLORS.featured.normal, emoji: "⭐", size: 40 },
+    gem:      { bg: active ? TYPE_COLORS.gem.active      : TYPE_COLORS.gem.normal,      emoji: "💎", size: 38 },
+    user:     { bg: TYPE_COLORS.user.normal, emoji: "👤", size: 38 }, // TS exhaustiveness only
   }[type];
 
   // Teardrop: a circle on top + a triangle pointing down, no CSS rotation tricks
@@ -146,6 +154,16 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
   const markersRef = useRef<Map<string, ReturnType<typeof window.L.marker>>>(new Map());
   const matchLineRef = useRef<ReturnType<typeof window.L.polyline> | null>(null);
   const gemTooltipRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Filter state: null = show all; otherwise show only that type ─────────
+  const [activeFilter, setActiveFilter] = useState<"user" | "gem" | null>(null);
+  const toggleFilter = (type: "user" | "gem") =>
+    setActiveFilter((prev) => (prev === type ? null : type));
+
+  // Apply filter — always keep featured pins; filter only user vs gem
+  const visibleMarkers = activeFilter
+    ? markers.filter((m) => m.type === "featured" || m.type === activeFilter)
+    : markers;
 
   // ── Init map ────────────────────────────────────────────────────
   useEffect(() => {
@@ -214,7 +232,7 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
     const map = mapRef.current;
     const existing = new Set(markersRef.current.keys());
 
-    markers.forEach((m) => {
+    visibleMarkers.forEach((m) => {
       existing.delete(m.id);
       const icon = makeIcon(m.type, m.active, m.photo);
 
@@ -284,7 +302,7 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
     // Navigation: when matchLine is active we use fitBounds (handled in matchLine effect)
     // Otherwise pan/zoom to the active user marker as before
     if (!matchLine) {
-      const active = markers.find((m) => m.active && m.type === "user");
+      const active = visibleMarkers.find((m) => m.active && m.type === "user");
       if (active) {
         const currentZoom = map.getZoom();
         if (currentZoom < 8) {
@@ -292,11 +310,11 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
         } else {
           map.panTo([active.lat, active.lng], { animate: true, duration: 0.6 });
         }
-      } else if (markers.length === 0) {
+      } else if (visibleMarkers.length === 0) {
         map.setView([12.0, 122.5], 6, { animate: true, duration: 0.8 });
       }
     }
-  }, [markers, matchLine]);
+  }, [visibleMarkers, matchLine]);
 
   // ── Match line animation ─────────────────────────────────────────
   useEffect(() => {
@@ -330,7 +348,7 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
     }
   }, [matchLine]);
 
-  // Derived legend flags
+  // Derived flags from original markers (not filtered — so buttons always appear)
   const hasUser     = markers.some((m) => m.type === "user");
   const hasFeatured = markers.some((m) => m.type === "featured");
   const hasGem      = markers.some((m) => m.type === "gem");
@@ -339,25 +357,55 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
     <div className="relative w-full h-full rounded-2xl overflow-hidden">
       <div ref={containerRef} className="w-full h-full" />
 
-      {/* Dynamic legend */}
+      {/* ── Filter buttons + legend ─────────────────────────── */}
       {(hasUser || hasFeatured || hasGem) && (
-        <div className="absolute top-3 left-3 z-[400] bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-lg border border-white/60 text-xs font-medium space-y-1.5">
-          {hasUser && (
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-sky-500 inline-block" />
-              <span className="text-slate-700">Traveler</span>
-            </div>
-          )}
-          {hasFeatured && (
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-amber-400 inline-block" />
-              <span className="text-slate-700">Featured</span>
-            </div>
-          )}
-          {hasGem && (
-            <div className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-full bg-emerald-500 inline-block" />
-              <span className="text-slate-700">Hidden Gem</span>
+        <div className="absolute top-3 left-3 z-[400] flex flex-col gap-1.5">
+          {/* Clickable filter pills */}
+          <div className="flex flex-col gap-1">
+            {hasUser && (
+              <button
+                onClick={() => toggleFilter("user")}
+                title={activeFilter === "user" ? "Show all" : "Show travelers only"}
+                className={[
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-md border transition-all",
+                  activeFilter === "user"
+                    ? "bg-blue-600 border-blue-700 text-white scale-105"
+                    : "bg-white/90 border-white/60 text-slate-700 hover:bg-blue-50 hover:border-blue-200 backdrop-blur-sm",
+                ].join(" ")}
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-600 inline-block flex-shrink-0" />
+                👤 Travelers
+                {activeFilter === "user" && <span className="ml-0.5 opacity-75">✕</span>}
+              </button>
+            )}
+            {hasFeatured && (
+              <div className="flex items-center gap-1.5 bg-white/90 backdrop-blur-sm rounded-full px-2.5 py-1 shadow-md border border-white/60 text-xs font-semibold text-slate-700">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block flex-shrink-0" />
+                ⭐ Featured
+              </div>
+            )}
+            {hasGem && (
+              <button
+                onClick={() => toggleFilter("gem")}
+                title={activeFilter === "gem" ? "Show all" : "Show hidden gems only"}
+                className={[
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-md border transition-all",
+                  activeFilter === "gem"
+                    ? "bg-emerald-600 border-emerald-700 text-white scale-105"
+                    : "bg-white/90 border-white/60 text-slate-700 hover:bg-emerald-50 hover:border-emerald-200 backdrop-blur-sm",
+                ].join(" ")}
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-600 inline-block flex-shrink-0" />
+                💎 Hidden Gems
+                {activeFilter === "gem" && <span className="ml-0.5 opacity-75">✕</span>}
+              </button>
+            )}
+          </div>
+
+          {/* Active filter label */}
+          {activeFilter && (
+            <div className="bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium px-2 py-0.5 rounded-full text-center">
+              Filtered · tap to clear
             </div>
           )}
         </div>
