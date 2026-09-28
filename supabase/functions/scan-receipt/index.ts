@@ -20,52 +20,48 @@ function json(data: unknown, status = 200) {
 
 // ── OCR field extractors ──────────────────────────────────────────
 
-/** GCash reference: 13-digit number, often preceded by "Ref No." or "Reference" */
+/**
+ * Broad reference-ID label pattern — matches all common label variants:
+ * Reference No. / Reference Number / Reference ID / Ref. No / Ref No / Ref ID
+ * Transaction ID / Transaction No. / Transaction Reference / Confirmation Number
+ * GCash Reference / Maya Reference / Confirmation No.
+ */
+const REF_LABEL_RE = /ref(?:erence)?[\s.]*(?:no\.?|number|id)?|transaction[\s]*(?:id|no\.?|reference|ref)?|confirmation[\s]*(?:no\.?|number)?|gcash[\s]*ref(?:erence)?|maya[\s]*ref(?:erence)?/i;
+
+/** Extract reference ID from OCR text — tries labelled lines first, falls back to digit patterns */
 function extractReferenceId(text: string, method: string): string | null {
   const lines = text.split(/\n|\r/);
 
-  // GCash: 13-digit number on a line labelled "Ref No" or standalone
+  // Pass 1: look for a known label then grab the value on the same or next line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!REF_LABEL_RE.test(line)) continue;
+
+    // Try to find a value on the same line after the label
+    // Strip the label part and look for a code
+    const afterLabel = line.replace(REF_LABEL_RE, "").replace(/[:\s#.]+/, "").trim();
+    const sameAlpha = afterLabel.match(/\b([A-Z0-9]{8,16})\b/i);
+    if (sameAlpha) return sameAlpha[1].toUpperCase();
+
+    // Try next line
+    const nextLine = lines[i + 1]?.trim() ?? "";
+    const nextAlpha = nextLine.match(/\b([A-Z0-9]{8,16})\b/i);
+    if (nextAlpha) return nextAlpha[1].toUpperCase();
+  }
+
+  // Pass 2: digit-only fallbacks by method
   if (method === "GCash") {
-    // Look for "Ref No" or "Reference" label followed by 13 digits on same or next line
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (/ref(?:erence)?[\s#.:]*no\.?/i.test(line)) {
-        // Try same line
-        const same = line.match(/\b(\d{13})\b/);
-        if (same) return same[1];
-        // Try next line
-        if (lines[i + 1]) {
-          const next = lines[i + 1].match(/\b(\d{13})\b/);
-          if (next) return next[1];
-        }
-      }
-    }
-    // Fallback: any standalone 13-digit number in the text
     const m = text.match(/\b(\d{13})\b/);
     if (m) return m[1];
   }
 
-  // Maya: 12-digit number or alphanumeric transaction ID
   if (method === "Maya") {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (/ref(?:erence)?|transaction\s*id|trx\s*id/i.test(line)) {
-        // Try alphanumeric ref on same line (Maya uses mixed)
-        const same = line.match(/\b([A-Z0-9]{10,16})\b/);
-        if (same) return same[1];
-        if (lines[i + 1]) {
-          const next = lines[i + 1].match(/\b([A-Z0-9]{10,16})\b/);
-          if (next) return next[1];
-        }
-      }
-    }
-    // Fallback: 12-digit number
     const m = text.match(/\b(\d{12})\b/);
     if (m) return m[1];
   }
 
-  // Generic fallback for any payment method
-  const generic = text.match(/\b(\d{12,14})\b/);
+  // Generic fallback: any 10–16 digit run
+  const generic = text.match(/\b(\d{10,16})\b/);
   return generic ? generic[1] : null;
 }
 
