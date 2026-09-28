@@ -26,6 +26,17 @@ interface DBPayment {
   amount: number;
   method: string;
   receipt_url: string | null;
+  reference_id: string | null;
+  ocr_data: {
+    rawText: string;
+    confidence: number;
+    extracted: {
+      referenceId: string | null;
+      amount: number | null;
+      date: string | null;
+      method: string | null;
+    };
+  } | null;
   status: PaymentStatus;
   created_at: string;
   profiles?: { full_name: string | null };
@@ -836,7 +847,7 @@ function PaymentsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) 
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  {["Account", "Plan", "Amount", "Method", "Date", "Status", "Action"].map(h => (
+                  {["Account", "Plan", "Amount", "Method", "Ref ID", "Date", "Status", "Action"].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -851,6 +862,11 @@ function PaymentsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) 
                     <td className="px-4 py-3 text-slate-600 text-xs">{p.plan_label}</td>
                     <td className="px-4 py-3 font-semibold text-slate-800">₱{p.amount}</td>
                     <td className="px-4 py-3 text-slate-600">{p.method}</td>
+                    <td className="px-4 py-3">
+                      {p.reference_id
+                        ? <span className="font-mono text-xs text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{p.reference_id}</span>
+                        : <span className="text-xs text-slate-400">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-slate-500 text-xs">
                       {new Date(p.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                     </td>
@@ -895,7 +911,43 @@ function PaymentsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) 
                 <span className="font-medium text-slate-800">{v}</span>
               </div>
             ))}
+            {/* Reference ID — prominent */}
+            <div className="flex flex-col gap-1 pt-1 border-t border-slate-100">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Reference ID</span>
+              {selected.reference_id
+                ? <span className="font-mono text-sm text-slate-800 bg-slate-100 px-2 py-1 rounded break-all">{selected.reference_id}</span>
+                : <span className="text-xs text-slate-400 italic">Not provided</span>}
+            </div>
           </div>
+
+          {/* OCR extracted data */}
+          {selected.ocr_data && (
+            <div className="rounded-xl bg-sky-50 border border-sky-200 p-3 space-y-1">
+              <p className="text-[10px] font-bold text-sky-700 uppercase tracking-wide mb-1.5">
+                🔍 OCR Scan (confidence: {Math.round((selected.ocr_data.confidence ?? 0) * 100)}%)
+              </p>
+              {selected.ocr_data.extracted?.method && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-sky-600">Method</span>
+                  <span className="font-medium text-slate-700">{selected.ocr_data.extracted.method}</span>
+                </div>
+              )}
+              {selected.ocr_data.extracted?.amount && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-sky-600">Amount</span>
+                  <span className="font-medium text-slate-700">₱{selected.ocr_data.extracted.amount.toFixed(2)}</span>
+                </div>
+              )}
+              {selected.ocr_data.extracted?.date && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-sky-600">Date</span>
+                  <span className="font-medium text-slate-700">
+                    {new Date(selected.ocr_data.extracted.date).toLocaleDateString("en-PH", { dateStyle: "medium" })}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="rounded-xl border-2 border-dashed border-slate-200 p-4 flex flex-col items-center gap-2 bg-slate-50">
             <Image className="h-8 w-8 text-slate-300" />

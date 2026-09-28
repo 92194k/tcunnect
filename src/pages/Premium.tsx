@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
-import { Crown, Check, Upload, X, Loader2, Shield, Building2, Star, Zap, Trophy, Rocket, Flame } from "lucide-react";
+import {
+  Crown, Check, Upload, X, Loader2, Shield, Building2, Star, Zap,
+  Trophy, Rocket, Flame, ScanLine, AlertCircle, CheckCircle2, Edit3,
+} from "lucide-react";
 
 interface PaymentMethod {
   id: string;
@@ -11,6 +14,16 @@ interface PaymentMethod {
   number: string;
   name: string;
   qrUrl?: string;
+}
+
+interface OcrResult {
+  referenceId: string | null;
+  amount: number | null;
+  date: string | null;
+  method: string | null;
+  rawText: string;
+  confidence: number;
+  message?: string;
 }
 
 // ── Feature lists ─────────────────────────────────────────────────
@@ -95,7 +108,6 @@ function FeatureList({ items, checkColor = "text-sky-600" }: { items: string[]; 
   );
 }
 
-// ── Countdown timer ──────────────────────────────────────────────
 function CountdownBanner() {
   return (
     <div className="bg-gradient-to-r from-rose-500 to-orange-500 text-white rounded-2xl p-4 mb-6 flex items-center gap-3 shadow-lg shadow-orange-200">
@@ -108,15 +120,33 @@ function CountdownBanner() {
   );
 }
 
+/** Convert a File to base64 string (without data: prefix) */
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip "data:<mime>;base64," prefix
+      resolve(result.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Premium() {
   const { user } = useAuthStore();
-  const [step, setStep]                       = useState<Step>("plans");
-  const [selectedPlan, setSelectedPlan]       = useState<PlanId>("plus-lifetime");
-  const [paymentMethod, setPaymentMethod]     = useState("gcash");
-  const [receiptFile, setReceiptFile]         = useState<File | null>(null);
-  const [isProcessing, setIsProcessing]       = useState(false);
-  const [submitError, setSubmitError]         = useState("");
-  const [paymentMethods, setPaymentMethods]   = useState<PaymentMethod[]>([
+  const [step, setStep]                         = useState<Step>("plans");
+  const [selectedPlan, setSelectedPlan]         = useState<PlanId>("plus-lifetime");
+  const [paymentMethod, setPaymentMethod]       = useState("gcash");
+  const [receiptFile, setReceiptFile]           = useState<File | null>(null);
+  const [isScanning, setIsScanning]             = useState(false);
+  const [isProcessing, setIsProcessing]         = useState(false);
+  const [submitError, setSubmitError]           = useState("");
+  const [ocrResult, setOcrResult]               = useState<OcrResult | null>(null);
+  const [ocrError, setOcrError]                 = useState("");
+  const [referenceIdInput, setReferenceIdInput] = useState("");
+  const [paymentMethods, setPaymentMethods]     = useState<PaymentMethod[]>([
     { id: "gcash", label: "GCash", icon: "💙", number: "09XX XXX XXXX", name: "TCUnnect Official" },
     { id: "maya",  label: "Maya",  icon: "💚", number: "09XX XXX XXXX", name: "TCUnnect Official" },
   ]);
@@ -139,42 +169,147 @@ export default function Premium() {
       });
   }, []);
 
+  /** Auto-scan receipt via Edge Function after file selection */
+  const scanReceipt = useCallback(async (file: File) => {
+    if (!isSupabaseConfigured || !user) return;
+
+    setIsScanning(true);
+    setOcrError("");
+    setOcrResult(null);
+    setReferenceIdInput("");
+
+    try {
+      const imageBase64 = await fileToBase64(file);
+      const methodLabel = paymentMethod === "gcash" ? "GCash" : "Maya";
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      // Get the Supabase project URL for Edge Functions
+      const supabaseUrl = (supabase as any).supabaseUrl as string;
+      const functionUrl = `${supabaseUrl}/functions/v1/scan-receipt`;
+
+      const res = await fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          imageBase64,
+          mimeType: file.type,
+          method: methodLabel,
+        }),
+      });
+
+      const result: OcrResult & { error?: string } = await res.json();
+
+      if (!res.ok || result.error) {
+        setOcrError(result.error ?? "OCR failed. You can enter the Reference ID manually.");
+        setIsScanning(false);
+        return;
+      }
+
+      setOcrResult(result);
+      // Pre-fill reference ID if OCR found it
+      if (result.referenceId) {
+        setReferenceIdInput(result.referenceId);
+      }
+
+      if (!result.referenceId) {
+        setOcrError("Couldn't extract Reference ID automatically. Please enter it from your receipt.");
+      }
+    } catch (e) {
+      console.error("OCR error:", e);
+      setOcrError("Receipt scan failed. Please enter the Reference ID manually.");
+    }
+
+    setIsScanning(false);
+  }, [paymentMethod, user]);
+
+  const handleFileChange = (file: File | null) => {
+    setReceiptFile(file);
+    setOcrResult(null);
+    setOcrError("");
+    setReferenceIdInput("");
+    if (file) {
+      scanReceipt(file);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!receiptFile || !user) return;
+
+    const refId = referenceIdInput.trim();
+    if (!refId) {
+      setSubmitError("Reference ID is required. Check your GCash/Maya receipt for the Ref No.");
+      return;
+    }
+
     setIsProcessing(true);
     setSubmitError("");
 
     try {
       let receiptUrl: string | null = null;
 
-      // 1. Upload receipt to Supabase Storage
       if (isSupabaseConfigured) {
+        // 1. Upload receipt to Supabase Storage
         const ext  = receiptFile.name.split(".").pop() ?? "jpg";
         const path = `receipts/${user.id}/${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("payment-receipts")
           .upload(path, receiptFile, { contentType: receiptFile.type, upsert: true });
 
-        if (!uploadError) {
+        if (uploadError) {
+          console.error("Receipt upload error:", uploadError.message);
+          // Non-fatal — continue without receipt URL
+        } else {
           const { data: urlData } = supabase.storage.from("payment-receipts").getPublicUrl(path);
           receiptUrl = urlData.publicUrl;
         }
-        // Continue even if upload fails — admin can still verify manually
 
-        // 2. Insert payment record
+        // 2. Check for duplicate reference_id
+        const { data: existing } = await supabase
+          .from("payments")
+          .select("id")
+          .eq("reference_id", refId)
+          .maybeSingle();
+
+        if (existing) {
+          setSubmitError(
+            `A payment with Reference ID "${refId}" was already submitted. ` +
+            `If you think this is a mistake, contact support.`
+          );
+          setIsProcessing(false);
+          return;
+        }
+
+        // 3. Insert payment record with reference_id and ocr_data
         const plan = PLAN_INFO[selectedPlan];
         const { error: insertError } = await supabase.from("payments").insert({
-          user_id:    user.id,
-          plan_id:    selectedPlan,
-          plan_label: plan.label,
-          amount:     plan.amount,
-          method:     paymentMethod === "gcash" ? "GCash" : "Maya",
+          user_id:     user.id,
+          plan_id:     selectedPlan,
+          plan_label:  plan.label,
+          amount:      plan.amount,
+          method:      paymentMethod === "gcash" ? "GCash" : "Maya",
           receipt_url: receiptUrl,
-          status:     "pending",
+          reference_id: refId,
+          ocr_data:    ocrResult ? {
+            rawText:    ocrResult.rawText,
+            confidence: ocrResult.confidence,
+            extracted:  {
+              referenceId: ocrResult.referenceId,
+              amount:      ocrResult.amount,
+              date:        ocrResult.date,
+              method:      ocrResult.method,
+            },
+          } : null,
+          status: "pending",
         });
 
         if (insertError) {
-          setSubmitError("Failed to submit payment. Please try again.");
+          console.error("Payment insert error:", insertError);
+          setSubmitError(`Failed to submit payment: ${insertError.message}`);
           setIsProcessing(false);
           return;
         }
@@ -182,7 +317,8 @@ export default function Premium() {
 
       setIsProcessing(false);
       setStep("done");
-    } catch {
+    } catch (e) {
+      console.error("Submit error:", e);
       setSubmitError("Something went wrong. Please try again.");
       setIsProcessing(false);
     }
@@ -291,8 +427,8 @@ export default function Premium() {
                     ? <li>Scan the QR code above <strong>or</strong> send to <strong>{pm.number}</strong></li>
                     : <li>Send <strong>{info.price.replace("/month", "")}</strong> to <strong>{pm.number}</strong></li>
                   }
-                  <li>Screenshot your receipt</li>
-                  <li>Upload it on the next screen</li>
+                  <li>Screenshot your receipt — it will be <strong>automatically scanned</strong></li>
+                  <li>Verify the extracted details and submit</li>
                 </ol>
               </div>
               <button onClick={() => setStep("upload")}
@@ -306,43 +442,159 @@ export default function Premium() {
           {step === "upload" && (
             <>
               <h3 className="font-bold text-slate-900 mb-1">Upload Receipt</h3>
-              <p className="text-slate-500 text-sm mb-5">Screenshot of your {pm.label} transaction</p>
+              <p className="text-slate-500 text-sm mb-5">Screenshot of your {pm.label} transaction — we'll scan it automatically</p>
+
+              {/* File upload zone */}
               <label className={`block w-full border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition mb-4 ${
                 receiptFile ? "border-emerald-400 bg-emerald-50" : "border-slate-200 hover:border-sky-300 hover:bg-sky-50"
               }`}>
-                <input type="file" accept="image/*" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} className="sr-only" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+                  className="sr-only"
+                />
                 {receiptFile ? (
                   <div>
-                    <Check className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-emerald-700">{receiptFile.name}</p>
-                    <p className="text-xs text-emerald-500 mt-1">Ready to submit</p>
+                    {isScanning ? (
+                      <>
+                        <ScanLine className="h-8 w-8 text-sky-500 mx-auto mb-2 animate-pulse" />
+                        <p className="text-sm font-semibold text-sky-700">Scanning receipt...</p>
+                        <p className="text-xs text-sky-500 mt-1">Extracting Reference ID, amount, and date</p>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                        <p className="text-sm font-semibold text-emerald-700">{receiptFile.name}</p>
+                        <p className="text-xs text-emerald-500 mt-1">
+                          {ocrResult ? "Receipt scanned" : "Tap to change"}
+                        </p>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div>
                     <Upload className="h-8 w-8 text-slate-300 mx-auto mb-2" />
                     <p className="text-sm font-medium text-slate-600">Tap to upload receipt</p>
-                    <p className="text-xs text-slate-400 mt-1">PNG, JPG, or screenshot</p>
+                    <p className="text-xs text-slate-400 mt-1">PNG, JPG, or screenshot — auto-scanned</p>
                   </div>
                 )}
               </label>
-              {receiptFile && (
-                <button onClick={() => setReceiptFile(null)} className="flex items-center gap-1 text-xs text-slate-400 mb-4">
+              {receiptFile && !isScanning && (
+                <button onClick={() => handleFileChange(null)} className="flex items-center gap-1 text-xs text-slate-400 mb-4">
                   <X className="h-3.5 w-3.5" /> Remove
                 </button>
               )}
+
+              {/* OCR result card */}
+              {ocrResult && !isScanning && (
+                <div className={`rounded-xl border p-4 mb-4 ${
+                  ocrResult.confidence >= 0.5
+                    ? "border-emerald-200 bg-emerald-50"
+                    : "border-amber-200 bg-amber-50"
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    {ocrResult.confidence >= 0.5
+                      ? <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      : <AlertCircle className="h-4 w-4 text-amber-600" />
+                    }
+                    <p className={`text-xs font-bold ${ocrResult.confidence >= 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
+                      {ocrResult.confidence >= 0.5 ? "Receipt scanned successfully" : "Partial scan — please verify"}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    {ocrResult.method && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Method</span>
+                        <span className="font-medium text-slate-800">{ocrResult.method}</span>
+                      </div>
+                    )}
+                    {ocrResult.amount && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Amount</span>
+                        <span className="font-medium text-slate-800">₱{ocrResult.amount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {ocrResult.date && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Date</span>
+                        <span className="font-medium text-slate-800">
+                          {new Date(ocrResult.date).toLocaleDateString("en-PH", { dateStyle: "medium" })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* OCR error */}
+              {ocrError && !isScanning && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">{ocrError}</p>
+                </div>
+              )}
+
+              {/* Reference ID field — always shown after file selected */}
+              {receiptFile && !isScanning && (
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Reference ID <span className="text-red-500">*</span>
+                    {ocrResult?.referenceId && (
+                      <span className="ml-2 text-emerald-600 font-normal">auto-filled from receipt</span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={referenceIdInput}
+                      onChange={e => setReferenceIdInput(e.target.value)}
+                      placeholder={paymentMethod === "gcash" ? "13-digit GCash Ref No." : "Maya transaction reference"}
+                      className={`w-full border rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 ${
+                        referenceIdInput
+                          ? "border-emerald-400 bg-emerald-50/50 focus:ring-emerald-300"
+                          : "border-slate-200 focus:ring-sky-300"
+                      }`}
+                    />
+                    {referenceIdInput && (
+                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {paymentMethod === "gcash"
+                      ? "Found in your GCash receipt as \"Ref No.\". It's a 13-digit number."
+                      : "Found in your Maya receipt as \"Reference\" or \"Transaction ID\"."}
+                  </p>
+                </div>
+              )}
+
+              {/* Submit error */}
               {submitError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                   {submitError}
                 </div>
               )}
+
               <div className="flex items-start gap-2 bg-slate-50 rounded-xl p-3 mb-5 text-xs text-slate-500">
                 <Shield className="h-4 w-4 shrink-0 mt-0.5 text-slate-400" />
                 Our admin team will verify your receipt within 24 hours and activate your plan.
               </div>
-              <button onClick={handleSubmit} disabled={!receiptFile || isProcessing}
-                className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
-                {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</> : "Submit Receipt"}
+
+              <button
+                onClick={handleSubmit}
+                disabled={!receiptFile || isProcessing || isScanning || !referenceIdInput.trim()}
+                className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2"
+              >
+                {isProcessing
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting...</>
+                  : isScanning
+                  ? <><ScanLine className="h-4 w-4 animate-pulse" /> Scanning...</>
+                  : "Submit Receipt"}
               </button>
+              {!referenceIdInput.trim() && receiptFile && !isScanning && (
+                <p className="text-center text-xs text-slate-400 mt-2">Enter Reference ID to continue</p>
+              )}
               <button onClick={() => setStep("payment")} className="w-full text-slate-400 text-sm py-2 mt-2">← Back</button>
             </>
           )}
