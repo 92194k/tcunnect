@@ -498,63 +498,78 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
     }
   }, [user?.id]);
 
-  // Fetch last message + unread count from Supabase for real matches
-  // Uses a two-attempt approach: new columns first (post-migration), base columns fallback
-  useEffect(() => {
+  // ── Fetch last message preview + exact unread count from Supabase ────────────
+  // Two separate queries:
+  //   1. Last message per match (for preview text + timestamp)
+  //   2. Unread count per match (messages WHERE receiver_id=me AND read=false)
+  // This avoids the old approach of counting from a 200-row cap which could miss
+  // older unread messages and mixed up unread/preview in a single pass.
+  const fetchPreviews = useCallback(async () => {
     if (!isSupabaseConfigured || !user || matches.length === 0) return;
     const ids = matches.map((m) => m.id);
 
-    const buildMap = (rows: Record<string, unknown>[], hasNewCols: boolean) => {
-      const map: Record<string, { lastMsg: string; unread: number; ts?: string }> = {};
-      for (const row of rows) {
-        const mid = row.match_id as string;
-        if (!map[mid]) {
-          const isCard = hasNewCols && (row.message_type as string) !== "text";
-          map[mid] = {
-            lastMsg: isCard ? "📍 Shared a place" : (row.content as string),
-            unread: 0,
-            ts: row.created_at as string,
-          };
-        }
-        // Count unread only if we know who the receiver is
-        if (!row.read && hasNewCols && (row.receiver_id as string) === user.id) {
-          map[mid].unread = (map[mid].unread ?? 0) + 1;
-        }
-      }
-      return map;
-    };
-
-    // Attempt 1: with new columns (requires SQL migration 08)
-    supabase
+    // Query 1: most-recent message per match (preview + timestamp)
+    const { data: lastMsgs } = await supabase
       .from("messages")
-      .select("match_id, content, message_type, created_at, read, receiver_id")
+      .select("match_id, content, message_type, created_at")
       .in("match_id", ids)
       .order("created_at", { ascending: false })
-      .limit(200)
-      .then(({ data, error }) => {
-        if (!error && data && data.length >= 0) {
-          setPreviews(buildMap(data as Record<string, unknown>[], true));
-        } else {
-          // Attempt 2: base columns only (works before migration)
-          supabase
-            .from("messages")
-            .select("match_id, content, created_at, read")
-            .in("match_id", ids)
-            .order("created_at", { ascending: false })
-            .limit(200)
-            .then(({ data: d2 }) => {
-              if (d2) setPreviews(buildMap(d2 as Record<string, unknown>[], false));
-            });
-        }
-      });
+      .limit(ids.length * 10); // enough rows to get at least 1 per match
+
+    // Query 2: all unread messages addressed to me across all my matches
+    const { data: unreadRows } = await supabase
+      .from("messages")
+      .select("match_id")
+      .in("match_id", ids)
+      .eq("receiver_id", user.id)
+      .eq("read", false);
+
+    // Build preview map — take the first (most-recent) row per match
+    const map: Record<string, { lastMsg: string; unread: number; ts?: string }> = {};
+    const seen = new Set<string>();
+    for (const row of (lastMsgs ?? []) as Record<string, unknown>[]) {
+      const mid = row.match_id as string;
+      if (seen.has(mid)) continue;
+      seen.add(mid);
+      const isCard = row.message_type && (row.message_type as string) !== "text";
+      map[mid] = {
+        lastMsg: isCard ? "📍 Shared a place" : ((row.content as string) ?? ""),
+        unread: 0,
+        ts: row.created_at as string,
+      };
+    }
+
+    // Count unread per match
+    for (const row of (unreadRows ?? []) as Record<string, unknown>[]) {
+      const mid = row.match_id as string;
+      if (!map[mid]) map[mid] = { lastMsg: "", unread: 0 };
+      map[mid].unread = (map[mid].unread ?? 0) + 1;
+    }
+
+    setPreviews(map);
   }, [matches.length, user?.id]);
 
-  // ── Real-time: update preview when a new message arrives in ANY match ────────
-  // Uses postgres_changes (requires migration 08: REPLICA IDENTITY FULL +
-  // messages in supabase_realtime publication). Falls back gracefully if not yet set up.
+  useEffect(() => { fetchPreviews(); }, [fetchPreviews]);
+
+  // ── Realtime: INSERT (new message) + UPDATE (read status change) ─────────────
+  // INSERT  → increment unread when I'm the receiver, update preview text
+  // UPDATE  → if read became true for a message I received, re-count unread for that match
   useEffect(() => {
     if (!isSupabaseConfigured || !user || matches.length === 0) return;
     const matchIds = new Set(matches.map((m) => m.id));
+
+    const refreshUnreadForMatch = async (mid: string) => {
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("match_id", mid)
+        .eq("receiver_id", user.id)
+        .eq("read", false);
+      setPreviews((prev) => ({
+        ...prev,
+        [mid]: { ...(prev[mid] ?? { lastMsg: "", ts: undefined }), unread: count ?? 0 },
+      }));
+    };
 
     const channel = supabase
       .channel(`chatlist_${user.id}`)
@@ -564,11 +579,11 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
         (payload) => {
           const row = payload.new as Record<string, unknown>;
           const mid = row.match_id as string;
-          if (!matchIds.has(mid)) return; // not our conversation
+          if (!matchIds.has(mid)) return;
 
-          const isCard = (row.message_type as string) && (row.message_type as string) !== "text";
+          const isCard = row.message_type && (row.message_type as string) !== "text";
           const content = isCard ? "📍 Shared a place" : (row.content as string);
-          const isFromPartner = (row.receiver_id as string) === user.id;
+          const isForMe = (row.receiver_id as string) === user.id;
 
           setPreviews((prev) => {
             const existing = prev[mid] ?? { lastMsg: "", unread: 0, ts: undefined };
@@ -576,18 +591,27 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
               ...prev,
               [mid]: {
                 lastMsg: content,
-                unread: isFromPartner ? (existing.unread + 1) : existing.unread,
+                unread: isForMe ? existing.unread + 1 : existing.unread,
                 ts: row.created_at as string,
               },
             };
           });
         }
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          console.log("[ChatList] Realtime connected — previews will update live");
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages" },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          const mid = row.match_id as string;
+          if (!matchIds.has(mid)) return;
+          // A message I received was marked read → re-fetch the exact unread count for that match
+          if (row.read === true && (row.receiver_id as string) === user.id) {
+            refreshUnreadForMatch(mid);
+          }
         }
-      });
+      )
+      .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [matches.length, user?.id]);
@@ -637,32 +661,34 @@ function ChatList({ onSelectMatch }: { onSelectMatch: (id: string) => void }) {
             const ts = previews[m.id]?.ts;
             return (
               <button key={m.id} onClick={() => {
-                // Clear unread count immediately when conversation is opened
-                if (unread > 0) {
-                  setPreviews((prev) => ({
-                    ...prev,
-                    [m.id]: { ...(prev[m.id] ?? { lastMsg: "", ts: undefined }), unread: 0 },
-                  }));
-                }
+                // Optimistically clear unread badge immediately — DB update happens in ChatThread
+                setPreviews((prev) => ({
+                  ...prev,
+                  [m.id]: { ...(prev[m.id] ?? { lastMsg: "", ts: undefined }), unread: 0 },
+                }));
                 onSelectMatch(m.id);
               }}
-                className="w-full flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm hover:shadow-md transition text-left">
+                className={`w-full flex items-center gap-4 bg-white rounded-2xl p-4 border shadow-sm hover:shadow-md transition text-left ${
+                  unread > 0 ? "border-sky-200 bg-sky-50/30" : "border-slate-100"
+                }`}>
                 <div className="relative shrink-0">
                   <img src={m.user.profilePhoto} alt={m.user.fullName}
                     className="h-14 w-14 rounded-full object-cover" />
                   <span className="absolute bottom-0.5 right-0.5 h-3.5 w-3.5 bg-emerald-400 border-2 border-white rounded-full" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-900">{m.user.fullName}</p>
+                  <p className={`truncate ${unread > 0 ? "font-bold text-slate-900" : "font-semibold text-slate-800"}`}>
+                    {m.user.fullName}
+                  </p>
                   <p className="text-xs text-slate-500 flex items-center gap-1 mb-0.5">
                     <MapPin className="h-3 w-3" /> {m.user.location}
                   </p>
-                  <p className={`text-sm truncate ${unread > 0 ? "font-medium text-slate-800" : "text-slate-500"}`}>
+                  <p className={`text-sm truncate ${unread > 0 ? "font-semibold text-slate-800" : "font-normal text-slate-500"}`}>
                     {m.lastMsg}
                   </p>
                 </div>
                 <div className="text-right shrink-0 flex flex-col items-end gap-1">
-                  {ts && <p className="text-[10px] text-slate-400">{formatTs(ts)}</p>}
+                  {ts && <p className={`text-[10px] ${unread > 0 ? "text-sky-600 font-medium" : "text-slate-400"}`}>{formatTs(ts)}</p>}
                   {unread > 0 && (
                     <span className="h-5 min-w-5 px-1 bg-sky-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                       {unread}
