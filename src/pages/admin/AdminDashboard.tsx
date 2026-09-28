@@ -798,8 +798,16 @@ function PaymentsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) 
   const act = async (payment: DBPayment, action: "approved" | "rejected") => {
     if (!isSupabaseConfigured) return;
     setActing(true);
-    // 1. Update payment status
-    await supabase.from("payments").update({ status: action, updated_at: new Date().toISOString() }).eq("id", payment.id);
+    // 1. Update payment status — do NOT include updated_at (column doesn't exist in schema)
+    const { error: updateErr } = await supabase
+      .from("payments")
+      .update({ status: action })
+      .eq("id", payment.id);
+    if (updateErr) {
+      console.error("Payment status update failed:", updateErr.message);
+      setActing(false);
+      return;
+    }
     // 2. If approved, activate is_premium on user
     if (action === "approved") {
       await supabase.from("profiles").update({ is_premium: true }).eq("id", payment.user_id);
