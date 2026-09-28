@@ -5,8 +5,28 @@ import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import {
   Crown, Check, Upload, X, Loader2, Shield, Building2, Star, Zap,
   Trophy, Flame, ScanLine, AlertCircle, CheckCircle2,
+  CalendarDays, CreditCard, Hash, Receipt, ChevronDown, ChevronUp, ExternalLink,
 } from "lucide-react";
 import { createWorker } from "tesseract.js";
+
+// ── My Plan types ─────────────────────────────────────────────────
+interface MyPayment {
+  id: string;
+  plan_id: string | null;
+  plan_label: string | null;
+  amount: number;
+  method: string;
+  reference_id: string | null;
+  receipt_url: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  // approved_at comes from ocr_data or we derive it from updated_at if available
+  ocr_data: {
+    rawText?: string;
+    confidence?: number;
+    extracted?: { referenceId?: string; amount?: number; date?: string; method?: string };
+  } | null;
+}
 
 interface PaymentMethod {
   id: string;
@@ -249,6 +269,25 @@ export default function Premium() {
     { id: "gcash", label: "GCash", icon: "💙", number: "09XX XXX XXXX", name: "TCUnnect Official" },
     { id: "maya",  label: "Maya",  icon: "💚", number: "09XX XXX XXXX", name: "TCUnnect Official" },
   ]);
+  const [myPayment, setMyPayment]               = useState<MyPayment | null>(null);
+  const [myPaymentLoading, setMyPaymentLoading] = useState(true);
+  const [showBenefits, setShowBenefits]         = useState(false);
+
+  // Load user's most recent payment (for "View My Plan")
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user) { setMyPaymentLoading(false); return; }
+    supabase
+      .from("payments")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        setMyPayment(data as MyPayment | null);
+        setMyPaymentLoading(false);
+      });
+  }, [user]);
 
   // Load real payment numbers from platform_settings
   useEffect(() => {
@@ -760,6 +799,163 @@ export default function Premium() {
           <h1 className="text-2xl font-bold text-slate-900">TCUnnect Plans</h1>
           <p className="text-slate-500 text-sm mt-1">For travelers and businesses across the Philippines</p>
         </div>
+
+        {/* ── My Plan (shown when user has a payment record) ───── */}
+        {!myPaymentLoading && myPayment && (
+          <div className={`rounded-2xl border-2 p-5 mb-6 ${
+            myPayment.status === "approved"
+              ? "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-400"
+              : myPayment.status === "rejected"
+              ? "bg-red-50 border-red-300"
+              : "bg-sky-50 border-sky-300"
+          }`}>
+            {/* Status header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                  myPayment.status === "approved" ? "bg-amber-100" : myPayment.status === "rejected" ? "bg-red-100" : "bg-sky-100"
+                }`}>
+                  {myPayment.status === "approved"
+                    ? <Trophy className="h-5 w-5 text-amber-500" />
+                    : myPayment.status === "rejected"
+                    ? <X className="h-5 w-5 text-red-500" />
+                    : <Loader2 className="h-5 w-5 text-sky-500 animate-spin" />}
+                </div>
+                <div>
+                  <p className="font-black text-slate-900 text-sm leading-tight">
+                    {myPayment.plan_label ?? "TCUnnect Plus"}
+                  </p>
+                  <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${
+                    myPayment.status === "approved"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : myPayment.status === "rejected"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-sky-100 text-sky-700"
+                  }`}>
+                    {myPayment.status === "approved" ? "✓ Active" : myPayment.status === "rejected" ? "✗ Rejected" : "⏳ Pending Review"}
+                  </span>
+                </div>
+              </div>
+              <p className="text-2xl font-black text-slate-800">₱{myPayment.amount}</p>
+            </div>
+
+            {/* Payment detail rows */}
+            <div className="space-y-2.5 mb-4">
+              {myPayment.reference_id && (
+                <div className="flex items-center gap-2.5 bg-white/70 rounded-xl px-3.5 py-2.5">
+                  <Hash className="h-4 w-4 text-slate-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Reference ID</p>
+                    <p className="text-sm font-mono font-bold text-slate-800 truncate">{myPayment.reference_id}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2.5 bg-white/70 rounded-xl px-3.5 py-2.5">
+                <CreditCard className="h-4 w-4 text-slate-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Payment Method</p>
+                  <p className="text-sm font-bold text-slate-800">{myPayment.method}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 bg-white/70 rounded-xl px-3.5 py-2.5">
+                <CalendarDays className="h-4 w-4 text-slate-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Submitted</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {new Date(myPayment.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}
+                  </p>
+                </div>
+              </div>
+
+              {myPayment.status === "approved" && (
+                <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wide">Payment Status</p>
+                    <p className="text-sm font-bold text-emerald-700">Approved — Plan Active</p>
+                    {myPayment.plan_id === "plus-lifetime" && (
+                      <p className="text-xs text-emerald-600 mt-0.5">Lifetime access · No renewal needed 🏆</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {myPayment.status === "rejected" && (
+                <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                  <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] text-red-600 font-semibold uppercase tracking-wide">Payment Status</p>
+                    <p className="text-sm font-bold text-red-700">Rejected — Contact support if you believe this is an error</p>
+                  </div>
+                </div>
+              )}
+
+              {myPayment.status === "pending" && (
+                <div className="flex items-start gap-2.5 bg-sky-50 border border-sky-200 rounded-xl px-3.5 py-2.5">
+                  <AlertCircle className="h-4 w-4 text-sky-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[10px] text-sky-600 font-semibold uppercase tracking-wide">Payment Status</p>
+                    <p className="text-sm font-bold text-sky-700">Pending — Admin review usually takes up to 24 hours</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Receipt preview */}
+            {myPayment.receipt_url && (
+              <div className="mb-4">
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <Receipt className="h-3 w-3" /> Receipt Preview
+                </p>
+                <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-white">
+                  <img
+                    src={myPayment.receipt_url}
+                    alt="Payment receipt"
+                    className="w-full max-h-48 object-contain bg-white"
+                  />
+                  <a
+                    href={myPayment.receipt_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute bottom-2 right-2 flex items-center gap-1 bg-white/90 border border-slate-200 text-xs text-slate-600 font-semibold px-2.5 py-1.5 rounded-lg shadow"
+                  >
+                    <ExternalLink className="h-3 w-3" /> View Full
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* View Benefits toggle (only for approved Plus) */}
+            {myPayment.status === "approved" && myPayment.plan_id === "plus-lifetime" && (
+              <div>
+                <button
+                  onClick={() => setShowBenefits(b => !b)}
+                  className="w-full flex items-center justify-between bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-sm px-4 py-3 rounded-xl transition"
+                >
+                  <span className="flex items-center gap-2">
+                    <Star className="h-4 w-4" /> View Your Plus Benefits
+                  </span>
+                  {showBenefits ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+                {showBenefits && (
+                  <div className="mt-3 bg-white rounded-xl border border-amber-200 p-4">
+                    <p className="text-xs font-bold text-amber-700 mb-3">🏆 Your TCUnnect Plus Benefits</p>
+                    <ul className="space-y-2">
+                      {USER_PLUS.map((benefit) => (
+                        <li key={benefit} className="flex items-start gap-2 text-sm text-slate-700">
+                          <CheckCircle2 className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                          <span>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 🔥 Promo Banner */}
         <CountdownBanner />
