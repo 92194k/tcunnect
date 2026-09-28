@@ -1894,6 +1894,8 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
   const [loading, setLoading]     = useState(true);
   const [acting, setActing]       = useState<string | null>(null);
   const [editorGemId, setEditorGemId] = useState<string | "new" | null>(null);
+  const [selected, setSelected]   = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const fetchGems = async () => {
     if (!isSupabaseConfigured) { setLoading(false); return; }
@@ -1934,8 +1936,35 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
     if (!window.confirm(`Delete "${gem.name}"? This cannot be undone.`)) return;
     setActing(gem.id);
     await supabase.from("hidden_gems").delete().eq("id", gem.id);
+    setSelected(prev => { const n = new Set(prev); n.delete(gem.id); return n; });
     await fetchGems();
     setActing(null);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === gems.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(gems.map(g => g.id)));
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Delete ${selected.size} gem${selected.size > 1 ? "s" : ""}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    await supabase.from("hidden_gems").delete().in("id", [...selected]);
+    setSelected(new Set());
+    await fetchGems();
+    setBulkDeleting(false);
   };
 
   const statusStyle = (s: string) => ({
@@ -1953,14 +1982,34 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
           onSaved={() => { setEditorGemId(null); fetchGems(); }}
         />
       )}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <h2 className="text-lg font-semibold text-slate-800">Hidden Gems</h2>
-        <button
-          onClick={() => setEditorGemId("new")}
-          className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
-        >
-          <span className="text-base leading-none">+</span> Add New Destination
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {selected.size > 0 && (
+            <>
+              <span className="text-xs text-slate-500 font-medium">{selected.size} selected</span>
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-slate-500 hover:text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg transition"
+              >
+                Deselect All
+              </button>
+              <button
+                onClick={bulkDelete}
+                disabled={bulkDeleting}
+                className="text-xs text-white bg-rose-500 hover:bg-rose-600 disabled:opacity-50 px-3 py-1.5 rounded-lg font-semibold transition"
+              >
+                {bulkDeleting ? "Deleting…" : `Delete ${selected.size}`}
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setEditorGemId("new")}
+            className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
+          >
+            <span className="text-base leading-none">+</span> Add New Destination
+          </button>
+        </div>
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         {loading ? (
@@ -1971,6 +2020,16 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
+                <th className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={gems.length > 0 && selected.size === gems.length}
+                    ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < gems.length; }}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-slate-300 text-sky-600 cursor-pointer"
+                    title="Select all"
+                  />
+                </th>
                 {["Name", "Location", "Category", "Submitted By", "Date", "Status", "Actions"].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                 ))}
@@ -1978,7 +2037,15 @@ function GemsTab({ onBadgeChange }: { onBadgeChange: (n: number) => void }) {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {gems.map(g => (
-                <tr key={g.id} className="hover:bg-slate-50/50">
+                <tr key={g.id} className={`hover:bg-slate-50/50 transition-colors ${selected.has(g.id) ? "bg-sky-50/60" : ""}`}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(g.id)}
+                      onChange={() => toggleSelect(g.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-sky-600 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3 font-medium text-slate-800">
                     {g.name}
                     {g.is_featured && (
