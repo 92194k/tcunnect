@@ -2435,8 +2435,10 @@ function ReportsTab() {
     report: DBReport,
     action: "suspend" | "ban" | "resolve" | "dismiss"
   ) => {
-    if (!isSupabaseConfigured || !report.reported_user_id) return;
+    if (!isSupabaseConfigured) return;
+    // suspend/ban require a reported_user_id — resolve/dismiss do not
     if (action === "suspend" || action === "ban") {
+      if (!report.reported_user_id) return;
       const target = report.reported_user;
       if (target?.is_admin) {
         alert("Cannot suspend or ban an administrator.");
