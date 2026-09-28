@@ -68,33 +68,75 @@ function injectMatchLineCSS() {
   document.head.appendChild(s);
 }
 
-function makeIcon(type: "user" | "featured" | "gem", active = false) {
+function makeIcon(type: "user" | "featured" | "gem", active = false, photo?: string) {
+  // ── User marker: show avatar photo (or fallback emoji) in a circle ──
+  if (type === "user") {
+    const size = active ? 50 : 42;
+    const ring  = active ? "#0284c7" : "#0ea5e9";
+    const glow  = active ? `,0 0 0 3px rgba(2,132,199,0.35)` : "";
+    const inner = photo
+      ? `<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block"/>`
+      : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:${size * 0.42}px;line-height:1">👤</div>`;
+    const html = `
+      <div style="
+        width:${size}px;height:${size}px;
+        border-radius:50%;
+        border:3px solid ${ring};
+        box-shadow:0 4px 14px rgba(0,0,0,0.38)${glow};
+        overflow:hidden;
+        background:#e0f2fe;
+        transition:all .2s;
+      ">${inner}</div>`;
+    return window.L.divIcon({
+      html,
+      className: "",
+      iconSize:    [size, size],
+      iconAnchor:  [size / 2, size / 2],
+      popupAnchor: [0, -(size / 2 + 8)],
+    });
+  }
+
+  // ── Gem / Featured: teardrop pin pointing straight down ──
   const cfg = {
-    user:     { bg: active ? "#0284c7" : "#0ea5e9", emoji: "👤", size: active ? 44 : 36 },
     featured: { bg: active ? "#d97706" : "#f59e0b", emoji: "⭐", size: 40 },
     gem:      { bg: active ? "#059669" : "#10b981", emoji: "💎", size: 38 },
+    // user fallback (won't be reached, kept for TS exhaustiveness)
+    user:     { bg: "#0ea5e9", emoji: "👤", size: 38 },
   }[type];
 
+  // Teardrop: a circle on top + a triangle pointing down, no CSS rotation tricks
+  const r   = cfg.size / 2;            // circle radius
+  const tip = 12;                       // extra height for the triangle tip
+  const total = cfg.size + tip;
   const html = `
-    <div style="
-      width:${cfg.size}px;height:${cfg.size}px;
-      background:${cfg.bg};
-      border-radius:50% 50% 50% 4px;
-      transform:rotate(45deg);
-      border:3px solid white;
-      box-shadow:0 4px 12px rgba(0,0,0,0.35);
-      display:flex;align-items:center;justify-content:center;
-      transition:all .2s;
-    ">
-      <span style="transform:rotate(-45deg);font-size:${cfg.size * 0.38}px;line-height:1">${cfg.emoji}</span>
+    <div style="position:relative;width:${cfg.size}px;height:${total}px">
+      <div style="
+        position:absolute;top:0;left:0;
+        width:${cfg.size}px;height:${cfg.size}px;
+        background:${cfg.bg};
+        border-radius:50%;
+        border:3px solid white;
+        box-shadow:0 4px 12px rgba(0,0,0,0.35);
+        display:flex;align-items:center;justify-content:center;
+      ">
+        <span style="font-size:${cfg.size * 0.4}px;line-height:1">${cfg.emoji}</span>
+      </div>
+      <div style="
+        position:absolute;bottom:0;left:50%;
+        transform:translateX(-50%);
+        width:0;height:0;
+        border-left:${r * 0.45}px solid transparent;
+        border-right:${r * 0.45}px solid transparent;
+        border-top:${tip + 2}px solid ${cfg.bg};
+      "></div>
     </div>`;
 
   return window.L.divIcon({
     html,
     className: "",
-    iconSize: [cfg.size, cfg.size],
-    iconAnchor: [cfg.size / 2, cfg.size],
-    popupAnchor: [0, -cfg.size],
+    iconSize:    [cfg.size, total],
+    iconAnchor:  [cfg.size / 2, total],      // tip of the triangle = lat/lng point
+    popupAnchor: [0, -(total + 4)],
   });
 }
 
@@ -174,7 +216,7 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
 
     markers.forEach((m) => {
       existing.delete(m.id);
-      const icon = makeIcon(m.type, m.active);
+      const icon = makeIcon(m.type, m.active, m.photo);
 
       const popup = `
         <div style="min-width:140px;font-family:system-ui;padding:2px">
