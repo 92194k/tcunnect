@@ -284,17 +284,51 @@ function UsersTab() {
     setConfirm(null);
     setActionError("");
     setActing(userId);
-    const newStatus = action === "suspend" ? "suspended" : action === "ban" ? "banned" : "active";
-    const { error } = await supabase
+    const expectedStatus = action === "suspend" ? "suspended" : action === "ban" ? "banned" : "active";
+
+    // Step 1: attempt the UPDATE
+    const { error: updateError } = await supabase
       .from("profiles")
-      .update({ account_status: newStatus })
+      .update({ account_status: expectedStatus })
       .eq("id", userId);
-    if (error) {
-      setActionError(`Failed to ${action} user: ${error.message}`);
-    } else {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, account_status: newStatus } : u));
-      if (viewUser?.id === userId) setViewUser(v => v ? { ...v, account_status: newStatus } : v);
+
+    if (updateError) {
+      setActionError(`Failed to ${action} user: ${updateError.message}`);
+      setActing(null);
+      return;
     }
+
+    // Step 2: re-fetch from DB to verify the change actually persisted.
+    // Supabase RLS silently blocks UPDATEs (0 rows affected, no error returned) —
+    // so we NEVER trust the absence of an error; we always confirm with a SELECT.
+    const { data: freshUser, error: fetchError } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, is_premium, is_admin, account_status, bio, age, university, avatar_url, created_at, location")
+      .eq("id", userId)
+      .single();
+
+    if (fetchError || !freshUser) {
+      setActionError(`Action sent but could not verify: ${fetchError?.message ?? "user not found"}`);
+      setActing(null);
+      return;
+    }
+
+    // Step 3: check DB value matches what we expected
+    const actualStatus = (freshUser as any).account_status as string | null;
+    if (actualStatus !== expectedStatus) {
+      setActionError(
+        `${action.charAt(0).toUpperCase() + action.slice(1)} failed silently — ` +
+        `DB still shows "${actualStatus ?? "null"}". ` +
+        `Run sql/25_admin_profiles_update_policy.sql in Supabase SQL Editor to fix admin RLS permissions, then try again.`
+      );
+      setActing(null);
+      return;
+    }
+
+    // Step 4: update local state from the real DB row (not the optimistic value)
+    const updatedProfile = freshUser as unknown as DBProfile;
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updatedProfile } : u));
+    if (viewUser?.id === userId) setViewUser(updatedProfile);
     setActing(null);
   };
 
