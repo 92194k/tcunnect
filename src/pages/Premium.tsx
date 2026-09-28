@@ -203,22 +203,29 @@ export default function Premium() {
         }),
       });
 
-      const result: OcrResult & { error?: string } = await res.json();
+      const result: OcrResult & { error?: string; message?: string } = await res.json();
 
-      if (!res.ok || result.error) {
-        setOcrError(result.error ?? "OCR failed. You can enter the Reference ID manually.");
+      // The Edge Function may return a non-ok status only for hard failures;
+      // a Vision API error now returns 200 with confidence:0 and a message field.
+      if (!res.ok && result.error) {
+        setOcrError("Receipt scan is temporarily unavailable. Please enter your Reference ID manually.");
         setIsScanning(false);
         return;
       }
 
       setOcrResult(result);
-      // Pre-fill reference ID if OCR found it
+
       if (result.referenceId) {
         setReferenceIdInput(result.referenceId);
-      }
-
-      if (!result.referenceId) {
-        setOcrError("Couldn't extract Reference ID automatically. Please enter it from your receipt.");
+        // clear any previous error
+        setOcrError("");
+      } else {
+        // Use the message from the server if present, otherwise generic fallback
+        setOcrError(
+          result.message && !result.message.includes("unavailable")
+            ? result.message
+            : "Couldn't detect the Reference ID automatically. Please enter it manually from your receipt."
+        );
       }
     } catch (e) {
       console.error("OCR error:", e);
@@ -228,22 +235,17 @@ export default function Premium() {
     setIsScanning(false);
   }, [paymentMethod, user]);
 
-  // Revoke old preview URL when file changes
-  useEffect(() => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-  }, [receiptFile]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleFileChange = (file: File | null) => {
+    // Revoke previous object URL before creating a new one
+    setPreviewUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
     setReceiptFile(file);
     setOcrResult(null);
     setOcrError("");
     setReferenceIdInput("");
-    if (file) {
-      setPreviewUrl(URL.createObjectURL(file));
-      scanReceipt(file); // auto-scan immediately after upload
-    } else {
-      setPreviewUrl(null);
-    }
+    if (file) scanReceipt(file); // auto-scan immediately after upload
   };
 
   const handleSubmit = async () => {

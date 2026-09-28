@@ -21,48 +21,91 @@ function json(data: unknown, status = 200) {
 // ── OCR field extractors ──────────────────────────────────────────
 
 /**
- * Broad reference-ID label pattern — matches all common label variants:
- * Reference No. / Reference Number / Reference ID / Ref. No / Ref No / Ref ID
- * Transaction ID / Transaction No. / Transaction Reference / Confirmation Number
- * GCash Reference / Maya Reference / Confirmation No.
+ * Normalise a line of OCR text for label matching:
+ * lowercase, collapse whitespace, remove trailing punctuation.
  */
-const REF_LABEL_RE = /ref(?:erence)?[\s.]*(?:no\.?|number|id)?|transaction[\s]*(?:id|no\.?|reference|ref)?|confirmation[\s]*(?:no\.?|number)?|gcash[\s]*ref(?:erence)?|maya[\s]*ref(?:erence)?/i;
+function normalise(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").replace(/[.:,#\-_]+/g, " ").trim();
+}
 
-/** Extract reference ID from OCR text — tries labelled lines first, falls back to digit patterns */
+/**
+ * Returns true if the normalised line looks like a reference-ID label.
+ * Covers every variant the user listed plus common OCR mis-reads.
+ */
+function isRefLabel(norm: string): boolean {
+  // Anchor patterns — the line must START with or purely BE one of these.
+  const patterns = [
+    // Reference / Ref variants
+    /^ref(?:erence)?\s*(?:id|no|number|num|#|code)?$/,
+    /^ref\s*\.\s*(?:id|no|number|num)?$/,
+    // Transaction variants
+    /^transaction\s*(?:id|no|number|num|ref(?:erence)?|code|reference\s*no|reference\s*number|ref\s*no)?$/,
+    /^txn\s*(?:id|no|number|ref)?$/,
+    /^trx\s*(?:id|no|number|ref)?$/,
+    // Payment variants
+    /^payment\s*(?:id|no|number|ref(?:erence)?|reference\s*(?:id|no|number)?|transaction\s*(?:id|no))?$/,
+    // Confirmation variants
+    /^confirmation\s*(?:id|no|number|code|ref(?:erence)?)?$/,
+    /^confirm\s*(?:id|no|number|code)?$/,
+    // Receipt variants
+    /^receipt\s*(?:id|no|number|ref(?:erence)?|reference\s*no)?$/,
+    // GCash-specific
+    /^gcash\s*(?:ref(?:erence)?\s*(?:id|no|number)?|transaction\s*(?:id|no))?$/,
+    // Maya / PayMaya-specific
+    /^(?:pay)?maya\s*(?:ref(?:erence)?\s*(?:id|no|number)?|transaction\s*(?:id|no))?$/,
+  ];
+  return patterns.some(re => re.test(norm));
+}
+
+/**
+ * Extract a reference/transaction ID from OCR text.
+ * Strategy:
+ *   1. Find lines whose content matches any known label.
+ *   2. Look for the value on the same line (after the label) or the very next line.
+ *   3. Fall back to method-specific digit-run heuristics.
+ *
+ * Never generates or invents a value — only returns text found in the receipt.
+ */
 function extractReferenceId(text: string, method: string): string | null {
-  const lines = text.split(/\n|\r/);
+  const rawLines = text.split(/[\n\r]+/);
+  const lines = rawLines.map(l => l.trim());
 
-  // Pass 1: look for a known label then grab the value on the same or next line
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!REF_LABEL_RE.test(line)) continue;
+    const norm = normalise(lines[i]);
+    if (!isRefLabel(norm)) continue;
 
-    // Try to find a value on the same line after the label
-    // Strip the label part and look for a code
-    const afterLabel = line.replace(REF_LABEL_RE, "").replace(/[:\s#.]+/, "").trim();
-    const sameAlpha = afterLabel.match(/\b([A-Z0-9]{8,16})\b/i);
-    if (sameAlpha) return sameAlpha[1].toUpperCase();
+    // Value may follow a colon/separator on the same line
+    // e.g. "Ref No.: 1234567890123"  or  "Transaction ID 9876543210"
+    const afterColon = lines[i].replace(/^[^:]+:?\s*/i, "").trim();
+    if (afterColon) {
+      // Match alphanumeric code (8–20 chars) — covers both numeric and mixed IDs
+      const m = afterColon.match(/\b([A-Z0-9]{8,20})\b/i);
+      if (m) return m[1];
+    }
 
-    // Try next line
-    const nextLine = lines[i + 1]?.trim() ?? "";
-    const nextAlpha = nextLine.match(/\b([A-Z0-9]{8,16})\b/i);
-    if (nextAlpha) return nextAlpha[1].toUpperCase();
+    // Value on the next non-empty line
+    for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+      const candidate = lines[j].trim();
+      if (!candidate) continue;
+      const m = candidate.match(/^([A-Z0-9]{8,20})$/i) // whole line is the code
+        ?? candidate.match(/\b([A-Z0-9]{8,20})\b/i);   // code embedded in line
+      if (m) return m[1];
+      break; // stop at first non-empty line after label
+    }
   }
 
-  // Pass 2: digit-only fallbacks by method
+  // Fallback: method-specific digit-run heuristics
   if (method === "GCash") {
     const m = text.match(/\b(\d{13})\b/);
     if (m) return m[1];
   }
-
   if (method === "Maya") {
     const m = text.match(/\b(\d{12})\b/);
     if (m) return m[1];
   }
-
-  // Generic fallback: any 10–16 digit run
-  const generic = text.match(/\b(\d{10,16})\b/);
-  return generic ? generic[1] : null;
+  // Generic: any 10–16 digit sequence
+  const gen = text.match(/\b(\d{10,16})\b/);
+  return gen ? gen[1] : null;
 }
 
 /** Extract amount — looks for ₱ or PHP followed by digits */
@@ -170,7 +213,14 @@ serve(async (req) => {
   if (!visionRes.ok) {
     const err = await visionRes.text();
     console.error("Vision API error:", err);
-    return json({ error: "Google Vision API error", details: err }, 502);
+    // Return a structured response so the frontend shows the manual-entry fallback
+    // rather than a generic crash — the receipt itself may be fine.
+    return json({
+      referenceId: null, amount: null, date: null,
+      method: hintedMethod ?? null, rawText: "", confidence: 0,
+      message: "Receipt scan unavailable right now. Please enter your Reference ID manually.",
+      _visionError: err,
+    });
   }
 
   const visionData = await visionRes.json();
