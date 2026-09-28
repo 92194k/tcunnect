@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import {
   Crown, Check, Upload, X, Loader2, Shield, Building2, Star, Zap,
-  Trophy, Rocket, Flame, ScanLine, AlertCircle, CheckCircle2,
+  Trophy, Flame, ScanLine, AlertCircle, CheckCircle2,
 } from "lucide-react";
+import { createWorker } from "tesseract.js";
 
 interface PaymentMethod {
   id: string;
@@ -24,6 +25,115 @@ interface OcrResult {
   rawText: string;
   confidence: number;
   message?: string;
+}
+
+// ── Client-side OCR extraction helpers ───────────────────────────
+
+function normLine(line: string): string {
+  return line.toLowerCase().replace(/[.:,#\-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const GCASH_LABEL_RE = /\b(?:gcash\s*)?ref(?:erence)?\s*(?:no|num(?:ber)?|id|#)?\b/;
+const MAYA_LABEL_RE  = /\b(?:(?:pay)?maya\s*)?(?:transaction|txn|trx)\s*(?:id|no|num(?:ber)?|ref(?:erence)?|code)?\b|\b(?:pay)?maya\s*ref(?:erence)?\s*(?:no|num(?:ber)?|id)?\b/;
+
+function extractGCashRef(rawLines: string[]): string | null {
+  const normLines = rawLines.map(normLine);
+  for (let i = 0; i < normLines.length; i++) {
+    if (!GCASH_LABEL_RE.test(normLines[i])) continue;
+    // Same line: strip label, collapse spaces, find 13 digits
+    const afterLabel = rawLines[i].replace(new RegExp(GCASH_LABEL_RE.source, "i"), "").replace(/^[\s:.\-#]+/, "").trim();
+    if (afterLabel) {
+      const m = afterLabel.replace(/\s+/g, "").match(/\d{13}/);
+      if (m) return m[0];
+      const m2 = afterLabel.match(/\b(\d{13})\b/);
+      if (m2) return m2[1];
+    }
+    // Next 1-2 lines
+    for (let j = i + 1; j <= Math.min(i + 2, rawLines.length - 1); j++) {
+      const cand = rawLines[j].trim();
+      if (!cand) continue;
+      if (GCASH_LABEL_RE.test(normLine(cand)) || MAYA_LABEL_RE.test(normLine(cand))) break;
+      const m = cand.replace(/\s+/g, "").match(/\d{13}/);
+      if (m) return m[0];
+      const m2 = cand.match(/\b(\d{13})\b/);
+      if (m2) return m2[1];
+      break;
+    }
+  }
+  // Fallback: scan whole text collapsed for 13 digits
+  const collapsed = rawLines.join("").replace(/\s+/g, "");
+  const mFull = collapsed.match(/\d{13}/);
+  if (mFull) return mFull[0];
+  const joined = rawLines.join("\n");
+  const mLast = joined.match(/(?<!\d)(\d{13})(?!\d)/);
+  return mLast ? mLast[1] : null;
+}
+
+function extractMayaRef(rawLines: string[]): string | null {
+  const normLines = rawLines.map(normLine);
+  for (let i = 0; i < normLines.length; i++) {
+    if (!MAYA_LABEL_RE.test(normLines[i])) continue;
+    const afterLabel = rawLines[i].replace(new RegExp(MAYA_LABEL_RE.source, "i"), "").replace(/^[\s:.\-#]+/, "").trim();
+    if (afterLabel) {
+      const m = afterLabel.match(/\b([A-Z0-9]{8,20})\b/i);
+      if (m) return m[1];
+    }
+    for (let j = i + 1; j <= Math.min(i + 2, rawLines.length - 1); j++) {
+      const cand = rawLines[j].trim();
+      if (!cand) continue;
+      if (GCASH_LABEL_RE.test(normLine(cand)) || MAYA_LABEL_RE.test(normLine(cand))) break;
+      const mW = cand.match(/^([A-Z0-9]{8,20})$/i);
+      if (mW) return mW[1];
+      const mP = cand.match(/\b([A-Z0-9]{8,20})\b/i);
+      if (mP) return mP[1];
+      break;
+    }
+  }
+  const joined = rawLines.join("\n");
+  const m12 = joined.match(/(?<!\d)(\d{12})(?!\d)/);
+  if (m12) return m12[1];
+  const gen = joined.match(/(?<!\d)(\d{10,16})(?!\d)/);
+  return gen ? gen[1] : null;
+}
+
+function extractReferenceId(text: string, method: string | null): string | null {
+  const rawLines = text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
+  if (method === "GCash") return extractGCashRef(rawLines);
+  if (method === "Maya")  return extractMayaRef(rawLines);
+  // Unknown: try GCash first (13-digit), then Maya
+  return extractGCashRef(rawLines) ?? extractMayaRef(rawLines);
+}
+
+function detectMethod(text: string): "GCash" | "Maya" | null {
+  if (/gcash/i.test(text)) return "GCash";
+  if (/\b(?:pay)?maya\b/i.test(text)) return "Maya";
+  return null;
+}
+
+function extractAmount(text: string): number | null {
+  for (const line of text.split(/\n|\r/)) {
+    if (/total|amount|paid|bayad/i.test(line)) {
+      const m = line.match(/[₱P]?(\d{1,6}(?:[.,]\d{2})?)/);
+      if (m) return parseFloat(m[1].replace(",", "."));
+    }
+  }
+  const m = text.match(/[₱P]\s*(\d{1,6}(?:[.,]\d{2})?)/);
+  return m ? parseFloat(m[1].replace(",", ".")) : null;
+}
+
+function extractDate(text: string): string | null {
+  const patterns = [
+    /(\d{4}-\d{2}-\d{2})\s+\d{2}:\d{2}/,
+    /(\d{4}-\d{2}-\d{2})/,
+    /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4})/i,
+    /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})/i,
+    /(\d{1,2}\/\d{1,2}\/\d{4})/,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) { const d = new Date(m[1]); if (!isNaN(d.getTime())) return d.toISOString(); }
+  }
+  return null;
 }
 
 // ── Feature lists ─────────────────────────────────────────────────
@@ -120,19 +230,6 @@ function CountdownBanner() {
   );
 }
 
-/** Convert a File to base64 string (without data: prefix) */
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Strip "data:<mime>;base64," prefix
-      resolve(result.split(",")[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function Premium() {
   const { user } = useAuthStore();
@@ -147,6 +244,7 @@ export default function Premium() {
   const [ocrError, setOcrError]                 = useState("");
   const [referenceIdInput, setReferenceIdInput] = useState("");
   const [previewUrl, setPreviewUrl]             = useState<string | null>(null);
+  const tesseractWorkerRef = useRef<Awaited<ReturnType<typeof createWorker>> | null>(null);
   const [paymentMethods, setPaymentMethods]     = useState<PaymentMethod[]>([
     { id: "gcash", label: "GCash", icon: "💙", number: "09XX XXX XXXX", name: "TCUnnect Official" },
     { id: "maya",  label: "Maya",  icon: "💚", number: "09XX XXX XXXX", name: "TCUnnect Official" },
@@ -170,61 +268,49 @@ export default function Premium() {
       });
   }, []);
 
-  /** Auto-scan receipt via Edge Function after file selection */
+  /** Auto-scan receipt using Tesseract.js (client-side, free, no API key) */
   const scanReceipt = useCallback(async (file: File) => {
-    if (!isSupabaseConfigured || !user) return;
-
     setIsScanning(true);
     setOcrError("");
     setOcrResult(null);
     setReferenceIdInput("");
 
     try {
-      const imageBase64 = await fileToBase64(file);
-      const methodLabel = paymentMethod === "gcash" ? "GCash" : "Maya";
-
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      // Get the Supabase project URL for Edge Functions
-      const supabaseUrl = (supabase as any).supabaseUrl as string;
-      const functionUrl = `${supabaseUrl}/functions/v1/scan-receipt`;
-
-      const res = await fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          imageBase64,
-          mimeType: file.type,
-          method: methodLabel,
-        }),
-      });
-
-      const result: OcrResult & { error?: string; message?: string } = await res.json();
-
-      // The Edge Function may return a non-ok status only for hard failures;
-      // a Vision API error now returns 200 with confidence:0 and a message field.
-      if (!res.ok && result.error) {
-        setOcrError("Receipt scan is temporarily unavailable. Please enter your Reference ID manually.");
-        setIsScanning(false);
-        return;
+      // Reuse worker if already initialised (avoids re-downloading language data)
+      if (!tesseractWorkerRef.current) {
+        tesseractWorkerRef.current = await createWorker("eng", 1, {
+          // suppress verbose Tesseract logs
+          logger: () => {},
+        });
       }
+      const worker = tesseractWorkerRef.current;
 
+      const { data } = await worker.recognize(file);
+      const rawText = data.text ?? "";
+
+      const methodHint  = paymentMethod === "gcash" ? "GCash" : "Maya";
+      const method      = detectMethod(rawText) ?? methodHint;
+      const referenceId = extractReferenceId(rawText, method);
+      const amount      = extractAmount(rawText);
+      const date        = extractDate(rawText);
+
+      let score = 0;
+      if (referenceId) score += 0.5;
+      if (amount)      score += 0.2;
+      if (date)        score += 0.15;
+      if (method)      score += 0.15;
+
+      const result: OcrResult = { referenceId, amount, date, method, rawText, confidence: score };
       setOcrResult(result);
 
-      if (result.referenceId) {
-        setReferenceIdInput(result.referenceId);
-        // clear any previous error
+      if (referenceId) {
+        setReferenceIdInput(referenceId);
         setOcrError("");
       } else {
-        // Use the message from the server if present, otherwise generic fallback
         setOcrError(
-          result.message && !result.message.includes("unavailable")
-            ? result.message
-            : "Couldn't detect the Reference ID automatically. Please enter it manually from your receipt."
+          rawText.trim()
+            ? "Couldn't detect the Reference ID automatically. Please enter it manually from your receipt."
+            : "No text detected — make sure the image is clear and well-lit."
         );
       }
     } catch (e) {
@@ -233,7 +319,7 @@ export default function Premium() {
     }
 
     setIsScanning(false);
-  }, [paymentMethod, user]);
+  }, [paymentMethod]);
 
   const handleFileChange = (file: File | null) => {
     // Revoke previous object URL before creating a new one
@@ -600,6 +686,23 @@ export default function Premium() {
                   <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700 leading-relaxed">{ocrError}</p>
                 </div>
+              )}
+
+              {/* ── DEBUG: raw OCR text (remove before production) ── */}
+              {receiptFile && !isScanning && ocrResult && (
+                <details className="mb-4 rounded-xl border border-slate-200 bg-slate-50 text-xs overflow-hidden">
+                  <summary className="cursor-pointer px-3 py-2 font-semibold text-slate-500 select-none hover:bg-slate-100">
+                    🔍 OCR Debug — tap to expand raw Vision text
+                  </summary>
+                  <div className="px-3 pb-3 pt-1 space-y-1">
+                    <p className="text-slate-400 font-semibold">Detected method: <span className="text-slate-700">{ocrResult.method ?? "none"}</span></p>
+                    <p className="text-slate-400 font-semibold">Extracted ref ID: <span className="text-slate-700 font-mono">{ocrResult.referenceId ?? "null"}</span></p>
+                    <p className="text-slate-400 font-semibold mt-2">Raw Vision text:</p>
+                    <pre className="whitespace-pre-wrap break-all font-mono text-[10px] text-slate-600 bg-white border border-slate-100 rounded-lg p-2 max-h-48 overflow-y-auto">
+                      {ocrResult.rawText || "(empty — no text detected)"}
+                    </pre>
+                  </div>
+                </details>
               )}
 
               {/* ── Submit error ── */}
