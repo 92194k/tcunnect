@@ -7,7 +7,7 @@ import {
   BookOpen, BarChart2, Settings, Bell, LogOut, ChevronRight, Check,
   X, Eye, Shield, Clock, TrendingUp, AlertCircle, CheckCircle2,
   XCircle, FileText, RefreshCw, Search, Filter, Download,
-  MessageSquare, Compass, Home, Image, Save, Loader2, Trash2,
+  MessageSquare, Compass, Home, Image, Save, Loader2, Trash2, Upload,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -1447,6 +1447,7 @@ function GemEditorModal({
   const [loading, setLoading] = useState(!!gemId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingImg, setUploadingImg] = useState(false);
 
   // Load existing gem + content items when editing
   useEffect(() => {
@@ -1519,6 +1520,34 @@ function GemEditorModal({
 
   function removeItem(section: ContentSection, key: string) {
     setItems(prev => ({ ...prev, [section]: prev[section].filter(it => it._key !== key) }));
+  }
+
+  async function handleImageUpload(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploadingImg(true);
+    const newUrls: string[] = [];
+    for (const file of Array.from(files)) {
+      const ext  = file.name.split(".").pop() ?? "jpg";
+      const path = `gem-images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("gem-images").upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) { setError(`Upload failed: ${upErr.message}`); continue; }
+      const { data: urlData } = supabase.storage.from("gem-images").getPublicUrl(path);
+      newUrls.push(urlData.publicUrl);
+    }
+    if (newUrls.length > 0) {
+      setForm(f => {
+        const existing = f.images.split(",").map(s => s.trim()).filter(Boolean);
+        return { ...f, images: [...existing, ...newUrls].join(", ") };
+      });
+    }
+    setUploadingImg(false);
+  }
+
+  function removeImageUrl(url: string) {
+    setForm(f => {
+      const arr = f.images.split(",").map(s => s.trim()).filter(s => s && s !== url);
+      return { ...f, images: arr.join(", ") };
+    });
   }
 
   async function handleSave() {
@@ -1681,8 +1710,48 @@ function GemEditorModal({
                     <input className={inputCls} value={form.tip} onChange={e => setForm(f => ({ ...f, tip: e.target.value }))} placeholder="e.g. Best visited at dawn for sunrise views" />
                   </div>
                   <div>
-                    <label className={labelCls}>Image URLs (comma-separated)</label>
-                    <textarea className={`${inputCls} resize-none`} rows={2} value={form.images} onChange={e => setForm(f => ({ ...f, images: e.target.value }))} placeholder="https://..., https://..." />
+                    <label className={labelCls}>Photos / Source</label>
+                    {/* Upload zone */}
+                    <label className={`flex items-center gap-2 cursor-pointer border-2 border-dashed rounded-lg px-3 py-3 transition mb-2 ${uploadingImg ? "border-sky-300 bg-sky-50" : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/40"}`}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="sr-only"
+                        disabled={uploadingImg}
+                        onChange={e => handleImageUpload(e.target.files)}
+                      />
+                      {uploadingImg
+                        ? <><div className="h-4 w-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin shrink-0" /><span className="text-xs text-sky-600 font-semibold">Uploading…</span></>
+                        : <><Upload className="h-4 w-4 text-slate-400 shrink-0" /><span className="text-xs text-slate-500">Upload photos <span className="text-slate-400">(PNG, JPG — multiple OK)</span></span></>
+                      }
+                    </label>
+                    {/* Thumbnail previews */}
+                    {form.images.split(",").map(s => s.trim()).filter(Boolean).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {form.images.split(",").map(s => s.trim()).filter(Boolean).map(url => (
+                          <div key={url} className="relative group w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 shrink-0">
+                            <img src={url} alt="" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <button
+                              type="button"
+                              onClick={() => removeImageUrl(url)}
+                              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition"
+                              title="Remove"
+                            >
+                              <X className="h-4 w-4 text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Manual URL input (labeled Source) */}
+                    <input
+                      className={`${inputCls} text-xs font-mono`}
+                      value={form.images}
+                      onChange={e => setForm(f => ({ ...f, images: e.target.value }))}
+                      placeholder="Or paste image URL(s) here, comma-separated"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Upload files above or paste direct URLs below. Hover thumbnails to remove.</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
