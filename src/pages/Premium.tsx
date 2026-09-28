@@ -146,6 +146,8 @@ export default function Premium() {
   const [ocrResult, setOcrResult]               = useState<OcrResult | null>(null);
   const [ocrError, setOcrError]                 = useState("");
   const [referenceIdInput, setReferenceIdInput] = useState("");
+  const [previewUrl, setPreviewUrl]             = useState<string | null>(null);
+  const [refIdMode, setRefIdMode]               = useState<"scan" | "manual" | null>(null);
   const [paymentMethods, setPaymentMethods]     = useState<PaymentMethod[]>([
     { id: "gcash", label: "GCash", icon: "💙", number: "09XX XXX XXXX", name: "TCUnnect Official" },
     { id: "maya",  label: "Maya",  icon: "💚", number: "09XX XXX XXXX", name: "TCUnnect Official" },
@@ -227,13 +229,21 @@ export default function Premium() {
     setIsScanning(false);
   }, [paymentMethod, user]);
 
+  // Revoke old preview URL when file changes
+  useEffect(() => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [receiptFile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleFileChange = (file: File | null) => {
     setReceiptFile(file);
     setOcrResult(null);
     setOcrError("");
     setReferenceIdInput("");
+    setRefIdMode(null);
     if (file) {
-      scanReceipt(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    } else {
+      setPreviewUrl(null);
     }
   };
 
@@ -448,83 +458,127 @@ export default function Premium() {
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-base leading-tight">Upload your receipt</h3>
-                  <p className="text-xs text-slate-400">We'll scan it automatically to fill in your details</p>
+                  <p className="text-xs text-slate-400">Take a screenshot of your {paymentMethod === "gcash" ? "GCash" : "Maya"} transaction</p>
                 </div>
               </div>
 
-              {/* Upload zone */}
-              <label className={`relative flex flex-col items-center justify-center w-full min-h-[140px] rounded-2xl border-2 border-dashed cursor-pointer transition-all mb-3 ${
-                isScanning
-                  ? "border-sky-300 bg-sky-50"
-                  : receiptFile
-                  ? "border-emerald-400 bg-emerald-50"
-                  : "border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50"
-              }`}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-                  className="sr-only"
-                />
-
-                {isScanning ? (
-                  <div className="flex flex-col items-center gap-2 py-6">
-                    <div className="h-10 w-10 rounded-full bg-sky-100 flex items-center justify-center">
-                      <ScanLine className="h-5 w-5 text-sky-600 animate-pulse" />
-                    </div>
-                    <p className="text-sm font-semibold text-sky-700">Scanning receipt…</p>
-                    <p className="text-xs text-sky-400">Extracting Ref No., amount &amp; date</p>
-                  </div>
-                ) : receiptFile ? (
-                  <div className="flex flex-col items-center gap-2 py-6 px-4">
-                    <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                      <Check className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <p className="text-sm font-semibold text-emerald-700 text-center break-all max-w-[220px]">
-                      {receiptFile.name}
-                    </p>
-                    <p className="text-[11px] text-emerald-500">
-                      {ocrResult ? "Scanned ✓ — tap to change" : "Tap to change"}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2 py-6">
-                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
-                      <Upload className="h-5 w-5 text-slate-400" />
+              {/* ── PHASE 1: Upload zone (always shown when no file) ── */}
+              {!receiptFile && (
+                <label className="relative flex flex-col items-center justify-center w-full min-h-[160px] rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-sky-300 hover:bg-sky-50 cursor-pointer transition-all mb-5">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+                    className="sr-only"
+                  />
+                  <div className="flex flex-col items-center gap-2 py-8">
+                    <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center">
+                      <Upload className="h-6 w-6 text-slate-400" />
                     </div>
                     <p className="text-sm font-semibold text-slate-600">Tap to upload receipt</p>
                     <p className="text-xs text-slate-400">PNG · JPG · Screenshot</p>
                   </div>
-                )}
-              </label>
-
-              {/* Remove link */}
-              {receiptFile && !isScanning && (
-                <button
-                  onClick={() => handleFileChange(null)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 transition mb-4"
-                >
-                  <X className="h-3.5 w-3.5" /> Remove file
-                </button>
+                </label>
               )}
 
-              {/* OCR scan results */}
-              {ocrResult && !isScanning && (
+              {/* ── PHASE 2: Receipt preview (shown after upload) ── */}
+              {receiptFile && previewUrl && (
+                <div className="mb-5">
+                  {/* Preview image */}
+                  <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-300 bg-emerald-50 mb-2">
+                    <img
+                      src={previewUrl}
+                      alt="Receipt preview"
+                      className="w-full max-h-72 object-contain bg-white"
+                    />
+                    {/* Remove / replace overlay */}
+                    <div className="absolute top-2 right-2 flex gap-2">
+                      <label className="flex items-center gap-1 bg-white/90 hover:bg-white border border-slate-200 text-xs text-slate-600 font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer shadow-sm transition">
+                        <Upload className="h-3 w-3" /> Replace
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
+                          className="sr-only"
+                        />
+                      </label>
+                      <button
+                        onClick={() => handleFileChange(null)}
+                        className="flex items-center gap-1 bg-white/90 hover:bg-red-50 border border-slate-200 hover:border-red-300 text-xs text-red-500 font-semibold px-2.5 py-1.5 rounded-lg shadow-sm transition"
+                      >
+                        <X className="h-3 w-3" /> Remove
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 text-center">{receiptFile.name}</p>
+                </div>
+              )}
+
+              {/* ── PHASE 3: Choose Ref ID method (shown after upload, before choice) ── */}
+              {receiptFile && !refIdMode && (
+                <div className="mb-5">
+                  <p className="text-xs font-bold text-slate-700 mb-3 text-center">
+                    How would you like to get the Reference ID?
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => {
+                        setRefIdMode("scan");
+                        if (receiptFile) scanReceipt(receiptFile);
+                      }}
+                      className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-sky-200 bg-sky-50 hover:bg-sky-100 hover:border-sky-400 transition text-left"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-sky-100 flex items-center justify-center">
+                        <ScanLine className="h-5 w-5 text-sky-600" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-sky-800">Scan Receipt</p>
+                        <p className="text-[10px] text-sky-500 mt-0.5 leading-relaxed">Auto-detect Ref No. using OCR</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setRefIdMode("manual")}
+                      className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-400 transition text-left"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
+                        <Edit3 className="h-5 w-5 text-slate-500" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-slate-700">Enter Manually</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">Type your Ref No. from receipt</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── PHASE 4A: Scanning state ── */}
+              {refIdMode === "scan" && isScanning && (
+                <div className="flex flex-col items-center gap-3 py-6 mb-5 rounded-2xl bg-sky-50 border border-sky-200">
+                  <div className="h-12 w-12 rounded-full bg-sky-100 flex items-center justify-center">
+                    <ScanLine className="h-6 w-6 text-sky-600 animate-pulse" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-sky-700">Scanning receipt…</p>
+                    <p className="text-xs text-sky-400 mt-0.5">Extracting Ref No., amount &amp; date</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── PHASE 4A: Scan results ── */}
+              {refIdMode === "scan" && !isScanning && ocrResult && (
                 <div className={`rounded-2xl border p-4 mb-4 ${
-                  ocrResult.confidence >= 0.5
-                    ? "border-emerald-200 bg-emerald-50"
-                    : "border-amber-200 bg-amber-50"
+                  ocrResult.confidence >= 0.5 ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"
                 }`}>
                   <div className="flex items-center gap-2 mb-3">
                     {ocrResult.confidence >= 0.5
                       ? <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                      : <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-                    }
+                      : <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />}
                     <span className={`text-xs font-bold ${ocrResult.confidence >= 0.5 ? "text-emerald-700" : "text-amber-700"}`}>
-                      {ocrResult.confidence >= 0.5 ? "Receipt read successfully" : "Partial scan — please verify below"}
+                      {ocrResult.confidence >= 0.5 ? "Receipt scanned successfully" : "Partial scan — please verify below"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 mb-3">
                     {ocrResult.method && (
                       <div className="bg-white rounded-xl p-2.5 text-center">
                         <p className="text-[10px] text-slate-400 uppercase tracking-wide">Method</p>
@@ -546,37 +600,59 @@ export default function Premium() {
                       </div>
                     )}
                   </div>
+                  <button
+                    onClick={() => { setRefIdMode(null); setOcrResult(null); setOcrError(""); setReferenceIdInput(""); }}
+                    className="text-[10px] text-slate-400 hover:text-slate-600 transition underline"
+                  >
+                    ← Change method
+                  </button>
                 </div>
               )}
 
-              {/* OCR warning (partial / failed) */}
-              {ocrError && !isScanning && (
+              {/* OCR error */}
+              {refIdMode === "scan" && !isScanning && ocrError && (
                 <div className="flex items-start gap-2.5 p-3.5 bg-amber-50 border border-amber-200 rounded-2xl mb-4">
                   <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700 leading-relaxed">{ocrError}</p>
+                  <div className="flex-1">
+                    <p className="text-xs text-amber-700 leading-relaxed">{ocrError}</p>
+                    <button
+                      onClick={() => { setRefIdMode(null); setOcrError(""); setReferenceIdInput(""); }}
+                      className="text-[10px] text-amber-600 underline mt-1"
+                    >
+                      Try another method
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Reference ID input — shown once file is selected */}
-              {receiptFile && !isScanning && (
+              {/* ── PHASE 4: Reference ID input (scan filled or manual) ── */}
+              {receiptFile && (refIdMode === "manual" || (refIdMode === "scan" && !isScanning)) && (
                 <div className="mb-5">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-bold text-slate-700">
                       Reference ID <span className="text-red-500">*</span>
                     </label>
-                    {ocrResult?.referenceId && referenceIdInput && (
+                    {refIdMode === "scan" && ocrResult?.referenceId && referenceIdInput && (
                       <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
-                        <ScanLine className="h-3 w-3" /> Auto-filled from receipt
+                        <ScanLine className="h-3 w-3" /> Detected from scan
                       </span>
+                    )}
+                    {refIdMode === "manual" && (
+                      <button
+                        onClick={() => { setRefIdMode(null); setReferenceIdInput(""); }}
+                        className="text-[10px] text-slate-400 hover:text-slate-600 underline transition"
+                      >
+                        ← Back
+                      </button>
                     )}
                   </div>
                   <div className="relative">
                     <input
                       type="text"
-                      inputMode="numeric"
+                      inputMode={refIdMode === "manual" ? "text" : "numeric"}
                       value={referenceIdInput}
                       onChange={e => setReferenceIdInput(e.target.value)}
-                      placeholder={paymentMethod === "gcash" ? "e.g. 1234567890123" : "Maya transaction reference"}
+                      placeholder={paymentMethod === "gcash" ? "e.g. 1234567890123" : "e.g. TXN123ABC456"}
                       className={`w-full border-2 rounded-xl px-4 py-3 text-sm font-mono tracking-wider focus:outline-none transition ${
                         referenceIdInput
                           ? "border-emerald-400 bg-white text-slate-800"
@@ -589,9 +665,14 @@ export default function Premium() {
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
                     {paymentMethod === "gcash"
-                      ? "Your 13-digit GCash Ref No. — shown on your transaction receipt as \"Ref No.\""
-                      : "Your Maya transaction reference — shown on your receipt as \"Reference\" or \"Transaction ID\""}
+                      ? "13-digit GCash Ref No. — shown on your receipt as \"Ref No.\""
+                      : "Maya transaction reference — shown as \"Reference\" or \"Transaction ID\""}
                   </p>
+                  {refIdMode === "scan" && !referenceIdInput && !isScanning && (
+                    <p className="text-[10px] text-amber-600 mt-1">
+                      OCR couldn't detect a Reference ID — type it from your receipt above
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -611,7 +692,7 @@ export default function Premium() {
                 </p>
               </div>
 
-              {/* CTA */}
+              {/* CTA — only enabled when reference ID is filled */}
               <button
                 onClick={handleSubmit}
                 disabled={!receiptFile || isProcessing || isScanning || !referenceIdInput.trim()}
@@ -619,12 +700,10 @@ export default function Premium() {
               >
                 {isProcessing
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</>
-                  : isScanning
-                  ? <><ScanLine className="h-4 w-4 animate-pulse" /> Scanning receipt…</>
                   : <>Submit Receipt <span className="opacity-70">→</span></>}
               </button>
 
-              {!referenceIdInput.trim() && receiptFile && !isScanning && (
+              {!referenceIdInput.trim() && receiptFile && !isScanning && refIdMode && (
                 <p className="text-center text-[11px] text-slate-400 mt-2">
                   Enter your Reference ID above to continue
                 </p>
