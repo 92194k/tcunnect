@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore, createNotification } from "../stores";
-import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight, Flag, MoreHorizontal } from "lucide-react";
+import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight, Flag, MoreHorizontal, Heart, MessageSquare } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 interface Comment {
@@ -15,6 +16,7 @@ interface Comment {
 
 interface Post {
   id: string;
+  user_id?: string | null;
   content: string;
   location: string;
   upvotes: number;
@@ -22,6 +24,8 @@ interface Post {
   image_url?: string | null;
   created_at: string;
   upvoted?: boolean;
+  author_name?: string | null;
+  author_avatar?: string | null;
 }
 
 function timeAgo(ts: string): string {
@@ -130,6 +134,108 @@ function ReportPostModal({ postId, reporterId, onClose }: {
   );
 }
 
+// ─── Author Row ───────────────────────────────────────────────────────────────
+function AuthorRow({ post, currentUserId }: { post: Post; currentUserId?: string }) {
+  const navigate = useNavigate();
+  const [liked, setLiked] = useState(false);
+  const [liking, setLiking] = useState(false);
+  const isOwn = !!(currentUserId && post.user_id && currentUserId === post.user_id);
+  const hasAuthor = !!(post.user_id && post.author_name);
+
+  const initials = post.author_name
+    ? post.author_name.trim().split(/\s+/).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
+    : "?";
+
+  async function handleLike() {
+    if (!currentUserId || !post.user_id || isOwn || liking) return;
+    setLiking(true);
+    const { isSupabaseConfigured, supabase } = await import("../lib/supabase");
+    if (isSupabaseConfigured) {
+      await supabase.from("likes").upsert(
+        { user_id: currentUserId, liked_user_id: post.user_id },
+        { onConflict: "user_id,liked_user_id", ignoreDuplicates: true }
+      );
+    }
+    setLiked(true);
+    setLiking(false);
+  }
+
+  async function handleMessage() {
+    if (!currentUserId || !post.user_id || isOwn) return;
+    const { isSupabaseConfigured, supabase } = await import("../lib/supabase");
+    if (!isSupabaseConfigured) return;
+    // Find or create a conversation between the two users
+    const ids = [currentUserId, post.user_id].sort();
+    const { data: existing } = await supabase
+      .from("conversations")
+      .select("id")
+      .contains("participant_ids", ids)
+      .limit(1)
+      .single();
+    if (existing?.id) {
+      navigate(`/chat/${existing.id}`);
+      return;
+    }
+    const { data: created } = await supabase
+      .from("conversations")
+      .insert({ participant_ids: ids })
+      .select("id")
+      .single();
+    if (created?.id) navigate(`/chat/${created.id}`);
+  }
+
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      {/* Avatar */}
+      <div className="h-9 w-9 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+        {post.author_avatar
+          ? <img src={post.author_avatar} alt="" className="h-full w-full object-cover" />
+          : initials}
+      </div>
+
+      {/* Name + meta */}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-slate-700 truncate">
+          {hasAuthor ? post.author_name : "TCUnnect Traveler"}
+        </p>
+        <p className="text-[10px] text-slate-400 flex items-center gap-1">
+          {post.location && (
+            <><MapPin className="h-2.5 w-2.5" />{post.location} · </>
+          )}
+          {timeAgo(post.created_at)}
+        </p>
+      </div>
+
+      {/* Message + Like — only shown if not own post and author is known */}
+      {!isOwn && hasAuthor && currentUserId && (
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={handleMessage}
+            title="Send a message"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-600 text-[11px] font-semibold transition"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Message</span>
+          </button>
+          <button
+            onClick={handleLike}
+            disabled={liked || liking}
+            title={liked ? "Liked!" : "Like this traveler"}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${
+              liked
+                ? "bg-rose-50 text-rose-500 cursor-default"
+                : "bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500"
+            }`}
+          >
+            <Heart className={`h-3.5 w-3.5 ${liked ? "fill-current" : ""}`} />
+            <span className="hidden sm:inline">{liked ? "Liked" : "Like"}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Post Card with Comments ───────────────────────────────────────────────
 function PostCard({
   post,
@@ -225,23 +331,7 @@ function PostCard({
     <div id={post.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
       <div className="p-5">
         {/* Author row */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center text-slate-500 text-xs font-bold shrink-0">
-            A
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-700">Anonymous Traveler</p>
-            <p className="text-[10px] text-slate-400 flex items-center gap-1">
-              {post.location && (
-                <>
-                  <MapPin className="h-2.5 w-2.5" />
-                  {post.location} ·{" "}
-                </>
-              )}
-              {timeAgo(post.created_at)}
-            </p>
-          </div>
-        </div>
+        <AuthorRow post={post} currentUserId={user?.id} />
 
         {/* Content */}
         <p className="text-sm text-slate-700 leading-relaxed mb-3">{post.content}</p>
@@ -551,11 +641,16 @@ export default function Community() {
 
     const { data } = await supabase
       .from("posts")
-      .select("id, content, location, upvotes, comment_count, image_url, created_at")
+      .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at, profiles(full_name, avatar_url)")
       .order("created_at", { ascending: false })
       .limit(50);
 
-    setPosts((data as Post[]) ?? []);
+    const mapped = (data ?? []).map((p: any) => ({
+      ...p,
+      author_name: p.profiles?.full_name ?? null,
+      author_avatar: p.profiles?.avatar_url ?? null,
+    })) as Post[];
+    setPosts(mapped);
     setLoading(false);
   }
 
@@ -650,10 +745,14 @@ export default function Community() {
       const { data } = await supabase
         .from("posts")
         .insert({ user_id: user.id, content, location: location || "", image_url: imageUrl })
-        .select("id, content, location, upvotes, comment_count, image_url, created_at")
+        .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at")
         .single();
 
-      if (data) setPosts([data as Post, ...posts]);
+      if (data) setPosts([{
+        ...(data as Post),
+        author_name: user.fullName ?? null,
+        author_avatar: user.profilePhoto ?? null,
+      }, ...posts]);
     }
 
     closeModal();
