@@ -128,7 +128,7 @@ export default function Profile() {
       }
 
       const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `covers/${user.id}.${ext}`;
+      const path = `cover-${user.id}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(path, file, { upsert: true, contentType: file.type });
@@ -147,7 +147,7 @@ export default function Profile() {
 
       setCoverPhoto(`${publicUrl}?t=${Date.now()}`);
     } catch (err: any) {
-      console.error("Cover upload failed:", err);
+      console.error("Cover upload failed — bucket: avatars, path: cover-" + user?.id, err);
       alert("Cover upload failed: " + (err?.message ?? String(err)));
     } finally {
       setCoverUploading(false);
