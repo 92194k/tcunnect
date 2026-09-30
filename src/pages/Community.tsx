@@ -149,7 +149,6 @@ function AuthorRow({ post, currentUserId }: { post: Post; currentUserId?: string
   async function handleLike() {
     if (!currentUserId || !post.user_id || isOwn || liking) return;
     setLiking(true);
-    const { isSupabaseConfigured, supabase } = await import("../lib/supabase");
     if (isSupabaseConfigured) {
       await supabase.from("likes").upsert(
         { user_id: currentUserId, liked_user_id: post.user_id },
@@ -162,7 +161,6 @@ function AuthorRow({ post, currentUserId }: { post: Post; currentUserId?: string
 
   async function handleMessage() {
     if (!currentUserId || !post.user_id || isOwn) return;
-    const { isSupabaseConfigured, supabase } = await import("../lib/supabase");
     if (!isSupabaseConfigured) return;
     // Find or create a conversation between the two users
     const ids = [currentUserId, post.user_id].sort();
@@ -639,16 +637,38 @@ export default function Community() {
       return;
     }
 
-    const { data } = await supabase
+    // Step 1 — fetch posts (no join, avoids PostgREST FK-resolution issues)
+    const { data: rawPosts, error: postsErr } = await supabase
       .from("posts")
-      .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at, profiles(full_name, avatar_url)")
+      .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at")
       .order("created_at", { ascending: false })
       .limit(50);
 
-    const mapped = (data ?? []).map((p: any) => ({
+    if (postsErr) {
+      console.error("[Community] posts fetch error:", postsErr);
+      setLoading(false);
+      return;
+    }
+
+    const posts = rawPosts ?? [];
+
+    // Step 2 — fetch profiles for each unique author in one query
+    const authorIds = [...new Set(posts.map((p: any) => p.user_id).filter(Boolean))];
+    let profileMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
+    if (authorIds.length > 0) {
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .in("id", authorIds);
+      for (const pr of profileRows ?? []) {
+        profileMap[pr.id] = { full_name: pr.full_name, avatar_url: pr.avatar_url };
+      }
+    }
+
+    const mapped = posts.map((p: any) => ({
       ...p,
-      author_name: p.profiles?.full_name ?? null,
-      author_avatar: p.profiles?.avatar_url ?? null,
+      author_name: profileMap[p.user_id]?.full_name ?? null,
+      author_avatar: profileMap[p.user_id]?.avatar_url ?? null,
     })) as Post[];
     setPosts(mapped);
     setLoading(false);
