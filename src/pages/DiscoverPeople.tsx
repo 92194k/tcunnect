@@ -296,6 +296,8 @@ export default function DiscoverPeople() {
   const { addMatch } = useMatchStore();
 
   const [deck, setDeck] = useState<User[]>([]);
+  // Separate full roster for the map — no limit, no interest filter
+  const [mapTravelers, setMapTravelers] = useState<User[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
@@ -322,6 +324,7 @@ export default function DiscoverPeople() {
   // ── Fetch profiles ───────────────────────────────────────────────
   useEffect(() => {
     fetchPeople(activeFilter);
+    fetchAllForMap();
   }, [activeFilter, user?.id]);
 
   // ── Fetch hidden gem markers (once) ──────────────────────────────
@@ -385,6 +388,35 @@ export default function DiscoverPeople() {
     setDeck(shuffle(users));
     setIndex(0);
     setLoading(false);
+  }
+
+  // Load every eligible traveler for the map (no interest filter, high limit)
+  async function fetchAllForMap() {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, age, bio, location, profile_photo, travel_interests, is_premium, is_verified")
+        .neq("id", user?.id ?? "")
+        .not("location", "is", null)
+        .not("travel_interests", "is", null)
+        .limit(500);
+      setMapTravelers(
+        (data ?? []).map((p) => ({
+          id: p.id,
+          email: "",
+          fullName: p.full_name ?? "Traveler",
+          age: p.age ?? undefined,
+          bio: p.bio ?? "",
+          location: p.location ?? "Philippines",
+          profilePhoto: p.profile_photo ?? "",
+          travelInterests: p.travel_interests ?? [],
+          createdAt: "",
+          isPremium: p.is_premium ?? false,
+          isVerified: p.is_verified ?? false,
+        }))
+      );
+    } catch { /* non-fatal */ }
   }
 
   // Freeze the displayed traveler during a match sequence so the card/map don't jump
@@ -546,31 +578,34 @@ export default function DiscoverPeople() {
   const mapMarkers = useMemo<MapMarker[]>(() => {
     const markers: MapMarker[] = [];
 
+    // Use full roster for map pins; fall back to deck if map fetch not yet done
+    const roster = mapTravelers.length > 0 ? mapTravelers : deck;
+
     // Count how many travelers share each base coordinate so we can spread them out
     const coordCount: Record<string, number> = {};
     const coordIndex: Record<string, number> = {};
-    for (const traveler of deck) {
+    for (const traveler of roster) {
       const coords = geocodeLocation(traveler.location);
       if (!coords) continue;
       const key = `${coords[0]},${coords[1]}`;
       coordCount[key] = (coordCount[key] ?? 0) + 1;
     }
 
-    // ALL deck users — jitter duplicates so every marker is individually tappable
-    for (const traveler of deck) {
+    // All travelers — jitter duplicates so every marker is individually tappable
+    for (const traveler of roster) {
       const coords = geocodeLocation(traveler.location);
       if (!coords) continue;
       const key = `${coords[0]},${coords[1]}`;
       const idx = coordIndex[key] ?? 0;
       coordIndex[key] = idx + 1;
 
-      // Spread duplicates in a small circle (~1–3 km radius) so they don't stack
+      // Spread duplicates in a small circle so they don't stack
       let lat = coords[0];
       let lng = coords[1];
       if (coordCount[key] > 1) {
         const total = coordCount[key];
         const angle = (2 * Math.PI * idx) / total;
-        const radius = 0.018 + (idx % 3) * 0.008; // ~2–4 km jitter
+        const radius = 0.018 + (idx % 3) * 0.008; // ~2–4 km
         lat += radius * Math.cos(angle);
         lng += radius * Math.sin(angle);
       }
@@ -609,7 +644,7 @@ export default function DiscoverPeople() {
     markers.push(...gemMarkers);
 
     return markers;
-  }, [deck, currentTraveler, showConnectionLine, user, gemMarkers]);
+  }, [deck, mapTravelers, currentTraveler, showConnectionLine, user, gemMarkers]);
 
   // ── Build match line ──────────────────────────────────────────────
   // Driven by showConnectionLine so it stays visible through both animation AND modal phases.
@@ -652,7 +687,11 @@ export default function DiscoverPeople() {
               onMarkerClick={(mk) => {
                 if (mk.type === 'user') {
                   const userId = mk.id.replace('user_', '');
-                  setSelectedMapTraveler(deck.find((t) => t.id === userId) ?? null);
+                  setSelectedMapTraveler(
+                    deck.find((t) => t.id === userId) ??
+                    mapTravelers.find((t) => t.id === userId) ??
+                    null
+                  );
                 }
               }}
             />
@@ -664,7 +703,7 @@ export default function DiscoverPeople() {
               ← Back
             </button>
             <div className="absolute top-4 right-4 z-[500] bg-black/55 text-white text-xs font-medium px-3 py-1.5 rounded-full">
-              {deck.length} travelers
+              {(mapTravelers.length > 0 ? mapTravelers : deck).length} travelers
             </div>
           </div>
 
