@@ -1,4 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+// inject slideUp animation once
+if (typeof document !== "undefined" && !document.getElementById("slide-up-css")) {
+  const s = document.createElement("style");
+  s.id = "slide-up-css";
+  s.textContent = "@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}.animate-slideUp{animation:slideUp .28s cubic-bezier(.32,.72,0,1) both}";
+  document.head.appendChild(s);
+}
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
@@ -197,6 +204,91 @@ function MatchModal({
   );
 }
 
+// ── Mobile Traveler Bottom Sheet ─────────────────────────────────
+function MobileTravelerSheet({
+  traveler, liking, onClose, onLike, onViewProfile,
+}: {
+  traveler: User;
+  liking: boolean;
+  onClose: () => void;
+  onLike: () => void;
+  onViewProfile: () => void;
+}) {
+  return (
+    <div className="absolute bottom-0 left-0 right-0 z-[600] bg-white rounded-t-3xl shadow-2xl overflow-hidden animate-slideUp"
+      style={{ maxHeight: '70vh' }}>
+      {/* Drag handle */}
+      <div className="flex justify-center pt-3 pb-1">
+        <div className="w-10 h-1 rounded-full bg-slate-200" />
+      </div>
+
+      <div className="overflow-y-auto" style={{ maxHeight: 'calc(70vh - 100px)' }}>
+        {/* Photo + info header */}
+        <div className="relative h-52 mx-4 mt-2 rounded-2xl overflow-hidden">
+          {traveler.profilePhoto ? (
+            <img src={traveler.profilePhoto} alt={traveler.fullName} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-sky-100 to-slate-200 flex items-center justify-center">
+              <span className="text-5xl">👤</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/75 via-transparent to-transparent" />
+          <button onClick={onClose}
+            className="absolute top-3 right-3 bg-black/40 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg leading-none">
+            ×
+          </button>
+          {traveler.isVerified && (
+            <span className="absolute top-3 left-3 bg-sky-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">✓ Verified</span>
+          )}
+          {traveler.isPremium && (
+            <span className="absolute top-9 left-3 bg-amber-400 text-amber-950 text-[10px] font-bold px-2.5 py-1 rounded-full">👑 Premium</span>
+          )}
+          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+            <h3 className="text-lg font-bold">
+              {traveler.fullName}{traveler.age ? `, ${traveler.age}` : ''}
+            </h3>
+            <p className="text-white/80 text-xs flex items-center gap-1">
+              📍 {traveler.location}
+            </p>
+          </div>
+        </div>
+
+        <div className="px-4 py-3">
+          {traveler.bio && (
+            <p className="text-slate-600 text-sm italic mb-3">"{traveler.bio}"</p>
+          )}
+          {traveler.travelInterests.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {traveler.travelInterests.map((i) => (
+                <span key={i} className="bg-sky-50 text-sky-700 text-xs font-medium px-2.5 py-1 rounded-full border border-sky-100">
+                  {INTEREST_EMOJI[i] ?? "📍"} {i}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-3 px-4 py-3 border-t border-slate-100 bg-white">
+        <button
+          onClick={onViewProfile}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors"
+        >
+          👤 View Profile
+        </button>
+        <button
+          onClick={onLike}
+          disabled={liking}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
+        >
+          {liking ? '...' : '❤️ Like'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────
 export default function DiscoverPeople() {
   const navigate = useNavigate();
@@ -209,6 +301,7 @@ export default function DiscoverPeople() {
   const [liking, setLiking] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
+  const [selectedMapTraveler, setSelectedMapTraveler] = useState<User | null>(null);
   const [gemMarkers, setGemMarkers] = useState<MapMarker[]>([]);
 
   // ── Match state — four independent variables ─────────────────────
@@ -376,49 +469,37 @@ export default function DiscoverPeople() {
   }
 
   // ── Like handler ──────────────────────────────────────────────────
-  const handleLike = async () => {
-    if (!currentTraveler || !user || liking || inMatchSequence) return;
+  // Core like logic — reused by both the card deck and the map bottom sheet
+  const handleLikeUser = async (traveler: User, shouldAdvance = true) => {
+    if (!user || liking || inMatchSequence) return;
 
-    console.log("[Like] ▶ START — myId:", user.id, "theirId:", currentTraveler.id);
+    console.log("[Like] ▶ START — myId:", user.id, "theirId:", traveler.id);
 
-    // Demo mode (no Supabase) — always simulate a match
     if (!isSupabaseConfigured) {
       console.log("[Like] Demo mode — simulating match");
-      startMatchSequence(currentTraveler, `demo_${Date.now()}`);
+      startMatchSequence(traveler, `demo_${Date.now()}`);
       return;
     }
 
     setLiking(true);
     try {
-      // 1. Insert the like.
-      //    ignoreDuplicates: true → generates ON CONFLICT DO NOTHING (no UPDATE needed)
-      //    This is critical: the `likes` table has INSERT but NO UPDATE RLS policy.
-      //    Without ignoreDuplicates, upsert generates ON CONFLICT DO UPDATE → RLS violation
-      //    on re-tests → likeError fires → advance() → match sequence never starts.
-      console.log("[Like] Step 1 — inserting like (ignoreDuplicates: true)");
       const { error: likeError } = await supabase
         .from("likes")
         .upsert(
-          { user_id: user.id, liked_user_id: currentTraveler.id },
+          { user_id: user.id, liked_user_id: traveler.id },
           { onConflict: "user_id,liked_user_id", ignoreDuplicates: true }
         );
 
       if (likeError) {
-        console.error("[Like] ✗ Insert failed — code:", likeError.code,
-          "| message:", likeError.message, "| details:", likeError.details,
-          "| hint:", likeError.hint, "| full:", likeError);
-        advance();
+        console.error("[Like] ✗ Insert failed:", likeError);
+        if (shouldAdvance) advance();
         return;
       }
-      console.log("[Like] Step 1 ✓ — like inserted (or already existed, ignored)");
 
-      // 2. Check if the DB trigger created a mutual match.
-      //    The trigger uses least()/greatest() on UUIDs (lexicographic), so mirror that here.
       const myId = user.id;
-      const theirId = currentTraveler.id;
+      const theirId = traveler.id;
       const minId = myId < theirId ? myId : theirId;
       const maxId = myId < theirId ? theirId : myId;
-      console.log("[Like] Step 2 — querying match (user1_id:", minId, "user2_id:", maxId, ")");
 
       const { data: matchRow, error: matchError } = await supabase
         .from("matches")
@@ -428,26 +509,32 @@ export default function DiscoverPeople() {
         .maybeSingle();
 
       if (matchError) {
-        console.error("[Like] ✗ Match query failed — code:", matchError.code,
-          "| message:", matchError.message, "| details:", matchError.details,
-          "| hint:", matchError.hint, "| full:", matchError);
-        advance();
+        console.error("[Like] ✗ Match query failed:", matchError);
+        if (shouldAdvance) advance();
         return;
       }
 
       if (matchRow?.id) {
-        console.log("[Like] Step 2 ✓ — MUTUAL MATCH found! matchId:", matchRow.id);
-        startMatchSequence(currentTraveler, matchRow.id);
+        console.log("[Like] ✓ MUTUAL MATCH found! matchId:", matchRow.id);
+        startMatchSequence(traveler, matchRow.id);
+        // Close map overlay if we matched from the map
+        setShowMapMobile(false);
+        setSelectedMapTraveler(null);
       } else {
-        console.log("[Like] Step 2 — no mutual match yet (they haven't liked back). Advancing.");
-        advance();
+        console.log("[Like] No mutual match yet.");
+        if (shouldAdvance) advance();
       }
     } catch (err) {
-      console.error("[Like] ✗ Unexpected exception:", err);
-      advance();
+      console.error("[Like] ✗ Exception:", err);
+      if (shouldAdvance) advance();
     } finally {
       setLiking(false);
     }
+  };
+
+  const handleLike = async () => {
+    if (!currentTraveler) return;
+    await handleLikeUser(currentTraveler, true);
   };
 
   const handlePass = () => {
@@ -528,6 +615,46 @@ export default function DiscoverPeople() {
         />
       )}
 
+      {/* ── Mobile fullscreen map overlay ──────────────────────────── */}
+      {showMapMobile && (
+        <div className="lg:hidden fixed inset-0 z-[9000] flex flex-col bg-black">
+          {/* Map fills the whole screen */}
+          <div className="flex-1 relative">
+            <TravelMap
+              markers={mapMarkers}
+              matchLine={matchLine}
+              onMarkerClick={(mk) => {
+                if (mk.type === 'user') {
+                  const userId = mk.id.replace('user_', '');
+                  setSelectedMapTraveler(deck.find((t) => t.id === userId) ?? null);
+                }
+              }}
+            />
+            {/* Back button */}
+            <button
+              onClick={() => { setShowMapMobile(false); setSelectedMapTraveler(null); }}
+              className="absolute top-4 left-4 z-[500] bg-white/95 rounded-full px-4 py-2 text-sm font-semibold shadow-lg flex items-center gap-1.5 text-slate-800"
+            >
+              ← Back
+            </button>
+            <div className="absolute top-4 right-4 z-[500] bg-black/55 text-white text-xs font-medium px-3 py-1.5 rounded-full">
+              {deck.length} travelers
+            </div>
+          </div>
+
+          {/* Traveler bottom sheet */}
+          {selectedMapTraveler && (
+            <MobileTravelerSheet
+              traveler={selectedMapTraveler}
+              liking={liking}
+              onClose={() => setSelectedMapTraveler(null)}
+              onLike={() => handleLikeUser(selectedMapTraveler, false)}
+              onViewProfile={() => { setShowMapMobile(false); navigate(`/profile/${selectedMapTraveler.id}`); }}
+            />
+          )}
+        </div>
+      )}
+
       <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
 
         {/* ── Left: Card deck ───────────────────────────────── */}
@@ -563,12 +690,7 @@ export default function DiscoverPeople() {
             ))}
           </div>
 
-          {/* Mobile map */}
-          {showMapMobile && (
-            <div className="lg:hidden h-56 mb-4 rounded-2xl overflow-hidden border border-slate-200 shadow">
-              <TravelMap markers={mapMarkers} matchLine={matchLine} />
-            </div>
-          )}
+
 
           {/* Loading */}
           {loading && (

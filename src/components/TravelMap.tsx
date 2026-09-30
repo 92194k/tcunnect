@@ -15,6 +15,7 @@ interface TravelMapProps {
   markers: MapMarker[];
   center?: [number, number];
   matchLine?: { fromLat: number; fromLng: number; toLat: number; toLng: number };
+  onMarkerClick?: (marker: MapMarker) => void;
 }
 
 declare global {
@@ -148,12 +149,14 @@ function makeIcon(type: "user" | "featured" | "gem", active = false, photo?: str
   });
 }
 
-export default function TravelMap({ markers, center, matchLine }: TravelMapProps) {
+export default function TravelMap({ markers, center, matchLine, onMarkerClick }: TravelMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<ReturnType<typeof window.L.map> | null>(null);
   const markersRef = useRef<Map<string, ReturnType<typeof window.L.marker>>>(new Map());
   const matchLineRef = useRef<ReturnType<typeof window.L.polyline> | null>(null);
   const gemTooltipRef = useRef<HTMLDivElement | null>(null);
+  const onMarkerClickRef = useRef(onMarkerClick);
+  useEffect(() => { onMarkerClickRef.current = onMarkerClick; }, [onMarkerClick]);
 
   // ── Filter state: null = show all; otherwise show only that type ─────────
   const [activeFilter, setActiveFilter] = useState<"user" | "gem" | null>(null);
@@ -258,6 +261,7 @@ export default function TravelMap({ markers, center, matchLine }: TravelMapProps
         const mk = L.marker([m.lat, m.lng], { icon })
           .addTo(map)
           .bindPopup(popup, { maxWidth: 200 });
+        mk.on('click', () => { if (onMarkerClickRef.current) onMarkerClickRef.current(m); });
         markersRef.current.set(m.id, mk);
 
         // ── Gem hover image preview (only for gem markers that have a photo)
