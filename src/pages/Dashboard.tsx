@@ -117,23 +117,33 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
 
       <Link
         to={`/gems/${gem.id}`}
-        className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group select-none block"
+        className="relative rounded-2xl overflow-hidden group select-none block"
+        style={{ aspectRatio: "16/9" }}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* Slide image — fade transition */}
+        {/* Blurred background — fills edges when image doesn't fill 16:9 */}
+        <img
+          key={gem.id + "-bg"}
+          src={gem.images?.[0] ?? ""}
+          alt=""
+          aria-hidden="true"
+          className={`absolute inset-0 w-full h-full object-cover scale-110 blur-xl brightness-50 transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
+        />
+
+        {/* Full image — contain so nothing is cropped */}
         <img
           key={gem.id}
           src={gem.images?.[0] ?? ""}
           alt={gem.name}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
+          className={`relative z-10 w-full h-full object-contain transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
         />
 
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/40 to-transparent" />
+        {/* Gradient overlay on bottom for text readability */}
+        <div className="absolute inset-0 z-20 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
 
         {/* Text content — left side */}
-        <div className={`absolute inset-0 flex flex-col justify-center px-6 lg:px-8 max-w-[65%] transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}>
+        <div className={`absolute inset-0 z-30 flex flex-col justify-center px-6 lg:px-8 max-w-[65%] transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}>
           <span className="inline-block bg-amber-400 text-amber-950 text-[10px] font-extrabold tracking-wider px-3 py-1 rounded-full mb-3 self-start">
             ✨ FEATURED BY TCUNNECT
           </span>
@@ -158,7 +168,7 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
         {gems.length > 1 && (
           <button
             onClick={(e) => { e.preventDefault(); prev(); }}
-            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
             aria-label="Previous"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -169,7 +179,7 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
         {gems.length > 1 && (
           <button
             onClick={(e) => { e.preventDefault(); next(); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
             aria-label="Next"
           >
             <ChevronRight className="h-5 w-5" />
@@ -178,7 +188,7 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
 
         {/* Dot indicators */}
         {gems.length > 1 && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex gap-1.5">
             {gems.map((_, i) => (
               <button
                 key={i}
