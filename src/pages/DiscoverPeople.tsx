@@ -546,15 +546,40 @@ export default function DiscoverPeople() {
   const mapMarkers = useMemo<MapMarker[]>(() => {
     const markers: MapMarker[] = [];
 
-    // ALL deck users — every profile gets a marker; only the current one is "active"
+    // Count how many travelers share each base coordinate so we can spread them out
+    const coordCount: Record<string, number> = {};
+    const coordIndex: Record<string, number> = {};
     for (const traveler of deck) {
       const coords = geocodeLocation(traveler.location);
       if (!coords) continue;
+      const key = `${coords[0]},${coords[1]}`;
+      coordCount[key] = (coordCount[key] ?? 0) + 1;
+    }
+
+    // ALL deck users — jitter duplicates so every marker is individually tappable
+    for (const traveler of deck) {
+      const coords = geocodeLocation(traveler.location);
+      if (!coords) continue;
+      const key = `${coords[0]},${coords[1]}`;
+      const idx = coordIndex[key] ?? 0;
+      coordIndex[key] = idx + 1;
+
+      // Spread duplicates in a small circle (~1–3 km radius) so they don't stack
+      let lat = coords[0];
+      let lng = coords[1];
+      if (coordCount[key] > 1) {
+        const total = coordCount[key];
+        const angle = (2 * Math.PI * idx) / total;
+        const radius = 0.018 + (idx % 3) * 0.008; // ~2–4 km jitter
+        lat += radius * Math.cos(angle);
+        lng += radius * Math.sin(angle);
+      }
+
       const isActive = traveler.id === currentTraveler?.id && !showConnectionLine;
       markers.push({
         id: `user_${traveler.id}`,
-        lat: coords[0],
-        lng: coords[1],
+        lat,
+        lng,
         type: "user",
         label: traveler.fullName,
         sublabel: traveler.location,
