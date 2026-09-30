@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
-import { ArrowRight, MapPin, Sparkles, Users, Star, TrendingUp, Loader2 } from "lucide-react";
+import { ArrowRight, MapPin, Sparkles, Users, Star, TrendingUp, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 const CATEGORY_EMOJIS: Record<string, string> = {
@@ -33,6 +33,7 @@ interface FeaturedGem {
   category: string;
   budget_level: string;
   description: string;
+  is_featured?: boolean;
 }
 
 interface TravelerCard {
@@ -63,9 +64,147 @@ function timeAgo(ts: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// ─── Featured Gem Carousel ────────────────────────────────────────────────────
+function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
+  const [idx, setIdx] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const touchStartX = useRef<number | null>(null);
+
+  const go = useCallback((next: number) => {
+    if (animating || gems.length <= 1) return;
+    setAnimating(true);
+    setTimeout(() => {
+      setIdx((next + gems.length) % gems.length);
+      setAnimating(false);
+    }, 220);
+  }, [animating, gems.length]);
+
+  const prev = () => go(idx - 1);
+  const next = () => go(idx + 1);
+
+  // Auto-advance every 4 s
+  useEffect(() => {
+    if (gems.length <= 1) return;
+    timerRef.current = setInterval(() => go(idx + 1), 4000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [idx, gems.length, go]);
+
+  // Touch swipe
+  function onTouchStart(e: React.TouchEvent) { touchStartX.current = e.touches[0].clientX; }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(dx) > 40) dx < 0 ? next() : prev();
+    touchStartX.current = null;
+  }
+
+  if (!gems.length) return null;
+  const gem = gems[idx];
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-amber-500" />
+          <h2 className="text-lg font-bold text-slate-900">Featured Gems</h2>
+        </div>
+        <Link to="/featured" className="text-sm text-sky-600 font-medium hover:text-sky-700 flex items-center gap-1">
+          See all <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      <div
+        className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group select-none"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {/* Slide image — fade transition */}
+        <img
+          key={gem.id}
+          src={gem.images?.[0] ?? ""}
+          alt={gem.name}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
+        />
+
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/40 to-transparent" />
+
+        {/* Text content — left side */}
+        <div className={`absolute inset-0 flex flex-col justify-center px-6 lg:px-8 max-w-[65%] transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}>
+          <span className="inline-block bg-amber-400 text-amber-950 text-[10px] font-extrabold tracking-wider px-3 py-1 rounded-full mb-3 self-start">
+            ✨ FEATURED BY TCUNNECT
+          </span>
+          <h3 className="text-xl lg:text-2xl font-bold text-white leading-tight mb-1">{gem.name}</h3>
+          <p className="flex items-center gap-1 text-white/80 text-sm mb-2">
+            <MapPin className="h-3.5 w-3.5 text-rose-400 shrink-0" /> {gem.location}
+          </p>
+          {gem.description && (
+            <p className="text-white/70 text-sm line-clamp-2 mb-3">{gem.description}</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+              {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
+            </span>
+            <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+              {gem.budget_level}
+            </span>
+          </div>
+        </div>
+
+        {/* Prev arrow */}
+        {gems.length > 1 && (
+          <button
+            onClick={prev}
+            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
+            aria-label="Previous"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
+
+        {/* Next / View arrow */}
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+          <Link
+            to={`/gems/${gem.id}`}
+            className="bg-white hover:bg-sky-50 text-slate-800 rounded-full h-11 w-11 flex items-center justify-center shadow-lg transition"
+            aria-label="View gem"
+          >
+            <ArrowRight className="h-5 w-5" />
+          </Link>
+          {gems.length > 1 && (
+            <button
+              onClick={next}
+              className="bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
+              aria-label="Next"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
+        {/* Dot indicators */}
+        {gems.length > 1 && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {gems.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => go(i)}
+                className={`rounded-full transition-all duration-300 ${i === idx ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/50 hover:bg-white/75"}`}
+                aria-label={`Go to slide ${i + 1}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user } = useAuthStore();
-  const [featuredGem, setFeaturedGem] = useState<FeaturedGem | null>(null);
+  const [featuredGems, setFeaturedGems] = useState<FeaturedGem[]>([]);
   const [popularGems, setPopularGems] = useState<FeaturedGem[]>([]);
   const [travelers, setTravelers] = useState<TravelerCard[]>([]);
   const [posts, setPosts] = useState<PostCard[]>([]);
@@ -82,11 +221,11 @@ export default function Dashboard() {
       const [gemsRes, travelersRes, postsRes] = await Promise.all([
         supabase
           .from("hidden_gems")
-          .select("id, name, location, category, images, budget_level, description")
+          .select("id, name, location, category, images, budget_level, description, is_featured")
           .eq("status", "approved")
           .order("is_featured", { ascending: false })
           .order("rating", { ascending: false })
-          .limit(6),
+          .limit(10),
         supabase
           .from("profiles")
           .select("id, full_name, age, location, travel_interests, profile_photo")
@@ -101,8 +240,11 @@ export default function Dashboard() {
       ]);
 
       const gems = (gemsRes.data ?? []) as FeaturedGem[];
-      setFeaturedGem(gems[0] ?? null);
-      setPopularGems(gems.slice(1, 4));
+      // Show ALL featured gems in carousel; fall back to top gems if none are marked featured
+      const featuredOnes = gems.filter(g => g.is_featured);
+      const featured = featuredOnes.length > 0 ? featuredOnes : gems.slice(0, 4);
+      setFeaturedGems(featured);
+      setPopularGems(gems.filter(g => !featured.includes(g)).slice(0, 3));
 
       setTravelers((travelersRes.data ?? []) as TravelerCard[]);
       setPosts((postsRes.data ?? []) as PostCard[]);
@@ -159,61 +301,8 @@ export default function Dashboard() {
 
         {!loading && (
           <>
-            {/* ── Featured Gem ── */}
-            {featuredGem && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-amber-500" />
-                    <h2 className="text-lg font-bold text-slate-900">Featured Gem</h2>
-                  </div>
-                  <Link to="/featured" className="text-sm text-sky-600 font-medium hover:text-sky-700 flex items-center gap-1">
-                    See all <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-
-                <div className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group">
-                  <img
-                    src={featuredGem.images?.[0] ?? ""}
-                    alt={featuredGem.name}
-                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition duration-500"
-                  />
-                  {/* left-to-right dark gradient so text on left is readable */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/40 to-transparent" />
-
-                  {/* Text content — left side */}
-                  <div className="absolute inset-0 flex flex-col justify-center px-6 lg:px-8 max-w-[65%]">
-                    <span className="inline-block bg-amber-400 text-amber-950 text-[10px] font-extrabold tracking-wider px-3 py-1 rounded-full mb-3 self-start">
-                      ✨ FEATURED BY TCUNNECT
-                    </span>
-                    <h3 className="text-xl lg:text-2xl font-bold text-white leading-tight mb-1">{featuredGem.name}</h3>
-                    <p className="flex items-center gap-1 text-white/80 text-sm mb-2">
-                      <MapPin className="h-3.5 w-3.5 text-rose-400 shrink-0" /> {featuredGem.location}
-                    </p>
-                    {featuredGem.description && (
-                      <p className="text-white/70 text-sm line-clamp-2 mb-3">{featuredGem.description}</p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
-                        {CATEGORY_EMOJIS[featuredGem.category] ?? "📍"} {featuredGem.category}
-                      </span>
-                      <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
-                        {featuredGem.budget_level}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Arrow button — right side */}
-                  <Link
-                    to={`/gems/${featuredGem.id}`}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-white hover:bg-sky-50 text-slate-800 rounded-full h-11 w-11 flex items-center justify-center shadow-lg transition"
-                    aria-label="View gem"
-                  >
-                    <ArrowRight className="h-5 w-5" />
-                  </Link>
-                </div>
-              </section>
-            )}
+            {/* ── Featured Gems Carousel ── */}
+            {featuredGems.length > 0 && <FeaturedCarousel gems={featuredGems} />}
 
             {/* ── Recommended Travelers ── */}
             {travelers.length > 0 && (
