@@ -159,6 +159,7 @@ export default function TravelMap({ markers, center, matchLine, onMarkerClick, f
   const gemTooltipRef = useRef<HTMLDivElement | null>(null);
   const onMarkerClickRef = useRef(onMarkerClick);
   useEffect(() => { onMarkerClickRef.current = onMarkerClick; }, [onMarkerClick]);
+  const [mapReady, setMapReady] = useState(false);
 
   // ── Filter state: null = show all; otherwise show only that type ─────────
   const [activeFilter, setActiveFilter] = useState<"user" | "gem" | null>(null);
@@ -197,6 +198,7 @@ export default function TravelMap({ markers, center, matchLine, onMarkerClick, f
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
       mapRef.current = map;
+      setMapReady(true);
 
       // Force Leaflet to recalculate container size after flex/fixed layouts resolve
       // Critical for mobile fullscreen overlay where flex-1 height may be 0 at mount time
@@ -325,7 +327,7 @@ export default function TravelMap({ markers, center, matchLine, onMarkerClick, f
         map.setView([12.0, 122.5], 6, { animate: true, duration: 0.8 });
       }
     }
-  }, [visibleMarkers, matchLine]);
+  }, [visibleMarkers, matchLine, mapReady]);
 
   // ── Match line animation ─────────────────────────────────────────
   useEffect(() => {
