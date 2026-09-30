@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore, createNotification } from "../stores";
-import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight, Flag, MoreHorizontal, Heart, MessageSquare } from "lucide-react";
+import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight, Flag, MoreHorizontal, Heart, MessageSquare, Crown } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 interface Comment {
@@ -134,13 +134,70 @@ function ReportPostModal({ postId, reporterId, onClose }: {
   );
 }
 
+// ─── Mystery Avatar keyframe (injected once) ──────────────────────────────────
+const MYSTERY_STYLE = `
+@keyframes tcMystery {
+  0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  50%      { box-shadow: 0 0 0 6px rgba(99,102,241,0.25), 0 0 12px 2px rgba(139,92,246,0.18); }
+}
+.tc-mystery-pulse { animation: tcMystery 2.4s ease-in-out infinite; }
+`;
+
+// ─── Plus upgrade modal (anonymous poster) ────────────────────────────────────
+function AnonymousPlusModal({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-6 text-center relative overflow-hidden">
+          {/* Decorative rings */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="h-32 w-32 rounded-full border-2 border-white/10" />
+            <div className="absolute h-48 w-48 rounded-full border border-white/5" />
+          </div>
+          <div className="relative h-16 w-16 mx-auto mb-3 rounded-full bg-white/20 flex items-center justify-center tc-mystery-pulse">
+            <span className="text-3xl font-black text-white select-none">?</span>
+          </div>
+          <h2 className="text-white font-bold text-lg relative">Mystery Traveler</h2>
+          <p className="text-white/80 text-sm mt-1 relative">TCUnnect Plus feature</p>
+        </div>
+        <div className="p-5">
+          <p className="text-slate-700 text-sm text-center mb-4">
+            Upgrade to <span className="font-bold text-indigo-600">TCUnnect Plus</span> to see who's posting and connect with travelers in the community.
+          </p>
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-center mb-4">
+            <p className="text-2xl font-bold text-indigo-700">₱30</p>
+            <p className="text-xs text-indigo-600 font-medium">Lifetime · Founding Explorer</p>
+          </div>
+          <button
+            onClick={() => { onClose(); navigate("/plans"); }}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl text-sm transition mb-2"
+          >
+            <Crown className="inline h-4 w-4 mr-1.5 -mt-0.5" />
+            Upgrade to Plus
+          </button>
+          <button onClick={onClose} className="w-full text-slate-500 text-sm py-2 hover:text-slate-700 transition">
+            Maybe later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Author Row ───────────────────────────────────────────────────────────────
-function AuthorRow({ post, currentUserId }: { post: Post; currentUserId?: string }) {
+function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
+  post: Post;
+  currentUserId?: string;
+  currentUserIsPremium?: boolean;
+}) {
   const navigate = useNavigate();
   const [liked, setLiked] = useState(false);
   const [liking, setLiking] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const isOwn = !!(currentUserId && post.user_id && currentUserId === post.user_id);
   const hasAuthor = !!(post.user_id && post.author_name);
+  const isAnonymous = !hasAuthor;
 
   const initials = post.author_name
     ? post.author_name.trim().split(/\s+/).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
@@ -162,7 +219,6 @@ function AuthorRow({ post, currentUserId }: { post: Post; currentUserId?: string
   async function handleMessage() {
     if (!currentUserId || !post.user_id || isOwn) return;
     if (!isSupabaseConfigured) return;
-    // Find or create a conversation between the two users
     const ids = [currentUserId, post.user_id].sort();
     const { data: existing } = await supabase
       .from("conversations")
@@ -170,10 +226,7 @@ function AuthorRow({ post, currentUserId }: { post: Post; currentUserId?: string
       .contains("participant_ids", ids)
       .limit(1)
       .single();
-    if (existing?.id) {
-      navigate(`/chat/${existing.id}`);
-      return;
-    }
+    if (existing?.id) { navigate(`/chat/${existing.id}`); return; }
     const { data: created } = await supabase
       .from("conversations")
       .insert({ participant_ids: ids })
@@ -182,55 +235,89 @@ function AuthorRow({ post, currentUserId }: { post: Post; currentUserId?: string
     if (created?.id) navigate(`/chat/${created.id}`);
   }
 
+  function handleMysteryClick() {
+    if (!currentUserIsPremium) setShowUpgrade(true);
+    // Plus users: do nothing — identity stays private
+  }
+
   return (
-    <div className="flex items-center gap-2 mb-3">
-      {/* Avatar */}
-      <div className="h-9 w-9 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
-        {post.author_avatar
-          ? <img src={post.author_avatar} alt="" className="h-full w-full object-cover" />
-          : initials}
-      </div>
+    <>
+      {/* Inject keyframe once */}
+      <style>{MYSTERY_STYLE}</style>
 
-      {/* Name + meta */}
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-slate-700 truncate">
-          {hasAuthor ? post.author_name : "TCUnnect Traveler"}
-        </p>
-        <p className="text-[10px] text-slate-400 flex items-center gap-1">
-          {post.location && (
-            <><MapPin className="h-2.5 w-2.5" />{post.location} · </>
+      <div className="flex items-center gap-2 mb-3">
+        {/* Avatar */}
+        {isAnonymous ? (
+          <button
+            onClick={handleMysteryClick}
+            title={currentUserIsPremium ? "Anonymous traveler" : "Unlock with Plus"}
+            className="h-9 w-9 rounded-full shrink-0 bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-sm font-black tc-mystery-pulse focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          >
+            ?
+          </button>
+        ) : (
+          <div className="h-9 w-9 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+            {post.author_avatar
+              ? <img src={post.author_avatar} alt="" className="h-full w-full object-cover" />
+              : initials}
+          </div>
+        )}
+
+        {/* Name + meta */}
+        <div className="flex-1 min-w-0">
+          {isAnonymous ? (
+            <button
+              onClick={handleMysteryClick}
+              className="flex items-center gap-1 group"
+            >
+              <p className="text-xs font-semibold text-slate-500 group-hover:text-indigo-600 transition truncate">
+                TCUnnect Traveler
+              </p>
+              {!currentUserIsPremium && (
+                <Crown className="h-3 w-3 text-amber-400 shrink-0" title="Plus: reveal poster" />
+              )}
+            </button>
+          ) : (
+            <p className="text-xs font-semibold text-slate-700 truncate">{post.author_name}</p>
           )}
-          {timeAgo(post.created_at)}
-        </p>
+          <p className="text-[10px] text-slate-400 flex items-center gap-1">
+            {post.location && (
+              <><MapPin className="h-2.5 w-2.5" />{post.location} · </>
+            )}
+            {timeAgo(post.created_at)}
+          </p>
+        </div>
+
+        {/* Message + Like — only if known author, not own post */}
+        {!isOwn && hasAuthor && currentUserId && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={handleMessage}
+              title="Send a message"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-600 text-[11px] font-semibold transition"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Message</span>
+            </button>
+            <button
+              onClick={handleLike}
+              disabled={liked || liking}
+              title={liked ? "Liked!" : "Like this traveler"}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${
+                liked
+                  ? "bg-rose-50 text-rose-500 cursor-default"
+                  : "bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500"
+              }`}
+            >
+              <Heart className={`h-3.5 w-3.5 ${liked ? "fill-current" : ""}`} />
+              <span className="hidden sm:inline">{liked ? "Liked" : "Like"}</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Message + Like — only shown if not own post and author is known */}
-      {!isOwn && hasAuthor && currentUserId && (
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={handleMessage}
-            title="Send a message"
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-600 text-[11px] font-semibold transition"
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Message</span>
-          </button>
-          <button
-            onClick={handleLike}
-            disabled={liked || liking}
-            title={liked ? "Liked!" : "Like this traveler"}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${
-              liked
-                ? "bg-rose-50 text-rose-500 cursor-default"
-                : "bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500"
-            }`}
-          >
-            <Heart className={`h-3.5 w-3.5 ${liked ? "fill-current" : ""}`} />
-            <span className="hidden sm:inline">{liked ? "Liked" : "Like"}</span>
-          </button>
-        </div>
-      )}
-    </div>
+      {showUpgrade && <AnonymousPlusModal onClose={() => setShowUpgrade(false)} />}
+    </>
   );
 }
 
@@ -329,7 +416,7 @@ function PostCard({
     <div id={post.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
       <div className="p-5">
         {/* Author row */}
-        <AuthorRow post={post} currentUserId={user?.id} />
+        <AuthorRow post={post} currentUserId={user?.id} currentUserIsPremium={user?.isPremium} />
 
         {/* Content */}
         <p className="text-sm text-slate-700 leading-relaxed mb-3">{post.content}</p>
