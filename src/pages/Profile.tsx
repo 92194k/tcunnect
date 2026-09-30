@@ -113,11 +113,11 @@ export default function Profile() {
     return (
       <AppShell>
         {/* Cover banner */}
-        <div className="relative w-full bg-slate-900" style={{ aspectRatio: "3/1" }}>
+        <div className="relative w-full h-48 sm:h-56 bg-slate-900 overflow-hidden">
           <img
             src={otherProfile.coverPhoto || DEFAULT_COVER}
             alt="Cover"
-            className="w-full h-full object-contain"
+            className="absolute inset-0 w-full h-full object-cover"
           />
         </div>
 
@@ -315,11 +315,11 @@ export default function Profile() {
       )}
 
       {/* ── Cover Banner ─────────────────────────────────────── */}
-      <div className="relative w-full bg-slate-900" style={{ aspectRatio: "3/1" }}>
+      <div className="relative w-full h-48 sm:h-56 bg-slate-900 overflow-hidden">
         <img
           src={coverPhoto || DEFAULT_COVER}
           alt="Cover"
-          className="w-full h-full object-contain"
+          className="absolute inset-0 w-full h-full object-cover"
         />
         <button
           onClick={() => bgInputRef.current?.click()}
