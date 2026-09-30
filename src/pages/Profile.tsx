@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
-import { MapPin, Edit2, Check, X, Camera, Crown, Shield, Loader2, ImagePlus } from "lucide-react";
+import { MapPin, Edit2, Check, X, Camera, Crown, Shield, Loader2 } from "lucide-react";
 import type { TravelInterest } from "../types";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -19,11 +19,9 @@ const PH_CITIES = [
   "Antipolo", "Mandaluyong", "Pasay", "Las Piñas", "Muntinlupa",
 ];
 
-const DEFAULT_COVER = "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=1200&q=80";
-
 interface OtherProfile {
   id: string; fullName: string; age?: number; bio: string;
-  location: string; profilePhoto: string; coverPhoto?: string;
+  location: string; profilePhoto: string;
   travelInterests: string[]; isVerified: boolean; isPremium: boolean;
 }
 
@@ -44,10 +42,6 @@ export default function Profile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
 
-  // ── Cover photo upload ──────────────────────────────────────
-  const bgInputRef = useRef<HTMLInputElement>(null);
-  const [coverPhoto, setCoverPhoto] = useState<string>("");
-  const [coverUploading, setCoverUploading] = useState(false);
 
   // ── Delete modal ────────────────────────────────────────────
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -60,19 +54,6 @@ export default function Profile() {
   const [otherNotFound, setOtherNotFound] = useState(false);
 
   const isViewingOther = !!userId && userId !== user?.id;
-
-  // Load own cover photo from DB on mount
-  useEffect(() => {
-    if (isViewingOther || !user || !isSupabaseConfigured) return;
-    supabase
-      .from("profiles")
-      .select("cover_photo")
-      .eq("id", user.id)
-      .single()
-      .then(({ data }) => {
-        if (data?.cover_photo) setCoverPhoto(data.cover_photo);
-      });
-  }, [user?.id, isViewingOther]);
 
   useEffect(() => {
     if (!isViewingOther) return;
@@ -87,7 +68,7 @@ export default function Profile() {
 
     supabase
       .from("profiles")
-      .select("id, full_name, age, bio, location, profile_photo, cover_photo, travel_interests, is_verified, is_premium")
+      .select("id, full_name, age, bio, location, profile_photo, travel_interests, is_verified, is_premium")
       .eq("id", userId)
       .single()
       .then(({ data }) => {
@@ -100,7 +81,6 @@ export default function Profile() {
             bio: data.bio ?? "",
             location: data.location ?? "Philippines",
             profilePhoto: data.profile_photo ?? "",
-            coverPhoto: data.cover_photo ?? "",
             travelInterests: data.travel_interests ?? [],
             isVerified: Boolean(data.is_verified),
             isPremium: Boolean(data.is_premium),
@@ -109,51 +89,6 @@ export default function Profile() {
         setOtherLoading(false);
       });
   }, [userId, isViewingOther]);
-
-  // ── Cover photo upload handler ──────────────────────────────
-  const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    setCoverUploading(true);
-    try {
-      if (!isSupabaseConfigured) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          setCoverPhoto(reader.result as string);
-          setCoverUploading(false);
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `cover-${user.id}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(path, file, { upsert: true, contentType: file.type });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
-
-      // Save to profiles table
-      const { error: dbError } = await supabase
-        .from("profiles")
-        .update({ cover_photo: publicUrl })
-        .eq("id", user.id);
-
-      if (dbError) throw dbError;
-
-      setCoverPhoto(`${publicUrl}?t=${Date.now()}`);
-    } catch (err: any) {
-      console.error("Cover upload failed — bucket: avatars, path: cover-" + user?.id, err);
-      alert("Cover upload failed: " + (err?.message ?? String(err)));
-    } finally {
-      setCoverUploading(false);
-      if (bgInputRef.current) bgInputRef.current.value = "";
-    }
-  };
 
   // ── Viewing someone else's profile ──────────────────────────
   if (isViewingOther) {
@@ -169,38 +104,25 @@ export default function Profile() {
     );
     return (
       <AppShell>
-        {/* Cover banner — full width */}
-        <div className="relative h-52 w-full overflow-hidden">
-          <img
-            src={otherProfile.coverPhoto || DEFAULT_COVER}
-            alt="Cover"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-        </div>
-
-        <div className="max-w-lg mx-auto pb-6">
-          {/* Avatar — overlapping cover */}
-          <div className="px-4 -mt-12 mb-4 flex items-end gap-4">
-            <div className="relative shrink-0">
+        <div className="max-w-lg mx-auto px-4 py-6">
+          <div className="text-center mb-6">
+            <div className="relative inline-block mb-4">
               {otherProfile.profilePhoto
                 ? <img src={otherProfile.profilePhoto} alt={otherProfile.fullName} className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-lg" />
                 : <div className="h-24 w-24 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg border-4 border-white">{otherProfile.fullName[0]}</div>
               }
               {otherProfile.isVerified && <span className="absolute bottom-0 right-0 bg-sky-600 rounded-full p-1.5"><Shield className="h-3.5 w-3.5 text-white" /></span>}
             </div>
-            <div className="mb-2">
-              <h1 className="text-xl font-bold text-slate-900 flex items-center gap-1.5">
-                {otherProfile.fullName}{otherProfile.age ? `, ${otherProfile.age}` : ""}
-                {otherProfile.isPremium && <Crown className="h-4.5 w-4.5 text-amber-500" />}
-              </h1>
-              <p className="flex items-center gap-1 text-slate-500 text-sm mt-0.5">
-                <MapPin className="h-3.5 w-3.5 text-rose-400 shrink-0" /> {otherProfile.location}
-              </p>
-            </div>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center justify-center gap-2">
+              {otherProfile.fullName}{otherProfile.age ? `, ${otherProfile.age}` : ""}
+              {otherProfile.isPremium && <Crown className="h-5 w-5 text-amber-500" />}
+            </h1>
+            <p className="flex items-center justify-center gap-1 text-slate-500 text-sm mt-1">
+              <MapPin className="h-3.5 w-3.5 text-rose-400" /> {otherProfile.location}
+            </p>
           </div>
 
-          <div className="px-4 space-y-4">
+          <div className="space-y-4">
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">About</h3>
               <p className="text-slate-700 text-sm">{otherProfile.bio || <span className="italic text-slate-400">No bio yet</span>}</p>
@@ -344,40 +266,10 @@ export default function Profile() {
         </div>
       )}
 
-      {/* ── Cover Photo Banner — full width, outside container ── */}
-      <div className="relative h-52 w-full overflow-hidden">
-        <img
-          src={coverPhoto || DEFAULT_COVER}
-          alt="Cover"
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-
-        {/* Change cover button */}
-        <button
-          onClick={() => bgInputRef.current?.click()}
-          disabled={coverUploading}
-          className="absolute bottom-3 right-4 flex items-center gap-1.5 bg-black/50 hover:bg-black/70 backdrop-blur-sm text-white text-xs font-medium px-3 py-1.5 rounded-full transition disabled:opacity-50"
-        >
-          {coverUploading
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : <ImagePlus className="h-3.5 w-3.5" />
-          }
-          {coverUploading ? "Uploading…" : "Change Cover"}
-        </button>
-        <input
-          ref={bgInputRef}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={handleCoverChange}
-        />
-      </div>
-
-      <div className="max-w-lg mx-auto pb-6">
-        {/* ── Avatar — overlapping cover ────────────────────── */}
-        <div className="px-4 -mt-12 mb-4 flex items-end gap-4">
-          <div className="relative shrink-0">
+      <div className="max-w-lg mx-auto px-4 py-6">
+        {/* ── Avatar ──────────────────────────────────────── */}
+        <div className="text-center mb-6">
+          <div className="relative inline-block mb-4">
             <div className="h-24 w-24 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg overflow-hidden border-4 border-white">
               {photoUploading
                 ? <Loader2 className="h-8 w-8 animate-spin text-white/80" />
@@ -400,22 +292,20 @@ export default function Profile() {
               onChange={handlePhotoChange}
             />
           </div>
-          <div className="mb-2">
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-1.5">
-              {user?.fullName}
-              {user?.isPremium && <Crown className="h-4.5 w-4.5 text-amber-500" />}
-              {user?.isVerified && <Shield className="h-4 w-4 text-sky-600" />}
-            </h1>
-            <p className="text-slate-500 text-sm">{user?.email}</p>
-            {user?.isPremium && (
-              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full mt-1">
-                <Crown className="h-3 w-3" /> Premium Member
-              </span>
-            )}
-          </div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center justify-center gap-2">
+            {user?.fullName}
+            {user?.isPremium && <Crown className="h-5 w-5 text-amber-500" />}
+            {user?.isVerified && <Shield className="h-4 w-4 text-sky-600" />}
+          </h1>
+          <p className="text-slate-500 text-sm">{user?.email}</p>
+          {user?.isPremium && (
+            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full mt-2">
+              <Crown className="h-3 w-3" /> Premium Member
+            </span>
+          )}
         </div>
 
-        <div className="px-4">
+        <div>
           {/* ── Edit / View ──────────────────────────────────── */}
           {!editing ? (
             <>
