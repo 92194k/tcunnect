@@ -113,16 +113,16 @@ export default function Profile() {
     return (
       <AppShell>
         {/* Cover banner */}
-        <div className="relative w-full h-48 sm:h-56 bg-slate-900 overflow-hidden">
+        <div className="relative w-full h-64 sm:h-72 bg-slate-900 overflow-hidden">
           <img
             src={otherProfile.coverPhoto || DEFAULT_COVER}
             alt="Cover"
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover object-top"
           />
         </div>
 
         <div className="max-w-lg mx-auto px-4 py-6">
-          <div className="text-center mb-6 -mt-12">
+          <div className="text-center mb-6 -mt-14">
             <div className="relative inline-block mb-4">
               {otherProfile.profilePhoto
                 ? <img src={otherProfile.profilePhoto} alt={otherProfile.fullName} className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-lg" />
@@ -315,11 +315,11 @@ export default function Profile() {
       )}
 
       {/* ── Cover Banner ─────────────────────────────────────── */}
-      <div className="relative w-full h-48 sm:h-56 bg-slate-900 overflow-hidden">
+      <div className="relative w-full h-64 sm:h-72 bg-slate-900 overflow-hidden">
         <img
           src={coverPhoto || DEFAULT_COVER}
           alt="Cover"
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover object-top"
         />
         <button
           onClick={() => bgInputRef.current?.click()}
@@ -336,7 +336,7 @@ export default function Profile() {
 
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* ── Avatar ──────────────────────────────────────── */}
-        <div className="text-center mb-6 -mt-10">
+        <div className="text-center mb-6 -mt-14">
           <div className="relative inline-block mb-4">
             <div className="h-24 w-24 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg overflow-hidden border-4 border-white">
               {photoUploading
