@@ -198,6 +198,11 @@ export default function TravelMap({ markers, center, matchLine, onMarkerClick, f
       L.control.zoom({ position: "bottomright" }).addTo(map);
       mapRef.current = map;
 
+      // Force Leaflet to recalculate container size after flex/fixed layouts resolve
+      // Critical for mobile fullscreen overlay where flex-1 height may be 0 at mount time
+      setTimeout(() => { try { map.invalidateSize(); } catch (_) {} }, 50);
+      setTimeout(() => { try { map.invalidateSize(); } catch (_) {} }, 250);
+
       // ── Gem hover tooltip div (added to map container, positioned absolutely)
       if (containerRef.current && !gemTooltipRef.current) {
         const tip = document.createElement("div");
