@@ -43,6 +43,7 @@ interface TravelerCard {
   location: string;
   travel_interests: string[];
   profile_photo: string;
+  cover_photo?: string;
 }
 
 interface PostCard {
@@ -114,8 +115,9 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
         </Link>
       </div>
 
-      <div
-        className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group select-none"
+      <Link
+        to={`/gems/${gem.id}`}
+        className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group select-none block"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -155,7 +157,7 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
         {/* Prev arrow */}
         {gems.length > 1 && (
           <button
-            onClick={prev}
+            onClick={(e) => { e.preventDefault(); prev(); }}
             className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
             aria-label="Previous"
           >
@@ -163,25 +165,16 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
           </button>
         )}
 
-        {/* Next / View arrow */}
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2">
-          <Link
-            to={`/gems/${gem.id}`}
-            className="bg-white hover:bg-sky-50 text-slate-800 rounded-full h-11 w-11 flex items-center justify-center shadow-lg transition"
-            aria-label="View gem"
+        {/* Next arrow */}
+        {gems.length > 1 && (
+          <button
+            onClick={(e) => { e.preventDefault(); next(); }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
+            aria-label="Next"
           >
-            <ArrowRight className="h-5 w-5" />
-          </Link>
-          {gems.length > 1 && (
-            <button
-              onClick={next}
-              className="bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
-              aria-label="Next"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          )}
-        </div>
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        )}
 
         {/* Dot indicators */}
         {gems.length > 1 && (
@@ -189,14 +182,14 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
             {gems.map((_, i) => (
               <button
                 key={i}
-                onClick={() => go(i)}
+                onClick={(e) => { e.preventDefault(); go(i); }}
                 className={`rounded-full transition-all duration-300 ${i === idx ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/50 hover:bg-white/75"}`}
                 aria-label={`Go to slide ${i + 1}`}
               />
             ))}
           </div>
         )}
-      </div>
+      </Link>
     </section>
   );
 }
@@ -228,7 +221,7 @@ export default function Dashboard() {
           .limit(10),
         supabase
           .from("profiles")
-          .select("id, full_name, age, location, travel_interests, profile_photo")
+          .select("id, full_name, age, location, travel_interests, profile_photo, cover_photo")
           .neq("id", user?.id ?? "")
           .not("travel_interests", "eq", "{}")
           .limit(4),
@@ -321,7 +314,8 @@ export default function Dashboard() {
                 <div className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
                   {travelers.map((t) => {
                     const primaryInterest = (t.travel_interests ?? [])[0];
-                    const bgImage = INTEREST_BG[primaryInterest] ?? DEFAULT_TRAVELER_BG;
+                    // Use the traveler's own cover photo if set, else fall back to interest image
+                    const bgImage = t.cover_photo || INTEREST_BG[primaryInterest] || DEFAULT_TRAVELER_BG;
                     return (
                       <Link
                         key={t.id}
@@ -352,10 +346,10 @@ export default function Dashboard() {
                               <img
                                 src={t.profile_photo}
                                 alt={t.full_name}
-                                className="h-9 w-9 rounded-full object-cover border-2 border-white shadow"
+                                className="h-14 w-14 rounded-full object-cover border-2 border-white shadow"
                               />
                             ) : (
-                              <div className="h-9 w-9 rounded-full bg-sky-500 border-2 border-white shadow flex items-center justify-center text-white font-bold text-sm">
+                              <div className="h-14 w-14 rounded-full bg-sky-500 border-2 border-white shadow flex items-center justify-center text-white font-bold text-lg">
                                 {t.full_name?.[0] ?? "?"}
                               </div>
                             )}
