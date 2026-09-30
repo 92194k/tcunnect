@@ -117,30 +117,20 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
 
       <Link
         to={`/gems/${gem.id}`}
-        className="relative rounded-2xl overflow-hidden group select-none block"
-        style={{ aspectRatio: "16/9" }}
+        className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group select-none block"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* Blurred background — fills edges when image doesn't fill 16:9 */}
-        <img
-          key={gem.id + "-bg"}
-          src={gem.images?.[0] ?? ""}
-          alt=""
-          aria-hidden="true"
-          className={`absolute inset-0 w-full h-full object-cover scale-110 blur-xl brightness-50 transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
-        />
-
-        {/* Full image — contain so nothing is cropped */}
+        {/* Slide image — fade transition */}
         <img
           key={gem.id}
           src={gem.images?.[0] ?? ""}
           alt={gem.name}
-          className={`relative z-10 w-full h-full object-contain transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
         />
 
-        {/* Gradient overlay on bottom for text readability */}
-        <div className="absolute inset-0 z-20 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/40 to-transparent" />
 
         {/* Text content — left side */}
         <div className={`absolute inset-0 z-30 flex flex-col justify-center px-6 lg:px-8 max-w-[65%] transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}>
