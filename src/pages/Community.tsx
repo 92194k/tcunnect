@@ -137,21 +137,37 @@ function ReportPostModal({ postId, reporterId, onClose }: {
 
 // ─── Mystery Avatar keyframe (injected once) ──────────────────────────────────
 const MYSTERY_STYLE = `
-@keyframes tcMystery {
-  0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
-  50%      { box-shadow: 0 0 0 6px rgba(99,102,241,0.25), 0 0 12px 2px rgba(139,92,246,0.18); }
+@keyframes tcMysteryPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(99,102,241,0); }
+  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
 }
-.tc-mystery-pulse { animation: tcMystery 2.4s ease-in-out infinite; }
+@keyframes tcMysteryRing {
+  0%   { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.tc-mystery-pulse {
+  animation: tcMysteryPulse 1.8s ease-out infinite;
+  position: relative;
+}
+.tc-mystery-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgba(99,102,241,0.35);
+  animation: tcMysteryRing 1.8s ease-out infinite;
+  pointer-events: none;
+}
 `;
 
 // ─── Plus upgrade modal (anonymous poster) ────────────────────────────────────
-function AnonymousPlusModal({ onClose }: { onClose: () => void }) {
+function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPlusUser?: boolean }) {
   const navigate = useNavigate();
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-6 text-center relative overflow-hidden">
-          {/* Decorative rings */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="h-32 w-32 rounded-full border-2 border-white/10" />
             <div className="absolute h-48 w-48 rounded-full border border-white/5" />
@@ -162,25 +178,39 @@ function AnonymousPlusModal({ onClose }: { onClose: () => void }) {
           <h2 className="text-white font-bold text-lg relative">Posted Anonymously</h2>
           <p className="text-white/80 text-sm mt-1 relative">This traveler chose to stay private</p>
         </div>
-        <div className="p-5">
-          <p className="text-slate-700 text-sm text-center mb-4">
-            Upgrade to <span className="font-bold text-indigo-600">TCUnnect Plus</span> to reveal <span className="font-semibold">your own identity</span> on your community posts — let fellow travelers know it was you.
-          </p>
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-center mb-4">
-            <p className="text-2xl font-bold text-indigo-700">₱30</p>
-            <p className="text-xs text-indigo-600 font-medium">Lifetime · Founding Explorer</p>
+
+        {isPlusUser ? (
+          /* Plus user — they already have Plus, poster just chose to stay anonymous */
+          <div className="p-5 text-center">
+            <p className="text-slate-700 text-sm mb-5">
+              This traveler is a <span className="font-bold text-indigo-600">TCUnnect Plus</span> member who chose to keep their identity hidden on this post. Their privacy is respected. 🕵️
+            </p>
+            <button onClick={onClose} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl text-sm transition">
+              Got it
+            </button>
           </div>
-          <button
-            onClick={() => { onClose(); navigate("/plans"); }}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl text-sm transition mb-2"
-          >
-            <Crown className="inline h-4 w-4 mr-1.5 -mt-0.5" />
-            Upgrade to Plus
-          </button>
-          <button onClick={onClose} className="w-full text-slate-500 text-sm py-2 hover:text-slate-700 transition">
-            Maybe later
-          </button>
-        </div>
+        ) : (
+          /* Free user — upgrade pitch */
+          <div className="p-5">
+            <p className="text-slate-700 text-sm text-center mb-4">
+              Upgrade to <span className="font-bold text-indigo-600">TCUnnect Plus</span> to reveal <span className="font-semibold">your own identity</span> on your community posts — let fellow travelers know it was you.
+            </p>
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-center mb-4">
+              <p className="text-2xl font-bold text-indigo-700">₱30</p>
+              <p className="text-xs text-indigo-600 font-medium">Lifetime · Founding Explorer</p>
+            </div>
+            <button
+              onClick={() => { onClose(); navigate("/plans"); }}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl text-sm transition mb-2 flex items-center justify-center gap-1.5"
+            >
+              <Crown className="h-4 w-4" />
+              Upgrade to Plus
+            </button>
+            <button onClick={onClose} className="w-full text-slate-500 text-sm py-2 hover:text-slate-700 transition">
+              Maybe later
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -282,7 +312,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
                 TCUnnect Traveler
               </p>
               {!currentUserIsPremium && (
-                <Crown className="h-3 w-3 text-amber-400 shrink-0" title="Upgrade to Plus to reveal your identity" />
+                <Crown className="h-3 w-3 text-amber-400 shrink-0" aria-label="Upgrade to Plus to reveal your identity" />
               )}
             </button>
           ) : isOwn ? (
@@ -331,7 +361,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
         )}
       </div>
 
-      {showUpgrade && <AnonymousPlusModal onClose={() => setShowUpgrade(false)} />}
+      {showUpgrade && <AnonymousPlusModal onClose={() => setShowUpgrade(false)} isPlusUser={currentUserIsPremium} />}
     </>
   );
 }
@@ -759,12 +789,13 @@ export default function Community() {
     const authorIds = [...new Set(posts.map((p: any) => p.user_id).filter(Boolean))];
     let profileMap: Record<string, { full_name: string | null; avatar_url: string | null }> = {};
     if (authorIds.length > 0) {
-      const { data: profileRows } = await supabase
+      const { data: profileRows, error: profileErr } = await supabase
         .from("profiles")
-        .select("id, full_name, avatar_url")
+        .select("id, full_name, profile_photo")
         .in("id", authorIds);
+      if (profileErr) console.error("[Community] profiles fetch error:", profileErr);
       for (const pr of profileRows ?? []) {
-        profileMap[pr.id] = { full_name: pr.full_name, avatar_url: pr.avatar_url };
+        profileMap[pr.id] = { full_name: pr.full_name, avatar_url: pr.profile_photo ?? null };
       }
     }
 
