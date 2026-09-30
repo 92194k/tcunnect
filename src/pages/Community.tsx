@@ -26,6 +26,7 @@ interface Post {
   upvoted?: boolean;
   author_name?: string | null;
   author_avatar?: string | null;
+  reveal_identity?: boolean;
 }
 
 function timeAgo(ts: string): string {
@@ -158,12 +159,12 @@ function AnonymousPlusModal({ onClose }: { onClose: () => void }) {
           <div className="relative h-16 w-16 mx-auto mb-3 rounded-full bg-white/20 flex items-center justify-center tc-mystery-pulse">
             <span className="text-3xl font-black text-white select-none">?</span>
           </div>
-          <h2 className="text-white font-bold text-lg relative">Mystery Traveler</h2>
-          <p className="text-white/80 text-sm mt-1 relative">TCUnnect Plus feature</p>
+          <h2 className="text-white font-bold text-lg relative">Posted Anonymously</h2>
+          <p className="text-white/80 text-sm mt-1 relative">This traveler chose to stay private</p>
         </div>
         <div className="p-5">
           <p className="text-slate-700 text-sm text-center mb-4">
-            Upgrade to <span className="font-bold text-indigo-600">TCUnnect Plus</span> to see who's posting and connect with travelers in the community.
+            Upgrade to <span className="font-bold text-indigo-600">TCUnnect Plus</span> to reveal <span className="font-semibold">your own identity</span> on your community posts — let fellow travelers know it was you.
           </p>
           <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-center mb-4">
             <p className="text-2xl font-bold text-indigo-700">₱30</p>
@@ -197,7 +198,9 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const isOwn = !!(currentUserId && post.user_id && currentUserId === post.user_id);
   const hasAuthor = !!(post.user_id && post.author_name);
-  const showRealIdentity = hasAuthor && !!(currentUserIsPremium || isOwn);
+  // Identity is revealed only when the POSTER explicitly chose to reveal it (Plus feature)
+  // Own posts always show your own identity regardless of reveal choice
+  const showRealIdentity = (!!post.reveal_identity && hasAuthor) || isOwn;
   const isAnonymous = !showRealIdentity;
 
   const initials = post.author_name
@@ -237,8 +240,9 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
   }
 
   function handleMysteryClick() {
-    if (!currentUserIsPremium) setShowUpgrade(true);
-    // Plus users: do nothing — identity stays private
+    // Show the modal for everyone — for free users it's an upgrade pitch,
+    // for Plus users it explains the poster chose to stay anonymous
+    setShowUpgrade(true);
   }
 
   return (
@@ -257,11 +261,14 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
             ?
           </button>
         ) : (
-          <div className="h-9 w-9 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+          <button
+            onClick={() => !isOwn && post.user_id && navigate(`/profile/${post.user_id}`)}
+            className={`h-9 w-9 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold ${!isOwn && post.user_id ? "cursor-pointer hover:ring-2 hover:ring-sky-400 transition" : "cursor-default"}`}
+          >
             {post.author_avatar
               ? <img src={post.author_avatar} alt="" className="h-full w-full object-cover" />
               : initials}
-          </div>
+          </button>
         )}
 
         {/* Name + meta */}
@@ -275,11 +282,18 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
                 TCUnnect Traveler
               </p>
               {!currentUserIsPremium && (
-                <Crown className="h-3 w-3 text-amber-400 shrink-0" title="Plus: reveal poster" />
+                <Crown className="h-3 w-3 text-amber-400 shrink-0" title="Upgrade to Plus to reveal your identity" />
               )}
             </button>
-          ) : (
+          ) : isOwn ? (
             <p className="text-xs font-semibold text-slate-700 truncate">{post.author_name}</p>
+          ) : (
+            <button
+              onClick={() => post.user_id && navigate(`/profile/${post.user_id}`)}
+              className="text-xs font-semibold text-sky-600 hover:text-sky-700 transition truncate text-left"
+            >
+              {post.author_name}
+            </button>
           )}
           <p className="text-[10px] text-slate-400 flex items-center gap-1">
             {post.location && (
@@ -289,8 +303,8 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
           </p>
         </div>
 
-        {/* Message + Like — only if known author, not own post */}
-        {!isOwn && hasAuthor && currentUserId && (
+        {/* Message + Like — only if poster revealed identity, and not own post */}
+        {!isOwn && showRealIdentity && currentUserId && (
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={handleMessage}
@@ -712,6 +726,7 @@ export default function Community() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [revealIdentity, setRevealIdentity] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -728,7 +743,7 @@ export default function Community() {
     // Step 1 — fetch posts (no join, avoids PostgREST FK-resolution issues)
     const { data: rawPosts, error: postsErr } = await supabase
       .from("posts")
-      .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at")
+      .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at, reveal_identity")
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -803,6 +818,7 @@ export default function Community() {
     setShowModal(false);
     setContent("");
     setLocation("");
+    setRevealIdentity(false);
     clearImage();
   }
 
@@ -850,10 +866,11 @@ export default function Community() {
       };
       setPosts([post, ...posts]);
     } else {
+      const shouldReveal = !!(user.isPremium && revealIdentity);
       const { data } = await supabase
         .from("posts")
-        .insert({ user_id: user.id, content, location: location || "", image_url: imageUrl })
-        .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at")
+        .insert({ user_id: user.id, content, location: location || "", image_url: imageUrl, reveal_identity: shouldReveal })
+        .select("id, user_id, content, location, upvotes, comment_count, image_url, created_at, reveal_identity")
         .single();
 
       if (data) setPosts([{
@@ -938,9 +955,39 @@ export default function Community() {
               {imageFile ? "Change photo" : "Add a photo"}
             </button>
 
-            <div className="flex gap-2 text-xs text-slate-500 mb-4 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-              🕵️ Posts are anonymous — your name won't be shown
-            </div>
+            {user?.isPremium ? (
+              /* Plus users: reveal identity toggle */
+              <button
+                type="button"
+                onClick={() => setRevealIdentity((v) => !v)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition mb-4 text-left ${
+                  revealIdentity
+                    ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                    : "border-slate-200 bg-slate-50 text-slate-600"
+                }`}
+              >
+                <div className={`h-5 w-5 rounded-full flex items-center justify-center shrink-0 border-2 transition ${
+                  revealIdentity ? "border-indigo-500 bg-indigo-500" : "border-slate-300 bg-white"
+                }`}>
+                  {revealIdentity && <span className="text-white text-[10px] font-black">✓</span>}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold">
+                    {revealIdentity ? `Post as ${user.fullName}` : "Post anonymously"}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {revealIdentity
+                      ? "Other travelers will see your name and profile"
+                      : "Your name won't be shown · TCUnnect Plus — toggle to reveal"}
+                  </p>
+                </div>
+                <Crown className="h-4 w-4 text-amber-400 ml-auto shrink-0" />
+              </button>
+            ) : (
+              <div className="flex gap-2 text-xs text-slate-500 mb-4 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                🕵️ Posts are anonymous — your name won't be shown
+              </div>
+            )}
 
             <button
               onClick={submitPost}
@@ -948,7 +995,7 @@ export default function Community() {
               className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl transition flex items-center justify-center gap-2"
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Post Anonymously
+              {user?.isPremium && revealIdentity ? `Post as ${user.fullName}` : "Post Anonymously"}
             </button>
           </div>
         </div>
@@ -986,7 +1033,7 @@ export default function Community() {
               onClick={() => setShowModal(true)}
               className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold px-5 py-2.5 rounded-full transition"
             >
-              Post Anonymously
+              Share Something
             </button>
           </div>
         )}
@@ -1000,7 +1047,7 @@ export default function Community() {
         )}
 
         <div className="mt-8 text-center text-xs text-slate-400">
-          🕵️ All posts are anonymous to protect privacy
+          🕵️ Posts are anonymous by default · <span className="text-indigo-400 font-medium">Plus</span> members can choose to reveal their identity
         </div>
       </div>
     </AppShell>
