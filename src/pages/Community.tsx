@@ -197,7 +197,8 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const isOwn = !!(currentUserId && post.user_id && currentUserId === post.user_id);
   const hasAuthor = !!(post.user_id && post.author_name);
-  const isAnonymous = !hasAuthor;
+  const showRealIdentity = hasAuthor && !!(currentUserIsPremium || isOwn);
+  const isAnonymous = !showRealIdentity;
 
   const initials = post.author_name
     ? post.author_name.trim().split(/\s+/).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
