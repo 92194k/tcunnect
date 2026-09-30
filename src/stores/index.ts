@@ -52,6 +52,7 @@ function profileToUser(profile: Record<string, unknown>): User {
     bio: (profile.bio as string) || "",
     location: (profile.location as string) || "",
     profilePhoto: (profile.profile_photo as string) || "",
+    coverPhoto: (profile.cover_photo as string) || "",
     travelInterests: (profile.travel_interests as User["travelInterests"]) || [],
     createdAt: profile.created_at as string,
     isPremium: Boolean(profile.is_premium),

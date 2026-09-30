@@ -13,6 +13,7 @@ export interface User {
   bio: string;
   location: string;
   profilePhoto: string;
+  coverPhoto?: string;
   travelInterests: TravelInterest[];
   createdAt: string;
   isPremium: boolean;
