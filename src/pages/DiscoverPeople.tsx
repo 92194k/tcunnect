@@ -110,16 +110,6 @@ const INTEREST_EMOJI: Record<string, string> = {
   "Couple Getaways": "💑", "Group Trips": "👥", "Budget Travel": "💰",
 };
 
-const FILTER_CHIPS = [
-  { label: "Beach", emoji: "🏖" },
-  { label: "Mountain", emoji: "🏔" },
-  { label: "Nature", emoji: "🌿" },
-  { label: "Food", emoji: "🍜" },
-  { label: "Heritage", emoji: "🏛" },
-  { label: "Cafe", emoji: "☕" },
-  { label: "Waterfalls", emoji: "💦" },
-  { label: "City", emoji: "🌆" },
-];
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -301,7 +291,6 @@ export default function DiscoverPeople() {
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [liking, setLiking] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showMapMobile, setShowMapMobile] = useState(false);
   const [selectedMapTraveler, setSelectedMapTraveler] = useState<User | null>(null);
   const [gemMarkers, setGemMarkers] = useState<MapMarker[]>([]);
@@ -323,9 +312,9 @@ export default function DiscoverPeople() {
 
   // ── Fetch profiles ───────────────────────────────────────────────
   useEffect(() => {
-    fetchPeople(activeFilter);
+    fetchPeople(null);
     fetchAllForMap();
-  }, [activeFilter, user?.id]);
+  }, [user?.id]);
 
   // ── Fetch hidden gem markers (once) ──────────────────────────────
   useEffect(() => {
@@ -728,7 +717,7 @@ export default function DiscoverPeople() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-xl font-bold text-slate-900">Find Your Travel People</h1>
-              <p className="text-slate-500 text-xs mt-0.5">Meet Filipinos who share your interests</p>
+              <p className="text-slate-500 text-xs mt-0.5">Meet Filipinos who love to travel</p>
             </div>
             <button
               onClick={() => setShowMapMobile((v) => !v)}
@@ -737,24 +726,6 @@ export default function DiscoverPeople() {
               <Map className="h-3.5 w-3.5" /> Map
             </button>
           </div>
-
-          {/* Filter chips */}
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-4">
-            {FILTER_CHIPS.map(({ label, emoji }) => (
-              <button
-                key={label}
-                onClick={() => setActiveFilter(activeFilter === label ? null : label)}
-                className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs font-medium transition ${
-                  activeFilter === label
-                    ? "border-sky-500 bg-sky-50 text-sky-700"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-sky-400 hover:text-sky-700"
-                }`}
-              >
-                {emoji} {label}
-              </button>
-            ))}
-          </div>
-
 
 
           {/* Loading */}
@@ -768,21 +739,8 @@ export default function DiscoverPeople() {
           {!loading && !currentTraveler && (
             <div className="text-center py-16">
               <div className="text-5xl mb-4">🌏</div>
-              <h3 className="font-semibold text-slate-700 mb-1">
-                {activeFilter
-                  ? `No travelers with "${activeFilter}" interest yet`
-                  : "No travelers found yet"}
-              </h3>
-              <p className="text-slate-400 text-sm mb-4">
-                {activeFilter
-                  ? "Try a different filter or check back later."
-                  : "Be the first to invite friends to TCUnnect!"}
-              </p>
-              {activeFilter && (
-                <button onClick={() => setActiveFilter(null)} className="text-sky-600 text-sm font-medium hover:underline">
-                  Clear filter
-                </button>
-              )}
+              <h3 className="font-semibold text-slate-700 mb-1">No travelers found yet</h3>
+              <p className="text-slate-400 text-sm mb-4">Be the first to invite friends to TCUnnect!</p>
             </div>
           )}
 
