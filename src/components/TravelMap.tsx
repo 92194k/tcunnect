@@ -16,6 +16,8 @@ interface TravelMapProps {
   center?: [number, number];
   matchLine?: { fromLat: number; fromLng: number; toLat: number; toLng: number };
   onMarkerClick?: (marker: MapMarker) => void;
+  /** Override top position of filter pills (e.g. "top-[68px]" on mobile fullscreen) */
+  filterTopClass?: string;
 }
 
 declare global {
@@ -149,7 +151,7 @@ function makeIcon(type: "user" | "featured" | "gem", active = false, photo?: str
   });
 }
 
-export default function TravelMap({ markers, center, matchLine, onMarkerClick }: TravelMapProps) {
+export default function TravelMap({ markers, center, matchLine, onMarkerClick, filterTopClass = "top-3" }: TravelMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<ReturnType<typeof window.L.map> | null>(null);
   const markersRef = useRef<Map<string, ReturnType<typeof window.L.marker>>>(new Map());
@@ -363,7 +365,7 @@ export default function TravelMap({ markers, center, matchLine, onMarkerClick }:
 
       {/* ── Filter buttons + legend ─────────────────────────── */}
       {(hasUser || hasFeatured || hasGem) && (
-        <div className="absolute top-3 left-3 z-[400] flex flex-col gap-1.5">
+        <div className={`absolute ${filterTopClass} left-3 z-[400] flex flex-col gap-1.5`}>
           {/* Clickable filter pills */}
           <div className="flex flex-col gap-1">
             {hasUser && (

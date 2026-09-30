@@ -623,6 +623,7 @@ export default function DiscoverPeople() {
             <TravelMap
               markers={mapMarkers}
               matchLine={matchLine}
+              filterTopClass="top-[68px]"
               onMarkerClick={(mk) => {
                 if (mk.type === 'user') {
                   const userId = mk.id.replace('user_', '');
