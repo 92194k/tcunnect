@@ -312,19 +312,17 @@ export default function TravelMap({ markers, center, matchLine, onMarkerClick, f
       markersRef.current.delete(id);
     });
 
-    // Navigation: when matchLine is active we use fitBounds (handled in matchLine effect)
-    // Otherwise pan/zoom to the active user marker as before
+    // Navigation: use fitBounds to show ALL markers so the full roster is visible
     if (!matchLine) {
-      const active = visibleMarkers.find((m) => m.active && m.type === "user");
-      if (active) {
-        const currentZoom = map.getZoom();
-        if (currentZoom < 8) {
-          map.setView([active.lat, active.lng], 9, { animate: true, duration: 0.8 });
-        } else {
-          map.panTo([active.lat, active.lng], { animate: true, duration: 0.6 });
-        }
+      const userMarkers = visibleMarkers.filter((m) => m.type === "user");
+      if (userMarkers.length > 1) {
+        // Fit the map to show all user markers with padding
+        const bounds = L.latLngBounds(userMarkers.map((m) => [m.lat, m.lng]));
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8, animate: true });
+      } else if (userMarkers.length === 1) {
+        map.setView([userMarkers[0].lat, userMarkers[0].lng], 8, { animate: true });
       } else if (visibleMarkers.length === 0) {
-        map.setView([12.0, 122.5], 6, { animate: true, duration: 0.8 });
+        map.setView([12.0, 122.5], 6, { animate: true });
       }
     }
   }, [visibleMarkers, matchLine, mapReady]);
