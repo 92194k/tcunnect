@@ -710,7 +710,7 @@ export default function GemDetail() {
         </div>
 
         {/* Quick Info */}
-        <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
           <div className="bg-sky-50 rounded-xl p-3 text-center">
             <Calendar className="h-4 w-4 text-sky-600 mx-auto mb-1" />
             <p className="text-[10px] text-slate-500 mb-0.5">Reviews</p>

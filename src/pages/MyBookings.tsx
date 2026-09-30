@@ -330,7 +330,7 @@ export default function MyBookings() {
                     </p>
                   )}
 
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                     <div className="bg-slate-50 rounded-lg p-2.5 text-center">
                       <Calendar className="h-3.5 w-3.5 text-slate-400 mx-auto mb-1" />
                       <p className="text-[10px] text-slate-500">Date</p>

@@ -645,7 +645,7 @@ export default function Premium() {
 
               {/* ── OCR extracted info tiles ── */}
               {receiptFile && !isScanning && ocrResult && (ocrResult.method || ocrResult.amount != null || ocrResult.date) && (
-                <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                   {ocrResult.method && (
                     <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 text-center">
                       <p className="text-[9px] text-slate-400 uppercase tracking-wide font-semibold">Method</p>

@@ -1290,7 +1290,7 @@ function BookingsTab() {
         />
       )}
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard icon={CheckCircle2} label="Confirmed" value={counts.confirmed} color="emerald" />
         <StatCard icon={Clock}        label="Pending"   value={counts.pending}   color="amber" />
         <StatCard icon={XCircle}      label="Cancelled" value={counts.cancelled} color="rose" />
@@ -2842,7 +2842,7 @@ function ReportsTab() {
   // List view
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard icon={TrendingUp}    label="Total Reports" value={reports.length}  color="rose" />
         <StatCard icon={AlertCircle}   label="Pending"       value={pendingCount}    color="amber" />
         <StatCard icon={CheckCircle2}  label="Resolved"      value={resolvedCount}   color="emerald" />
