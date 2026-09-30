@@ -314,8 +314,9 @@ export default function Dashboard() {
                 <div className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
                   {travelers.map((t) => {
                     const primaryInterest = (t.travel_interests ?? [])[0];
-                    // Use the traveler's own cover photo if set, else fall back to interest image
-                    const bgImage = t.cover_photo || INTEREST_BG[primaryInterest] || DEFAULT_TRAVELER_BG;
+                    // Priority: user's own cover photo → their profile photo (blurred bg) → default
+                    const bgImage = t.cover_photo || t.profile_photo || DEFAULT_TRAVELER_BG;
+                    const isProfileFallback = !t.cover_photo && !!t.profile_photo;
                     return (
                       <Link
                         key={t.id}
@@ -323,11 +324,11 @@ export default function Dashboard() {
                         className="relative rounded-2xl overflow-hidden shrink-0 w-44 sm:w-auto group"
                         style={{ aspectRatio: "3/4" }}
                       >
-                        {/* Background photo */}
+                        {/* Background photo — blurred+zoomed when using profile photo as bg */}
                         <img
                           src={bgImage}
                           alt={primaryInterest ?? "travel"}
-                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                          className={`absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500 ${isProfileFallback ? "scale-125 blur-sm brightness-75" : ""}`}
                         />
                         {/* Dark gradient overlay */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />

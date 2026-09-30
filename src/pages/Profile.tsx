@@ -169,17 +169,17 @@ export default function Profile() {
     );
     return (
       <AppShell>
-        <div className="max-w-lg mx-auto pb-6">
-          {/* Cover banner */}
-          <div className="relative h-44 w-full overflow-hidden rounded-b-3xl">
-            <img
-              src={otherProfile.coverPhoto || DEFAULT_COVER}
-              alt="Cover"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-          </div>
+        {/* Cover banner — full width */}
+        <div className="relative h-52 w-full overflow-hidden">
+          <img
+            src={otherProfile.coverPhoto || DEFAULT_COVER}
+            alt="Cover"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+        </div>
 
+        <div className="max-w-lg mx-auto pb-6">
           {/* Avatar — overlapping cover */}
           <div className="px-4 -mt-12 mb-4 flex items-end gap-4">
             <div className="relative shrink-0">
@@ -344,37 +344,37 @@ export default function Profile() {
         </div>
       )}
 
+      {/* ── Cover Photo Banner — full width, outside container ── */}
+      <div className="relative h-52 w-full overflow-hidden">
+        <img
+          src={coverPhoto || DEFAULT_COVER}
+          alt="Cover"
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+
+        {/* Change cover button */}
+        <button
+          onClick={() => bgInputRef.current?.click()}
+          disabled={coverUploading}
+          className="absolute bottom-3 right-4 flex items-center gap-1.5 bg-black/50 hover:bg-black/70 backdrop-blur-sm text-white text-xs font-medium px-3 py-1.5 rounded-full transition disabled:opacity-50"
+        >
+          {coverUploading
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <ImagePlus className="h-3.5 w-3.5" />
+          }
+          {coverUploading ? "Uploading…" : "Change Cover"}
+        </button>
+        <input
+          ref={bgInputRef}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={handleCoverChange}
+        />
+      </div>
+
       <div className="max-w-lg mx-auto pb-6">
-        {/* ── Cover Photo Banner ────────────────────────────── */}
-        <div className="relative h-44 w-full overflow-hidden rounded-b-3xl">
-          <img
-            src={coverPhoto || DEFAULT_COVER}
-            alt="Cover"
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-
-          {/* Change cover button */}
-          <button
-            onClick={() => bgInputRef.current?.click()}
-            disabled={coverUploading}
-            className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/50 hover:bg-black/70 backdrop-blur-sm text-white text-xs font-medium px-3 py-1.5 rounded-full transition disabled:opacity-50"
-          >
-            {coverUploading
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <ImagePlus className="h-3.5 w-3.5" />
-            }
-            {coverUploading ? "Uploading…" : "Change Cover"}
-          </button>
-          <input
-            ref={bgInputRef}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            onChange={handleCoverChange}
-          />
-        </div>
-
         {/* ── Avatar — overlapping cover ────────────────────── */}
         <div className="px-4 -mt-12 mb-4 flex items-end gap-4">
           <div className="relative shrink-0">
