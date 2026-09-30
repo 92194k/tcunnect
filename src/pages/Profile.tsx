@@ -113,7 +113,7 @@ export default function Profile() {
     return (
       <AppShell>
         {/* Cover banner */}
-        <div className="relative w-full h-64 sm:h-72 bg-slate-900 overflow-hidden">
+        <div className="relative h-64 sm:h-72 bg-slate-900 overflow-hidden" style={{ width: '100vw', marginLeft: 'calc(50% - 50vw)' }}>
           <img
             src={otherProfile.coverPhoto || DEFAULT_COVER}
             alt="Cover"
@@ -315,7 +315,7 @@ export default function Profile() {
       )}
 
       {/* ── Cover Banner ─────────────────────────────────────── */}
-      <div className="relative w-full h-64 sm:h-72 bg-slate-900 overflow-hidden">
+      <div className="relative h-64 sm:h-72 bg-slate-900 overflow-hidden" style={{ width: '100vw', marginLeft: 'calc(50% - 50vw)' }}>
         <img
           src={coverPhoto || DEFAULT_COVER}
           alt="Cover"
