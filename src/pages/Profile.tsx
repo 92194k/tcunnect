@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
-import { MapPin, Edit2, Check, X, Camera, Crown, Shield, Loader2 } from "lucide-react";
+import { MapPin, Edit2, Check, X, Camera, Crown, Shield, Loader2, ImagePlus } from "lucide-react";
 import type { TravelInterest } from "../types";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -19,9 +19,11 @@ const PH_CITIES = [
   "Antipolo", "Mandaluyong", "Pasay", "Las Piñas", "Muntinlupa",
 ];
 
+const DEFAULT_COVER = "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=1200&q=80";
+
 interface OtherProfile {
   id: string; fullName: string; age?: number; bio: string;
-  location: string; profilePhoto: string;
+  location: string; profilePhoto: string; coverPhoto: string;
   travelInterests: string[]; isVerified: boolean; isPremium: boolean;
 }
 
@@ -41,6 +43,11 @@ export default function Profile() {
   // ── Photo upload ────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+
+  // ── Cover photo ─────────────────────────────────────────────
+  const bgInputRef = useRef<HTMLInputElement>(null);
+  const [coverPhoto, setCoverPhoto] = useState(user?.coverPhoto ?? "");
+  const [coverUploading, setCoverUploading] = useState(false);
 
 
   // ── Delete modal ────────────────────────────────────────────
@@ -68,7 +75,7 @@ export default function Profile() {
 
     supabase
       .from("profiles")
-      .select("id, full_name, age, bio, location, profile_photo, travel_interests, is_verified, is_premium")
+      .select("id, full_name, age, bio, location, profile_photo, cover_photo, travel_interests, is_verified, is_premium")
       .eq("id", userId)
       .single()
       .then(({ data }) => {
@@ -81,6 +88,7 @@ export default function Profile() {
             bio: data.bio ?? "",
             location: data.location ?? "Philippines",
             profilePhoto: data.profile_photo ?? "",
+            coverPhoto: data.cover_photo ?? "",
             travelInterests: data.travel_interests ?? [],
             isVerified: Boolean(data.is_verified),
             isPremium: Boolean(data.is_premium),
@@ -104,8 +112,17 @@ export default function Profile() {
     );
     return (
       <AppShell>
+        {/* Cover banner */}
+        <div className="relative w-full bg-slate-900" style={{ aspectRatio: "3/1" }}>
+          <img
+            src={otherProfile.coverPhoto || DEFAULT_COVER}
+            alt="Cover"
+            className="w-full h-full object-contain"
+          />
+        </div>
+
         <div className="max-w-lg mx-auto px-4 py-6">
-          <div className="text-center mb-6">
+          <div className="text-center mb-6 -mt-12">
             <div className="relative inline-block mb-4">
               {otherProfile.profilePhoto
                 ? <img src={otherProfile.profilePhoto} alt={otherProfile.fullName} className="h-24 w-24 rounded-full object-cover border-4 border-white shadow-lg" />
@@ -179,6 +196,37 @@ export default function Profile() {
     } finally {
       setPhotoUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setCoverUploading(true);
+    try {
+      if (!isSupabaseConfigured) {
+        const reader = new FileReader();
+        reader.onload = () => { setCoverPhoto(reader.result as string); setCoverUploading(false); };
+        reader.readAsDataURL(file);
+        return;
+      }
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `cover-${user.id}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+      const { error: dbError } = await supabase.from("profiles")
+        .update({ cover_photo: publicUrl }).eq("id", user.id);
+      if (dbError) throw dbError;
+      setCoverPhoto(`${publicUrl}?t=${Date.now()}`);
+    } catch (err: any) {
+      console.error("Cover upload failed:", err);
+      alert("Cover upload failed: " + (err?.message ?? String(err)));
+    } finally {
+      setCoverUploading(false);
+      if (bgInputRef.current) bgInputRef.current.value = "";
     }
   };
 
@@ -266,9 +314,29 @@ export default function Profile() {
         </div>
       )}
 
+      {/* ── Cover Banner ─────────────────────────────────────── */}
+      <div className="relative w-full bg-slate-900" style={{ aspectRatio: "3/1" }}>
+        <img
+          src={coverPhoto || DEFAULT_COVER}
+          alt="Cover"
+          className="w-full h-full object-contain"
+        />
+        <button
+          onClick={() => bgInputRef.current?.click()}
+          disabled={coverUploading}
+          className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs font-medium px-3 py-1.5 rounded-full transition disabled:opacity-50 backdrop-blur-sm">
+          {coverUploading
+            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            : <ImagePlus className="h-3.5 w-3.5" />
+          }
+          {coverUploading ? "Uploading…" : "Change Cover"}
+        </button>
+        <input ref={bgInputRef} type="file" accept="image/*" className="sr-only" onChange={handleCoverChange} />
+      </div>
+
       <div className="max-w-lg mx-auto px-4 py-6">
         {/* ── Avatar ──────────────────────────────────────── */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-6 -mt-10">
           <div className="relative inline-block mb-4">
             <div className="h-24 w-24 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white text-3xl font-bold shadow-lg overflow-hidden border-4 border-white">
               {photoUploading
