@@ -128,14 +128,14 @@ export default function Profile() {
       }
 
       const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${user.id}.${ext}`;
+      const path = `covers/${user.id}.${ext}`;
       const { error: uploadError } = await supabase.storage
-        .from("covers")
+        .from("avatars")
         .upload(path, file, { upsert: true, contentType: file.type });
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage.from("covers").getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
 
       // Save to profiles table
       const { error: dbError } = await supabase
