@@ -449,7 +449,7 @@ export default function Dashboard() {
       setFeaturedGems(featured);
 
       setTravelers((travelersRes.data ?? []) as TravelerCard[]);
-      setPosts((postsRes.data ?? []) as PostCard[]);
+      setPosts((postsRes.data ?? []) as unknown as PostCard[]);
 
       setLoading(false);
     }
