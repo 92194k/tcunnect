@@ -214,7 +214,8 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
   return (
     <Link
       to={`/profile/${t.id}`}
-      className="group flex flex-col bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative h-full"
+      className="group flex flex-col bg-white rounded-2xl overflow-visible shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative"
+      style={{ minHeight: "280px" }}
     >
       {/* Cover image — fixed height */}
       <div className="relative rounded-t-2xl overflow-hidden" style={{ height: "140px" }}>
@@ -257,8 +258,8 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
       </div>
 
-      {/* Card body — flex-1 fills remaining height so all cards align perfectly */}
-      <div className="flex-1 pt-10 pb-4 px-4 text-center overflow-hidden">
+      {/* Card body — fixed 140px at rest, white area grows on hover to contain all tags */}
+      <div className="pt-10 px-4 text-center bg-white rounded-b-2xl" style={{ minHeight: "140px" }}>
         <p className="font-bold text-slate-900 text-sm leading-tight truncate">{t.full_name}</p>
         {t.location && (
           <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5">
@@ -268,7 +269,7 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
 
         {/* Default: show first 2 tags only */}
-        <div className="flex flex-wrap justify-center gap-1.5 mt-3 group-hover:hidden">
+        <div className="flex flex-wrap justify-center gap-1.5 mt-3 pb-4 group-hover:hidden">
           {interests.slice(0, 2).map((interest) => (
             <span
               key={interest}
@@ -279,8 +280,8 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
           ))}
         </div>
 
-        {/* Hover: show ALL tags */}
-        <div className="hidden group-hover:flex flex-wrap justify-center gap-1.5 mt-3">
+        {/* Hover: show ALL tags — white body grows to contain them */}
+        <div className="hidden group-hover:flex flex-wrap justify-center gap-1.5 mt-3 pb-4">
           {interests.map((interest) => (
             <span
               key={interest}
@@ -576,12 +577,9 @@ export default function Dashboard() {
                 </div>
 
                 {/* 4-col desktop, 2-col tablet, horizontal scroll mobile */}
-                <div
-                  className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible"
-                  style={{ gridAutoRows: "280px" }}
-                >
+                <div className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
                   {travelers.map((t) => (
-                    <div key={t.id} className="shrink-0 w-44 h-[280px] sm:w-auto sm:h-full">
+                    <div key={t.id} className="shrink-0 w-44 sm:w-auto">
                       <TravelerCardUI t={t} />
                     </div>
                   ))}
