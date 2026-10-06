@@ -214,9 +214,9 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
   return (
     <Link
       to={`/profile/${t.id}`}
-      // Fixed height so all cards are identical regardless of interest count
+      // min-height keeps cards uniform; body expands on hover to fit all tags
       className="group block bg-white rounded-2xl overflow-visible shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative"
-      style={{ height: "280px" }}
+      style={{ minHeight: "280px" }}
     >
       {/* Cover image — fixed height */}
       <div className="relative rounded-t-2xl overflow-hidden" style={{ height: "140px" }}>
@@ -259,8 +259,8 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
       </div>
 
-      {/* Card body — fixed, overflow hidden so extra tags don't push height */}
-      <div className="pt-10 pb-4 px-4 text-center overflow-hidden" style={{ height: "140px" }}>
+      {/* Card body — expands naturally on hover to show all tags inside white area */}
+      <div className="pt-10 pb-4 px-4 text-center" style={{ minHeight: "140px" }}>
         <p className="font-bold text-slate-900 text-sm leading-tight truncate">{t.full_name}</p>
         {t.location && (
           <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5">
