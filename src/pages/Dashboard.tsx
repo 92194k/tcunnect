@@ -2,9 +2,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore } from "../stores";
-import { ArrowRight, MapPin, Sparkles, Users, Star, TrendingUp, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ArrowRight, MapPin, Sparkles, Users, Loader2,
+  ChevronLeft, ChevronRight, Heart, MoreHorizontal,
+  ThumbsUp, MessageCircle, Share2, Bookmark,
+} from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
 const CATEGORY_EMOJIS: Record<string, string> = {
   Beach: "🏖", Mountain: "🏔", Nature: "🌿", Heritage: "🏛",
   Cafe: "☕", Waterfalls: "💦", City: "🌆", Food: "🍜",
@@ -22,9 +27,10 @@ const INTEREST_BG: Record<string, string> = {
 };
 
 const HERO_BG = "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=1200&q=80";
-
 const DEFAULT_TRAVELER_BG = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=600&q=80";
+const PROMO_BG = "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=80";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface FeaturedGem {
   id: string;
   name: string;
@@ -53,8 +59,10 @@ interface PostCard {
   upvotes: number;
   comment_count: number;
   created_at: string;
+  profiles?: { full_name: string; profile_photo: string } | null;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function timeAgo(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
   const mins = Math.floor(diff / 60000);
@@ -84,14 +92,12 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
   const prev = () => go(idx - 1);
   const next = () => go(idx + 1);
 
-  // Auto-advance every 4 s
   useEffect(() => {
     if (gems.length <= 1) return;
     timerRef.current = setInterval(() => go(idx + 1), 4000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [idx, gems.length, go]);
 
-  // Touch swipe
   function onTouchStart(e: React.TouchEvent) { touchStartX.current = e.touches[0].clientX; }
   function onTouchEnd(e: React.TouchEvent) {
     if (touchStartX.current === null) return;
@@ -105,85 +111,90 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
 
   return (
     <section>
+      {/* Section header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-amber-500" />
-          <h2 className="text-lg font-bold text-slate-900">Featured Gems</h2>
+          <span className="text-amber-500 text-lg">⭐</span>
+          <h2 className="text-base font-bold text-slate-900">Featured Gems</h2>
         </div>
-        <Link to="/featured" className="text-sm text-sky-600 font-medium hover:text-sky-700 flex items-center gap-1">
+        <Link
+          to="/featured"
+          className="text-sm text-sky-600 font-semibold hover:text-sky-700 flex items-center gap-1 transition"
+        >
           See all <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>
 
+      {/* Carousel card */}
       <Link
         to={`/gems/${gem.id}`}
-        className="relative rounded-2xl overflow-hidden h-56 lg:h-72 group select-none block"
+        className="relative rounded-2xl overflow-hidden h-60 lg:h-80 group select-none block shadow-md"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* Slide image — fade transition */}
+        {/* Slide image */}
         <img
           key={gem.id}
           src={gem.images?.[0] ?? ""}
           alt={gem.name}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}
+          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 group-hover:scale-[1.02] transition-transform duration-700 ${animating ? "opacity-0" : "opacity-100"}`}
         />
 
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/40 to-transparent" />
+        {/* Gradient overlay — strong on left, fades right */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
 
-        {/* Text content — left side */}
-        <div className={`absolute inset-0 z-30 flex flex-col justify-center px-6 lg:px-8 max-w-[65%] transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}>
-          <span className="inline-block bg-amber-400 text-amber-950 text-[10px] font-extrabold tracking-wider px-3 py-1 rounded-full mb-3 self-start">
-            ✨ FEATURED BY TCUNNECT
+        {/* Left text content */}
+        <div className={`absolute inset-0 z-20 flex flex-col justify-center px-6 lg:px-10 max-w-[70%] transition-opacity duration-300 ${animating ? "opacity-0" : "opacity-100"}`}>
+          <span className="inline-flex items-center gap-1 bg-amber-400 text-amber-950 text-[10px] font-extrabold tracking-widest uppercase px-3 py-1 rounded-full mb-3 self-start shadow-sm">
+            ✨ Featured by TCUnnect
           </span>
-          <h3 className="text-xl lg:text-2xl font-bold text-white leading-tight mb-1">{gem.name}</h3>
-          <p className="flex items-center gap-1 text-white/80 text-sm mb-2">
-            <MapPin className="h-3.5 w-3.5 text-rose-400 shrink-0" /> {gem.location}
+          <h3 className="text-2xl lg:text-3xl font-extrabold text-white leading-tight mb-2">{gem.name}</h3>
+          <p className="flex items-center gap-1.5 text-white/80 text-sm mb-3">
+            <MapPin className="h-3.5 w-3.5 text-rose-400 shrink-0" />
+            {gem.location}
           </p>
           {gem.description && (
-            <p className="text-white/70 text-sm line-clamp-2 mb-3">{gem.description}</p>
+            <p className="text-white/70 text-sm line-clamp-2 mb-4 max-w-sm">{gem.description}</p>
           )}
           <div className="flex flex-wrap gap-2">
-            <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+            <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full border border-white/20">
               {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
             </span>
-            <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+            <span className="bg-white/15 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full border border-white/20">
               {gem.budget_level}
             </span>
           </div>
         </div>
 
-        {/* Prev arrow */}
+        {/* Nav arrows */}
         {gems.length > 1 && (
-          <button
-            onClick={(e) => { e.preventDefault(); prev(); }}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
-            aria-label="Previous"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-        )}
-
-        {/* Next arrow */}
-        {gems.length > 1 && (
-          <button
-            onClick={(e) => { e.preventDefault(); next(); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/60 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm"
-            aria-label="Next"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
+          <>
+            <button
+              onClick={(e) => { e.preventDefault(); prev(); }}
+              className="absolute left-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/70 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm border border-white/10"
+              aria-label="Previous"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              onClick={(e) => { e.preventDefault(); next(); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 hover:bg-black/70 text-white rounded-full h-9 w-9 flex items-center justify-center transition backdrop-blur-sm border border-white/10"
+              aria-label="Next"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </>
         )}
 
         {/* Dot indicators */}
         {gems.length > 1 && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex gap-1.5">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex gap-1.5">
             {gems.map((_, i) => (
               <button
                 key={i}
                 onClick={(e) => { e.preventDefault(); go(i); }}
-                className={`rounded-full transition-all duration-300 ${i === idx ? "w-5 h-2 bg-white" : "w-2 h-2 bg-white/50 hover:bg-white/75"}`}
+                className={`rounded-full transition-all duration-300 ${i === idx ? "w-6 h-2 bg-white" : "w-2 h-2 bg-white/40 hover:bg-white/70"}`}
                 aria-label={`Go to slide ${i + 1}`}
               />
             ))}
@@ -194,11 +205,211 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
   );
 }
 
+// ─── Traveler Card ────────────────────────────────────────────────────────────
+function TravelerCardUI({ t }: { t: TravelerCard }) {
+  const primaryInterest = (t.travel_interests ?? [])[0];
+  const secondInterest = (t.travel_interests ?? [])[1];
+  const bgImage = t.cover_photo || t.profile_photo || INTEREST_BG[primaryInterest] || DEFAULT_TRAVELER_BG;
+
+  return (
+    <Link
+      to={`/profile/${t.id}`}
+      className="group block bg-white rounded-2xl overflow-visible shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative"
+    >
+      {/* Cover image area */}
+      <div className="relative rounded-t-2xl overflow-hidden h-36 sm:h-40">
+        <img
+          src={bgImage}
+          alt={t.full_name}
+          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+        />
+        {/* Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+
+        {/* Heart icon top-right */}
+        <button
+          onClick={(e) => { e.preventDefault(); }}
+          className="absolute top-3 right-3 h-7 w-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm hover:bg-white transition"
+          aria-label="Save traveler"
+        >
+          <Heart className="h-3.5 w-3.5 text-slate-400 group-hover:text-rose-400 transition" />
+        </button>
+
+        {/* Interest tag top-left */}
+        {primaryInterest && (
+          <span className="absolute top-3 left-3 bg-black/40 backdrop-blur-sm text-white text-[10px] font-semibold px-2.5 py-1 rounded-full">
+            {CATEGORY_EMOJIS[primaryInterest] ?? "✈️"} {primaryInterest}
+          </span>
+        )}
+      </div>
+
+      {/* Profile photo — overlapping */}
+      <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "calc(144px - 28px)" }}>
+        <div className="relative">
+          {t.profile_photo ? (
+            <img
+              src={t.profile_photo}
+              alt={t.full_name}
+              className="h-14 w-14 rounded-full object-cover border-[3px] border-white shadow-md"
+            />
+          ) : (
+            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 border-[3px] border-white shadow-md flex items-center justify-center text-white font-bold text-lg">
+              {t.full_name?.[0] ?? "?"}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Card body */}
+      <div className="pt-10 pb-4 px-4 text-center">
+        <p className="font-bold text-slate-900 text-sm leading-tight">{t.full_name}</p>
+        {t.location && (
+          <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5">
+            <MapPin className="h-3 w-3 shrink-0 text-rose-400" />
+            {t.location}
+          </p>
+        )}
+
+        {/* Interest tags */}
+        <div className="flex flex-wrap justify-center gap-1.5 mt-3">
+          {[primaryInterest, secondInterest].filter(Boolean).map((interest) => (
+            <span
+              key={interest}
+              className="bg-sky-50 text-sky-700 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-sky-100"
+            >
+              {interest}
+            </span>
+          ))}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ─── Community Post Card ──────────────────────────────────────────────────────
+function CommunityPostCard({ post }: { post: PostCard }) {
+  const authorName = post.profiles?.full_name ?? "TCUnnect Traveler";
+  const authorPhoto = post.profiles?.profile_photo ?? "";
+  const initial = authorName[0]?.toUpperCase() ?? "T";
+
+  // Extract hashtags from content
+  const hashtags = post.content.match(/#\w+/g) ?? [];
+  const cleanContent = post.content.replace(/#\w+/g, "").trim();
+
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 h-full">
+      {/* Author row */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          {authorPhoto ? (
+            <img
+              src={authorPhoto}
+              alt={authorName}
+              className="h-10 w-10 rounded-full object-cover border-2 border-slate-100"
+            />
+          ) : (
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+              {initial}
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-bold text-slate-900 leading-tight">{authorName}</p>
+            <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
+              {post.location && (
+                <>
+                  <MapPin className="h-3 w-3 text-rose-400 shrink-0" />
+                  <span>{post.location}</span>
+                  <span>·</span>
+                </>
+              )}
+              {timeAgo(post.created_at)}
+            </p>
+          </div>
+        </div>
+        <button className="p-1.5 hover:bg-slate-100 rounded-lg transition text-slate-400">
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Content */}
+      <p className="text-sm text-slate-700 leading-relaxed mb-2">{cleanContent}</p>
+
+      {/* Hashtags */}
+      {hashtags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {hashtags.map((tag) => (
+            <span key={tag} className="text-sky-500 text-xs font-medium hover:text-sky-600 cursor-pointer">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Engagement actions */}
+      <div className="flex items-center gap-1 pt-3 border-t border-slate-100">
+        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition font-medium">
+          <ThumbsUp className="h-3.5 w-3.5" />
+          {post.upvotes > 0 ? post.upvotes : ""} Like
+        </button>
+        <Link to="/community" className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-sky-500 hover:bg-sky-50 rounded-lg transition font-medium">
+          <MessageCircle className="h-3.5 w-3.5" />
+          {post.comment_count > 0 ? post.comment_count : ""} Comment
+        </Link>
+        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition font-medium">
+          <Share2 className="h-3.5 w-3.5" />
+          Share
+        </button>
+        <button className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition">
+          <Bookmark className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Community Promo Card ─────────────────────────────────────────────────────
+function CommunityPromoCard() {
+  return (
+    <div className="relative rounded-2xl overflow-hidden h-full min-h-[260px] shadow-sm">
+      {/* Background image */}
+      <img
+        src={PROMO_BG}
+        alt="Travel together"
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+      {/* Sky blue overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-600/90 via-sky-500/80 to-sky-400/70" />
+
+      {/* Content */}
+      <div className="relative z-10 flex flex-col justify-between h-full p-6">
+        {/* Top label */}
+        <div className="inline-flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-bold px-3 py-1.5 rounded-full self-start border border-white/20">
+          ✈️ TCUnnect
+        </div>
+
+        {/* Main copy */}
+        <div className="mt-auto">
+          <h3 className="text-xl font-extrabold text-white leading-tight mb-2">
+            Share your journey,<br />
+            find your people.
+          </h3>
+          <p className="text-white/80 text-sm mb-4">Real travelers. Great stories.</p>
+          <Link
+            to="/community"
+            className="inline-flex items-center gap-2 bg-white text-sky-700 font-bold text-sm px-4 py-2.5 rounded-full hover:bg-sky-50 transition shadow"
+          >
+            Join the community <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user } = useAuthStore();
   const [featuredGems, setFeaturedGems] = useState<FeaturedGem[]>([]);
-  const [popularGems, setPopularGems] = useState<FeaturedGem[]>([]);
   const [travelers, setTravelers] = useState<TravelerCard[]>([]);
   const [posts, setPosts] = useState<PostCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -227,17 +438,15 @@ export default function Dashboard() {
           .limit(4),
         supabase
           .from("posts")
-          .select("id, content, location, upvotes, comment_count, created_at")
+          .select("id, content, location, upvotes, comment_count, created_at, profiles:user_id(full_name, profile_photo)")
           .order("created_at", { ascending: false })
-          .limit(2),
+          .limit(3),
       ]);
 
       const gems = (gemsRes.data ?? []) as FeaturedGem[];
-      // Show ALL featured gems in carousel; fall back to top gems if none are marked featured
       const featuredOnes = gems.filter(g => g.is_featured);
-      const featured = featuredOnes.length > 0 ? featuredOnes : gems.slice(0, 4);
+      const featured = featuredOnes.length > 0 ? featuredOnes : gems.slice(0, 5);
       setFeaturedGems(featured);
-      setPopularGems(gems.filter(g => !featured.includes(g)).slice(0, 3));
 
       setTravelers((travelersRes.data ?? []) as TravelerCard[]);
       setPosts((postsRes.data ?? []) as PostCard[]);
@@ -249,201 +458,131 @@ export default function Dashboard() {
 
   return (
     <AppShell>
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-10">
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-8">
 
-        {/* ── Hero ── */}
-        <section className="rounded-2xl overflow-hidden bg-sky-50 min-h-[200px] lg:min-h-[240px] flex flex-col lg:flex-row shadow-sm">
-          {/* Left: text */}
-          <div className="flex-1 flex flex-col justify-center px-6 py-8 lg:px-10 lg:py-0 z-10">
-            <p className="text-sky-500 text-sm font-semibold mb-1">{greeting}, ✈️</p>
-            <h1 className="text-2xl lg:text-3xl font-extrabold text-slate-900 leading-tight mb-1">
-              {user?.fullName ?? "Traveler"}
-            </h1>
-            <p className="text-slate-500 text-sm mb-5">Where will you go next?</p>
-            <Link
-              to="/hidden-gems"
-              className="self-start inline-flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-semibold px-5 py-2.5 rounded-full text-sm transition shadow"
-            >
-              Explore Hidden Gems <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-
-          {/* Right: photo */}
-          <div className="relative flex-1 min-h-[160px] lg:min-h-0">
-            <img
-              src={HERO_BG}
-              alt="Philippines travel"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            {/* left-fade so text side blends on desktop */}
-            <div className="absolute inset-0 bg-gradient-to-r from-sky-50 via-sky-50/30 to-transparent lg:block hidden" />
-            {/* script overlay */}
-            <div className="absolute bottom-4 right-4 text-right">
-              <p className="text-white font-serif italic text-lg lg:text-xl drop-shadow-md leading-tight">
-                Better Trips Together
+        {/* ── Hero Banner ──────────────────────────────────────────────────────── */}
+        <section className="relative rounded-2xl overflow-hidden bg-sky-50 shadow-sm" style={{ minHeight: "220px" }}>
+          <div className="flex flex-col lg:flex-row min-h-[220px]">
+            {/* Left: text */}
+            <div className="flex-1 flex flex-col justify-center px-7 py-8 lg:px-10 lg:py-10 z-10 relative">
+              <p className="text-sky-500 text-sm font-semibold mb-1 flex items-center gap-1.5">
+                ✈️ {greeting},
               </p>
+              <h1 className="text-3xl lg:text-4xl font-extrabold text-slate-900 leading-tight mb-1.5 tracking-tight">
+                {user?.fullName?.split(" ")[0] ?? "Traveler"}
+              </h1>
+              <p className="text-slate-500 text-base mb-6">Where will you go next?</p>
+              <Link
+                to="/hidden-gems"
+                className="self-start inline-flex items-center gap-2 bg-sky-600 hover:bg-sky-700 text-white font-bold px-6 py-3 rounded-full text-sm transition shadow-md hover:shadow-lg"
+              >
+                Explore Hidden Gems <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            {/* Right: travel image */}
+            <div className="relative flex-1 min-h-[180px] lg:min-h-0">
+              <img
+                src={HERO_BG}
+                alt="Philippines travel"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {/* Blend left edge into sky-50 */}
+              <div className="absolute inset-0 bg-gradient-to-r from-sky-50 via-sky-50/20 to-transparent hidden lg:block" />
+              {/* Vignette bottom for mobile */}
+              <div className="absolute inset-0 bg-gradient-to-t from-sky-50/60 to-transparent lg:hidden" />
+
+              {/* Tagline */}
+              <div className="absolute bottom-5 right-5 text-right z-10">
+                <p className="text-white font-bold text-lg lg:text-xl drop-shadow-lg leading-snug">
+                  Better Trips<br />Together
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
+        {/* ── Loading spinner ── */}
         {loading && (
-          <div className="flex justify-center py-10">
+          <div className="flex justify-center py-12">
             <Loader2 className="h-8 w-8 text-sky-500 animate-spin" />
           </div>
         )}
 
         {!loading && (
           <>
-            {/* ── Featured Gems Carousel ── */}
+            {/* ── Featured Gems Carousel ────────────────────────────────────── */}
             {featuredGems.length > 0 && <FeaturedCarousel gems={featuredGems} />}
 
-            {/* ── Recommended Travelers ── */}
+            {/* ── Recommended Travelers ─────────────────────────────────────── */}
             {travelers.length > 0 && (
               <section>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-sky-500" />
-                    <h2 className="text-lg font-bold text-slate-900">Recommended Travelers</h2>
+                    <span className="text-sky-500 text-lg">👥</span>
+                    <h2 className="text-base font-bold text-slate-900">Recommended Travelers</h2>
                   </div>
-                  <Link to="/discover-people" className="text-sm text-sky-600 font-medium hover:text-sky-700 flex items-center gap-1">
+                  <Link
+                    to="/discover-people"
+                    className="text-sm text-sky-600 font-semibold hover:text-sky-700 flex items-center gap-1 transition"
+                  >
                     Discover more <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
 
-                {/* Horizontal scroll on mobile, 4-col grid on larger screens */}
+                {/* 4-col desktop, 2-col tablet, horizontal scroll mobile */}
                 <div className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
-                  {travelers.map((t) => {
-                    const primaryInterest = (t.travel_interests ?? [])[0];
-                    const bgImage = t.cover_photo || t.profile_photo || INTEREST_BG[primaryInterest] || DEFAULT_TRAVELER_BG;
-                    return (
-                      <Link
-                        key={t.id}
-                        to={`/profile/${t.id}`}
-                        className="relative rounded-2xl overflow-hidden shrink-0 w-44 sm:w-auto group"
-                        style={{ aspectRatio: "3/4" }}
-                      >
-                        {/* Background photo */}
-                        <img
-                          src={bgImage}
-                          alt={primaryInterest ?? "travel"}
-                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                        />
-                        {/* Dark gradient overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-
-                        {/* Interest tag — top right */}
-                        {primaryInterest && (
-                          <span className="absolute top-3 right-3 bg-white/20 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-full">
-                            {CATEGORY_EMOJIS[primaryInterest] ?? "✈️"} {primaryInterest}
-                          </span>
-                        )}
-
-                        {/* Bottom: avatar + name/location */}
-                        <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
-                          <div className="flex items-center gap-2">
-                            {t.profile_photo ? (
-                              <img
-                                src={t.profile_photo}
-                                alt={t.full_name}
-                                className="h-14 w-14 rounded-full object-cover border-2 border-white shadow"
-                              />
-                            ) : (
-                              <div className="h-14 w-14 rounded-full bg-sky-500 border-2 border-white shadow flex items-center justify-center text-white font-bold text-lg">
-                                {t.full_name?.[0] ?? "?"}
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-white font-semibold text-xs leading-tight">{t.full_name}</p>
-                              <p className="text-white/70 text-[10px] flex items-center gap-0.5">
-                                <MapPin className="h-2.5 w-2.5 shrink-0" /> {t.location || "Philippines"}
-                              </p>
-                            </div>
-                          </div>
-                          {/* Star placeholder — no fake rating */}
-                          <span className="text-amber-300 text-xs font-bold">★</span>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            {/* ── Popular Gems ── */}
-            {popularGems.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-emerald-500" />
-                    <h2 className="text-lg font-bold text-slate-900">Popular Hidden Gems</h2>
-                  </div>
-                  <Link to="/hidden-gems" className="text-sm text-sky-600 font-medium hover:text-sky-700 flex items-center gap-1">
-                    Explore all <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {popularGems.map((gem) => (
-                    <Link key={gem.id} to={`/gems/${gem.id}`}
-                      className="group overflow-hidden rounded-2xl bg-white shadow-sm border border-slate-100 hover:shadow-md transition">
-                      <div className="h-40 overflow-hidden">
-                        <img src={gem.images?.[0] ?? ""} alt={gem.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                      </div>
-                      <div className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="font-semibold text-slate-900 text-sm">{gem.name}</h3>
-                            <p className="text-xs text-slate-500 mt-0.5">{gem.location}</p>
-                          </div>
-                          <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
-                            {CATEGORY_EMOJIS[gem.category] ?? "📍"} {gem.category}
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* ── Community Posts ── */}
-            {posts.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Star className="h-5 w-5 text-rose-500" />
-                    <h2 className="text-lg font-bold text-slate-900">Community</h2>
-                  </div>
-                  <Link to="/community" className="text-sm text-sky-600 font-medium hover:text-sky-700 flex items-center gap-1">
-                    See all <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-
-                <div className="space-y-3">
-                  {posts.map((post) => (
-                    <div key={post.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-xs font-bold">?</div>
-                        <div>
-                          <p className="text-xs font-semibold text-slate-700">TCUnnect Traveler</p>
-                          <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                            {post.location && <><MapPin className="h-2.5 w-2.5" /> {post.location} · </>}
-                            {timeAgo(post.created_at)}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-sm text-slate-700">{post.content}</p>
-                      <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
-                        <span>▲ {post.upvotes}</span>
-                        <span>💬 {post.comment_count}</span>
-                      </div>
+                  {travelers.map((t) => (
+                    <div key={t.id} className="shrink-0 w-44 sm:w-auto">
+                      <TravelerCardUI t={t} />
                     </div>
                   ))}
                 </div>
               </section>
             )}
+
+            {/* ── Community ─────────────────────────────────────────────────── */}
+            {posts.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">✨</span>
+                    <h2 className="text-base font-bold text-slate-900">Community</h2>
+                  </div>
+                  <Link
+                    to="/community"
+                    className="text-sm text-sky-600 font-semibold hover:text-sky-700 flex items-center gap-1 transition"
+                  >
+                    See all <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+
+                {/* Two-column: big post left, promo right */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {/* Left — featured post (takes 2/3 width on desktop) */}
+                  <div className="lg:col-span-2 space-y-4">
+                    {posts.slice(0, 2).map((post) => (
+                      <CommunityPostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+
+                  {/* Right — promo card */}
+                  <div className="hidden lg:block">
+                    <CommunityPromoCard />
+                  </div>
+                </div>
+
+                {/* Mobile promo — shown below posts on small screens */}
+                <div className="lg:hidden mt-4">
+                  <CommunityPromoCard />
+                </div>
+              </section>
+            )}
           </>
         )}
+
+        {/* Bottom padding for mobile nav */}
+        <div className="h-4" />
       </div>
     </AppShell>
   );
