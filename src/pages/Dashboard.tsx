@@ -207,26 +207,27 @@ function FeaturedCarousel({ gems }: { gems: FeaturedGem[] }) {
 
 // ─── Traveler Card ────────────────────────────────────────────────────────────
 function TravelerCardUI({ t }: { t: TravelerCard }) {
-  const primaryInterest = (t.travel_interests ?? [])[0];
-  const secondInterest = (t.travel_interests ?? [])[1];
+  const interests = (t.travel_interests ?? []).filter(Boolean);
+  const primaryInterest = interests[0];
   const bgImage = t.cover_photo || t.profile_photo || INTEREST_BG[primaryInterest] || DEFAULT_TRAVELER_BG;
 
   return (
     <Link
       to={`/profile/${t.id}`}
+      // Fixed height so all cards are identical regardless of interest count
       className="group block bg-white rounded-2xl overflow-visible shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative"
+      style={{ height: "280px" }}
     >
-      {/* Cover image area */}
-      <div className="relative rounded-t-2xl overflow-hidden h-36 sm:h-40">
+      {/* Cover image — fixed height */}
+      <div className="relative rounded-t-2xl overflow-hidden" style={{ height: "140px" }}>
         <img
           src={bgImage}
           alt={t.full_name}
           className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
         />
-        {/* Gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 
-        {/* Heart icon top-right */}
+        {/* Heart top-right */}
         <button
           onClick={(e) => { e.preventDefault(); }}
           className="absolute top-3 right-3 h-7 w-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm hover:bg-white transition"
@@ -235,7 +236,7 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
           <Heart className="h-3.5 w-3.5 text-slate-400 group-hover:text-rose-400 transition" />
         </button>
 
-        {/* Interest tag top-left */}
+        {/* Primary interest badge top-left */}
         {primaryInterest && (
           <span className="absolute top-3 left-3 bg-black/40 backdrop-blur-sm text-white text-[10px] font-semibold px-2.5 py-1 rounded-full">
             {CATEGORY_EMOJIS[primaryInterest] ?? "✈️"} {primaryInterest}
@@ -243,41 +244,51 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
       </div>
 
-      {/* Profile photo — overlapping */}
-      <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "calc(144px - 28px)" }}>
-        <div className="relative">
-          {t.profile_photo ? (
-            <img
-              src={t.profile_photo}
-              alt={t.full_name}
-              className="h-14 w-14 rounded-full object-cover border-[3px] border-white shadow-md"
-            />
-          ) : (
-            <div className="h-14 w-14 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 border-[3px] border-white shadow-md flex items-center justify-center text-white font-bold text-lg">
-              {t.full_name?.[0] ?? "?"}
-            </div>
-          )}
-        </div>
+      {/* Profile photo — overlapping image and card body */}
+      <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "112px" }}>
+        {t.profile_photo ? (
+          <img
+            src={t.profile_photo}
+            alt={t.full_name}
+            className="h-14 w-14 rounded-full object-cover border-[3px] border-white shadow-md"
+          />
+        ) : (
+          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 border-[3px] border-white shadow-md flex items-center justify-center text-white font-bold text-lg">
+            {t.full_name?.[0] ?? "?"}
+          </div>
+        )}
       </div>
 
-      {/* Card body */}
-      <div className="pt-10 pb-4 px-4 text-center">
-        <p className="font-bold text-slate-900 text-sm leading-tight">{t.full_name}</p>
+      {/* Card body — fixed, overflow hidden so extra tags don't push height */}
+      <div className="pt-10 pb-4 px-4 text-center overflow-hidden" style={{ height: "140px" }}>
+        <p className="font-bold text-slate-900 text-sm leading-tight truncate">{t.full_name}</p>
         {t.location && (
           <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5">
             <MapPin className="h-3 w-3 shrink-0 text-rose-400" />
-            {t.location}
+            <span className="truncate">{t.location}</span>
           </p>
         )}
 
-        {/* Interest tags */}
-        <div className="flex flex-wrap justify-center gap-1.5 mt-3">
-          {[primaryInterest, secondInterest].filter(Boolean).map((interest) => (
+        {/* Default: show first 2 tags only */}
+        <div className="flex flex-wrap justify-center gap-1.5 mt-3 group-hover:hidden">
+          {interests.slice(0, 2).map((interest) => (
             <span
               key={interest}
               className="bg-sky-50 text-sky-700 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-sky-100"
             >
               {interest}
+            </span>
+          ))}
+        </div>
+
+        {/* Hover: show ALL tags */}
+        <div className="hidden group-hover:flex flex-wrap justify-center gap-1.5 mt-3">
+          {interests.map((interest) => (
+            <span
+              key={interest}
+              className="bg-sky-500 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full"
+            >
+              {CATEGORY_EMOJIS[interest] ?? "✈️"} {interest}
             </span>
           ))}
         </div>
