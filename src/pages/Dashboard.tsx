@@ -212,13 +212,14 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
   const bgImage = t.cover_photo || t.profile_photo || INTEREST_BG[primaryInterest] || DEFAULT_TRAVELER_BG;
 
   return (
+    // h-full fills the fixed gridAutoRows cell; overflow-visible lets the hover panel escape below
     <Link
       to={`/profile/${t.id}`}
-      className="group flex flex-col bg-white rounded-2xl overflow-visible shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative"
-      style={{ minHeight: "280px" }}
+      className="group flex flex-col bg-white rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative h-full"
+      style={{ overflow: "visible" }}
     >
-      {/* Cover image — fixed height */}
-      <div className="relative rounded-t-2xl overflow-hidden" style={{ height: "140px" }}>
+      {/* Cover image — fixed 140px, clipped to its own bounds */}
+      <div className="relative rounded-t-2xl overflow-hidden flex-shrink-0" style={{ height: "140px" }}>
         <img
           src={bgImage}
           alt={t.full_name}
@@ -243,7 +244,7 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
       </div>
 
-      {/* Profile photo — overlapping image and card body (absolute, z-10 so it sits above both sections) */}
+      {/* Profile photo — sits on the boundary between cover and body */}
       <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{ top: "112px" }}>
         {t.profile_photo ? (
           <img
@@ -258,8 +259,8 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
       </div>
 
-      {/* Card body — fixed 140px at rest, white area grows on hover to contain all tags */}
-      <div className="pt-10 px-4 text-center bg-white rounded-b-2xl" style={{ minHeight: "140px" }}>
+      {/* Card body — flex-1 fills remainder of the fixed grid cell; overflow hidden so card stays uniform */}
+      <div className="flex-1 pt-10 pb-4 px-4 text-center overflow-hidden rounded-b-2xl">
         <p className="font-bold text-slate-900 text-sm leading-tight truncate">{t.full_name}</p>
         {t.location && (
           <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5">
@@ -268,25 +269,32 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
           </p>
         )}
 
-        {/* Default: show first 2 tags only */}
-        <div className="flex flex-wrap justify-center gap-1.5 mt-3 pb-4 group-hover:hidden">
+        {/* Default tags: always visible, hidden on hover */}
+        <div className="flex flex-wrap justify-center gap-1.5 mt-3 group-hover:hidden">
           {interests.slice(0, 2).map((interest) => (
-            <span
-              key={interest}
-              className="bg-sky-50 text-sky-700 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-sky-100"
-            >
+            <span key={interest} className="bg-sky-50 text-sky-700 text-[10px] font-semibold px-2.5 py-1 rounded-full border border-sky-100">
               {interest}
             </span>
           ))}
         </div>
+      </div>
 
-        {/* Hover: show ALL tags — white body grows to contain them */}
-        <div className="hidden group-hover:flex flex-wrap justify-center gap-1.5 mt-3 pb-4">
+      {/* Hover panel — absolutely positioned BELOW the card, white area that grows downward */}
+      <div
+        className="absolute left-0 right-0 hidden group-hover:block bg-white rounded-b-2xl shadow-lg border border-slate-100 border-t-0 px-4 pb-4 z-20"
+        style={{ top: "calc(100% - 2rem)" }}
+      >
+        {/* Name + location repeated so the panel looks like a natural extension */}
+        <p className="font-bold text-slate-900 text-sm leading-tight truncate text-center pt-2">{t.full_name}</p>
+        {t.location && (
+          <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5 mb-2">
+            <MapPin className="h-3 w-3 shrink-0 text-rose-400" />
+            <span className="truncate">{t.location}</span>
+          </p>
+        )}
+        <div className="flex flex-wrap justify-center gap-1.5 mt-2">
           {interests.map((interest) => (
-            <span
-              key={interest}
-              className="bg-sky-500 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full"
-            >
+            <span key={interest} className="bg-sky-500 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full">
               {CATEGORY_EMOJIS[interest] ?? "✈️"} {interest}
             </span>
           ))}
@@ -576,10 +584,13 @@ export default function Dashboard() {
                   </Link>
                 </div>
 
-                {/* 4-col desktop, 2-col tablet, horizontal scroll mobile */}
-                <div className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
+                {/* 4-col desktop, 2-col tablet; gridAutoRows locks every cell to 280px so all cards are identical height */}
+                <div
+                  className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible"
+                  style={{ gridAutoRows: "280px" }}
+                >
                   {travelers.map((t) => (
-                    <div key={t.id} className="shrink-0 w-44 sm:w-auto">
+                    <div key={t.id} className="shrink-0 w-44 sm:w-auto h-[280px] sm:h-full overflow-visible relative">
                       <TravelerCardUI t={t} />
                     </div>
                   ))}
