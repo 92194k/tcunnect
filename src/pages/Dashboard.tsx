@@ -303,6 +303,33 @@ function CommunityPostCard({ post }: { post: PostCard }) {
   const authorPhoto = post.profiles?.profile_photo ?? "";
   const initial = authorName[0]?.toUpperCase() ?? "T";
 
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.upvotes ?? 0);
+  const [liking, setLiking] = useState(false);
+
+  async function handleLike() {
+    if (liking) return;
+    // Optimistic update
+    const next = liked ? likeCount - 1 : likeCount + 1;
+    setLiked(!liked);
+    setLikeCount(next);
+    setLiking(true);
+    try {
+      if (isSupabaseConfigured) {
+        await supabase
+          .from("posts")
+          .update({ upvotes: next })
+          .eq("id", post.id);
+      }
+    } catch {
+      // Revert on failure
+      setLiked(liked);
+      setLikeCount(likeCount);
+    } finally {
+      setLiking(false);
+    }
+  }
+
   // Extract hashtags from content
   const hashtags = post.content.match(/#\w+/g) ?? [];
   const cleanContent = post.content.replace(/#\w+/g, "").trim();
@@ -358,9 +385,18 @@ function CommunityPostCard({ post }: { post: PostCard }) {
 
       {/* Engagement actions */}
       <div className="flex items-center gap-1 pt-3 border-t border-slate-100">
-        <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition font-medium">
-          <ThumbsUp className="h-3.5 w-3.5" />
-          {post.upvotes > 0 ? post.upvotes : ""} Like
+        <button
+          onClick={handleLike}
+          disabled={liking}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition font-medium select-none
+            ${liked
+              ? "text-rose-500 bg-rose-50 hover:bg-rose-100"
+              : "text-slate-500 hover:text-rose-500 hover:bg-rose-50"
+            }`}
+        >
+          <ThumbsUp className={`h-3.5 w-3.5 transition-transform ${liked ? "scale-110 fill-rose-500 stroke-rose-500" : ""}`} />
+          {likeCount > 0 && <span>{likeCount}</span>}
+          <span>{liked ? "Liked" : "Like"}</span>
         </button>
         <Link to="/community" className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 hover:text-sky-500 hover:bg-sky-50 rounded-lg transition font-medium">
           <MessageCircle className="h-3.5 w-3.5" />
