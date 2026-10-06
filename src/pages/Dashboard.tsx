@@ -279,26 +279,16 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         </div>
       </div>
 
-      {/* Hover panel — absolutely positioned BELOW the card, white area that grows downward */}
+      {/* Hover panel — drops below card, shows all interests without repeating name */}
       <div
-        className="absolute left-0 right-0 hidden group-hover:block bg-white rounded-b-2xl shadow-lg border border-slate-100 border-t-0 px-4 pb-4 z-20"
-        style={{ top: "calc(100% - 2rem)" }}
+        className="absolute left-0 right-0 hidden group-hover:flex flex-wrap justify-center gap-1.5 bg-white rounded-b-2xl shadow-lg border border-slate-100 border-t-0 px-4 pt-2 pb-4 z-20"
+        style={{ top: "calc(100% - 1px)" }}
       >
-        {/* Name + location repeated so the panel looks like a natural extension */}
-        <p className="font-bold text-slate-900 text-sm leading-tight truncate text-center pt-2">{t.full_name}</p>
-        {t.location && (
-          <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5 mb-2">
-            <MapPin className="h-3 w-3 shrink-0 text-rose-400" />
-            <span className="truncate">{t.location}</span>
-          </p>
-        )}
-        <div className="flex flex-wrap justify-center gap-1.5 mt-2">
-          {interests.map((interest) => (
-            <span key={interest} className="bg-sky-500 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full">
-              {CATEGORY_EMOJIS[interest] ?? "✈️"} {interest}
-            </span>
-          ))}
-        </div>
+        {interests.map((interest) => (
+          <span key={interest} className="bg-sky-500 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full">
+            {CATEGORY_EMOJIS[interest] ?? "✈️"} {interest}
+          </span>
+        ))}
       </div>
     </Link>
   );
