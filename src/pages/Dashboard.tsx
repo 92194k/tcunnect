@@ -214,9 +214,7 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
   return (
     <Link
       to={`/profile/${t.id}`}
-      // min-height keeps cards uniform; body expands on hover to fit all tags
-      className="group block bg-white rounded-2xl overflow-visible shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative"
-      style={{ minHeight: "280px" }}
+      className="group flex flex-col bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition duration-300 relative h-full"
     >
       {/* Cover image — fixed height */}
       <div className="relative rounded-t-2xl overflow-hidden" style={{ height: "140px" }}>
@@ -244,8 +242,8 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
       </div>
 
-      {/* Profile photo — overlapping image and card body */}
-      <div className="absolute left-1/2 -translate-x-1/2" style={{ top: "112px" }}>
+      {/* Profile photo — overlapping image and card body (absolute, z-10 so it sits above both sections) */}
+      <div className="absolute left-1/2 -translate-x-1/2 z-10" style={{ top: "112px" }}>
         {t.profile_photo ? (
           <img
             src={t.profile_photo}
@@ -259,8 +257,8 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
         )}
       </div>
 
-      {/* Card body — expands naturally on hover to show all tags inside white area */}
-      <div className="pt-10 pb-4 px-4 text-center" style={{ minHeight: "140px" }}>
+      {/* Card body — flex-1 fills remaining height so all cards align perfectly */}
+      <div className="flex-1 pt-10 pb-4 px-4 text-center overflow-hidden">
         <p className="font-bold text-slate-900 text-sm leading-tight truncate">{t.full_name}</p>
         {t.location && (
           <p className="flex items-center justify-center gap-1 text-slate-500 text-xs mt-0.5">
@@ -578,9 +576,12 @@ export default function Dashboard() {
                 </div>
 
                 {/* 4-col desktop, 2-col tablet, horizontal scroll mobile */}
-                <div className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
+                <div
+                  className="flex gap-4 overflow-x-auto pb-2 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible"
+                  style={{ gridAutoRows: "280px" }}
+                >
                   {travelers.map((t) => (
-                    <div key={t.id} className="shrink-0 w-44 sm:w-auto">
+                    <div key={t.id} className="shrink-0 w-44 h-[280px] sm:w-auto sm:h-full">
                       <TravelerCardUI t={t} />
                     </div>
                   ))}
