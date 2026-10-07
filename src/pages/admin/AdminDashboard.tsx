@@ -53,7 +53,6 @@ interface DBProfile {
   location: string | null;
   bio: string | null;
   age: number | null;
-  university: string | null;
   avatar_url: string | null;
 }
 
@@ -275,7 +274,7 @@ function UsersTab() {
     // Step 2: try to enrich with columns added by migration 21 — fail silently
     const { data: extraData } = await supabase
       .from("profiles")
-      .select("id, is_admin, account_status, bio, age, university, avatar_url")
+      .select("id, is_admin, account_status, bio, age, avatar_url")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -314,7 +313,7 @@ function UsersTab() {
     // so we NEVER trust the absence of an error; we always confirm with a SELECT.
     const { data: freshUser, error: fetchError } = await supabase
       .from("profiles")
-      .select("id, full_name, email, is_premium, is_admin, account_status, bio, age, university, avatar_url, created_at, location")
+      .select("id, full_name, email, is_premium, is_admin, account_status, bio, age, avatar_url, created_at, location")
       .eq("id", userId)
       .single();
 
@@ -428,7 +427,6 @@ function UsersTab() {
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
             {[
               { label: "Location",   value: u.location },
-              { label: "University", value: u.university },
               { label: "Age",        value: u.age?.toString() },
               { label: "Joined",     value: new Date(u.created_at).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" }) },
             ].map(f => (
@@ -450,19 +448,33 @@ function UsersTab() {
             <div className="border-t border-slate-100 pt-4 space-y-2">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Moderation</p>
               <div className="flex flex-wrap gap-2">
-                {u.account_status !== "suspended" && u.account_status !== "banned" && (
-                  <button disabled={isActing} onClick={() => setConfirm({ kind: "suspend", userId: u.id, name: u.full_name ?? "this user" })}
-                    className="px-3 py-2 text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-lg disabled:opacity-50 transition">
-                    {isActing ? "…" : "Suspend User"}
+                {/* Suspend ↔ Unsuspend toggle (never shown for banned users) */}
+                {u.account_status !== "banned" && (
+                  <button
+                    disabled={isActing}
+                    onClick={() => setConfirm({
+                      kind: u.account_status === "suspended" ? "reactivate" : "suspend",
+                      userId: u.id,
+                      name: u.full_name ?? "this user",
+                    })}
+                    className={`px-3 py-2 text-xs font-semibold text-white rounded-lg disabled:opacity-50 transition ${
+                      u.account_status === "suspended"
+                        ? "bg-emerald-600 hover:bg-emerald-700"
+                        : "bg-amber-500 hover:bg-amber-600"
+                    }`}
+                  >
+                    {isActing ? "…" : u.account_status === "suspended" ? "Unsuspend" : "Suspend User"}
                   </button>
                 )}
+                {/* Ban button — only for non-banned users */}
                 {u.account_status !== "banned" && (
                   <button disabled={isActing} onClick={() => setConfirm({ kind: "ban", userId: u.id, name: u.full_name ?? "this user" })}
                     className="px-3 py-2 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition">
                     {isActing ? "…" : "Ban User"}
                   </button>
                 )}
-                {(u.account_status === "suspended" || u.account_status === "banned") && (
+                {/* Reactivate — only for banned users */}
+                {u.account_status === "banned" && (
                   <button disabled={isActing} onClick={() => setConfirm({ kind: "reactivate", userId: u.id, name: u.full_name ?? "this user" })}
                     className="px-3 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 transition">
                     {isActing ? "…" : "Reactivate Account"}
@@ -603,15 +615,24 @@ function UsersTab() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <button onClick={() => setViewUser(u)}
                             className="text-xs text-sky-600 hover:underline font-medium">View</button>
-                          {mod && u.account_status !== "suspended" && u.account_status !== "banned" && (
-                            <button onClick={() => setConfirm({ kind: "suspend", userId: u.id, name: u.full_name ?? "this user" })}
-                              className="text-xs text-amber-600 hover:underline font-medium">Suspend</button>
+                          {/* Suspend ↔ Unsuspend toggle (never for banned) */}
+                          {mod && u.account_status !== "banned" && (
+                            <button
+                              onClick={() => setConfirm({
+                                kind: u.account_status === "suspended" ? "reactivate" : "suspend",
+                                userId: u.id,
+                                name: u.full_name ?? "this user",
+                              })}
+                              className={`text-xs font-medium hover:underline ${u.account_status === "suspended" ? "text-emerald-600" : "text-amber-600"}`}
+                            >
+                              {u.account_status === "suspended" ? "Unsuspend" : "Suspend"}
+                            </button>
                           )}
                           {mod && u.account_status !== "banned" && (
                             <button onClick={() => setConfirm({ kind: "ban", userId: u.id, name: u.full_name ?? "this user" })}
                               className="text-xs text-red-600 hover:underline font-medium">Ban</button>
                           )}
-                          {mod && (u.account_status === "suspended" || u.account_status === "banned") && (
+                          {mod && u.account_status === "banned" && (
                             <button onClick={() => setConfirm({ kind: "reactivate", userId: u.id, name: u.full_name ?? "this user" })}
                               className="text-xs text-emerald-600 hover:underline font-medium">Reactivate</button>
                           )}
