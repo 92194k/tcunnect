@@ -53,7 +53,7 @@ interface DBProfile {
   location: string | null;
   bio: string | null;
   age: number | null;
-  avatar_url: string | null;
+  profile_photo: string | null;
 }
 
 interface DBGem {
@@ -274,7 +274,7 @@ function UsersTab() {
     // Step 2: try to enrich with columns added by migration 21 — fail silently
     const { data: extraData } = await supabase
       .from("profiles")
-      .select("id, is_admin, account_status, bio, age, avatar_url")
+      .select("id, is_admin, account_status, bio, age, profile_photo")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -313,7 +313,7 @@ function UsersTab() {
     // so we NEVER trust the absence of an error; we always confirm with a SELECT.
     const { data: freshUser, error: fetchError } = await supabase
       .from("profiles")
-      .select("id, full_name, email, is_premium, is_admin, account_status, bio, age, avatar_url, created_at, location")
+      .select("id, full_name, email, is_premium, is_admin, account_status, bio, age, profile_photo, created_at, location")
       .eq("id", userId)
       .single();
 
@@ -407,8 +407,8 @@ function UsersTab() {
           {/* Header */}
           <div className="flex items-start gap-4">
             <div className="h-14 w-14 rounded-full bg-sky-100 flex items-center justify-center text-sky-700 font-bold text-xl flex-shrink-0 overflow-hidden">
-              {u.avatar_url
-                ? <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
+              {u.profile_photo
+                ? <img src={u.profile_photo} alt="" className="h-full w-full object-cover" />
                 : (u.full_name ?? "?")[0].toUpperCase()
               }
             </div>
@@ -588,8 +588,8 @@ function UsersTab() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="h-7 w-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-700 text-xs font-bold flex-shrink-0 overflow-hidden">
-                          {u.avatar_url
-                            ? <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
+                          {u.profile_photo
+                            ? <img src={u.profile_photo} alt="" className="h-full w-full object-cover" />
                             : (u.full_name ?? "?")[0].toUpperCase()}
                         </div>
                         <div>
