@@ -138,9 +138,9 @@ function ReportPostModal({ postId, reporterId, onClose }: {
 // ─── Mystery Avatar keyframe (injected once) ──────────────────────────────────
 const MYSTERY_STYLE = `
 @keyframes tcMysteryPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.55); }
-  70%  { box-shadow: 0 0 0 9px rgba(99,102,241,0); }
-  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+  0%   { box-shadow: 0 0 0 0 rgba(7,189,214,0.6); }
+  70%  { box-shadow: 0 0 0 9px rgba(7,189,214,0); }
+  100% { box-shadow: 0 0 0 0 rgba(7,189,214,0); }
 }
 @keyframes tcMysteryRing {
   0%   { transform: scale(1); opacity: 0.6; }
@@ -155,7 +155,7 @@ const MYSTERY_STYLE = `
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  background: rgba(99,102,241,0.35);
+  background: rgba(7,189,214,0.3);
   animation: tcMysteryRing 1.8s ease-out infinite;
   pointer-events: none;
 }
@@ -167,7 +167,7 @@ function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPl
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-6 text-center relative overflow-hidden">
+        <div className="bg-gradient-to-br from-[#060F1E] to-[#0A1628] p-6 text-center relative overflow-hidden">
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="h-32 w-32 rounded-full border-2 border-white/10" />
             <div className="absolute h-48 w-48 rounded-full border border-white/5" />
@@ -185,7 +185,7 @@ function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPl
             <p className="text-slate-700 text-sm mb-5">
               This traveler is a <span className="font-bold text-indigo-600">TCUnnect Plus</span> member who chose to keep their identity hidden on this post. Their privacy is respected. 🕵️
             </p>
-            <button onClick={onClose} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl text-sm transition">
+            <button onClick={onClose} className="w-full bg-[#07BDD6] hover:bg-[#06AABF] text-white font-semibold py-3 rounded-xl text-sm transition">
               Got it
             </button>
           </div>
@@ -195,13 +195,13 @@ function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPl
             <p className="text-slate-700 text-sm text-center mb-4">
               Upgrade to <span className="font-bold text-indigo-600">TCUnnect Plus</span> to reveal <span className="font-semibold">your own identity</span> on your community posts — let fellow travelers know it was you.
             </p>
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-center mb-4">
-              <p className="text-2xl font-bold text-indigo-700">₱30</p>
-              <p className="text-xs text-indigo-600 font-medium">Lifetime · Founding Explorer</p>
+            <div className="bg-gradient-to-br from-[#F5B731]/10 to-[#F26B38]/10 border border-[#F5B731]/30 rounded-xl px-4 py-3 text-center mb-4">
+              <p className="text-2xl font-bold text-[#F26B38]">₱30</p>
+              <p className="text-xs text-[#F5B731] font-semibold">Lifetime · Founding Explorer</p>
             </div>
             <button
-              onClick={() => { onClose(); navigate("/plans"); }}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl text-sm transition mb-2 flex items-center justify-center gap-1.5"
+              onClick={() => { onClose(); navigate("/premium"); }}
+              className="w-full bg-gradient-to-r from-[#07BDD6] to-[#0A8093] hover:from-[#06AABF] hover:to-[#097380] text-white font-semibold py-3 rounded-xl text-sm transition mb-2 shadow-md shadow-[#07BDD6]/20 flex items-center justify-center gap-1.5"
             >
               <Crown className="h-4 w-4" />
               Upgrade to Plus
@@ -286,7 +286,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
           <button
             onClick={handleMysteryClick}
             title={currentUserIsPremium ? "Anonymous traveler" : "Unlock with Plus"}
-            className="h-9 w-9 rounded-full shrink-0 bg-gradient-to-br from-indigo-400 to-violet-500 flex items-center justify-center text-white text-sm font-black tc-mystery-pulse focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            className="h-9 w-9 rounded-full shrink-0 bg-gradient-to-br from-[#07BDD6] to-[#0A8093] flex items-center justify-center text-white text-sm font-black tc-mystery-pulse focus:outline-none focus-visible:ring-2 focus-visible:ring-[#07BDD6]"
           >
             ?
           </button>
@@ -308,7 +308,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
               onClick={handleMysteryClick}
               className="flex items-center gap-1 group"
             >
-              <p className="text-xs font-semibold text-slate-500 group-hover:text-indigo-600 transition truncate">
+              <p className="text-xs font-semibold text-[#0A8093] group-hover:text-[#07BDD6] transition truncate">
                 TCUnnect Traveler
               </p>
               {!currentUserIsPremium && (
