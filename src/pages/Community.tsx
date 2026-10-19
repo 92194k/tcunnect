@@ -183,7 +183,7 @@ function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPl
           /* Plus user — they already have Plus, poster just chose to stay anonymous */
           <div className="p-5 text-center">
             <p className="text-slate-700 text-sm mb-5">
-              This traveler is a <span className="font-bold text-indigo-600">TCUnnect Plus</span> member who chose to keep their identity hidden on this post. Their privacy is respected. 🕵️
+              This traveler is a <span className="font-bold text-sky-600">TCUnnect Plus</span> member who chose to keep their identity hidden on this post. Their privacy is respected. 🕵️
             </p>
             <button onClick={onClose} className="w-full bg-[#0284c7] hover:bg-[#0369a1] text-white font-semibold py-3 rounded-xl text-sm transition">
               Got it
@@ -192,9 +192,16 @@ function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPl
         ) : (
           /* Free user — upgrade pitch */
           <div className="p-5">
-            <p className="text-slate-700 text-sm text-center mb-4">
-              Upgrade to <span className="font-bold text-indigo-600">TCUnnect Plus</span> to reveal <span className="font-semibold">your own identity</span> on your community posts — let fellow travelers know it was you.
-            </p>
+            <ul className="text-slate-700 text-sm mb-4 space-y-2">
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-4 w-4 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+                <span>Reveal <span className="font-semibold">your own identity</span> on your posts — let fellow travelers know it was you.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-0.5 h-4 w-4 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+                <span>See <span className="font-semibold">who posted</span> — reveal the real identity behind every anonymous post.</span>
+              </li>
+            </ul>
             <div className="bg-gradient-to-br from-[#F5B731]/10 to-[#F26B38]/10 border border-[#F5B731]/30 rounded-xl px-4 py-3 text-center mb-4">
               <p className="text-2xl font-bold text-[#F26B38]">₱30</p>
               <p className="text-xs text-[#F5B731] font-semibold">Lifetime · Founding Explorer</p>
@@ -295,7 +302,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
         ) : (
           <button
             onClick={() => !isOwn && post.user_id && navigate(`/profile/${post.user_id}`)}
-            className={`h-9 w-9 rounded-full shrink-0 overflow-hidden flex items-center justify-center text-white text-xs font-bold transition ${isPlusReveal ? "bg-gradient-to-br from-[#0284c7] to-[#0369a1] ring-2 ring-[#F5B731] ring-offset-1" : "bg-gradient-to-br from-sky-400 to-indigo-500"} ${!isOwn && post.user_id ? "cursor-pointer" : "cursor-default"}`}
+            className={`h-9 w-9 rounded-full shrink-0 overflow-hidden flex items-center justify-center text-white text-xs font-bold transition ${isPlusReveal ? "bg-gradient-to-br from-[#0284c7] to-[#0369a1] ring-2 ring-[#F5B731] ring-offset-1" : "bg-gradient-to-br from-sky-400 to-sky-600"} ${!isOwn && post.user_id ? "cursor-pointer" : "cursor-default"}`}
           >
             {post.author_avatar
               ? <img src={post.author_avatar} alt="" className="h-full w-full object-cover" />
@@ -1008,12 +1015,12 @@ export default function Community() {
                 onClick={() => setRevealIdentity((v) => !v)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition mb-4 text-left ${
                   revealIdentity
-                    ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                    ? "border-sky-300 bg-sky-50 text-sky-700"
                     : "border-slate-200 bg-slate-50 text-slate-600"
                 }`}
               >
                 <div className={`h-5 w-5 rounded-full flex items-center justify-center shrink-0 border-2 transition ${
-                  revealIdentity ? "border-indigo-500 bg-indigo-500" : "border-slate-300 bg-white"
+                  revealIdentity ? "border-sky-600 bg-sky-600" : "border-slate-300 bg-white"
                 }`}>
                   {revealIdentity && <span className="text-white text-[10px] font-black">✓</span>}
                 </div>
@@ -1093,7 +1100,7 @@ export default function Community() {
         )}
 
         <div className="mt-8 text-center text-xs text-slate-400">
-          🕵️ Posts are anonymous by default · <span className="text-indigo-400 font-medium">Plus</span> members can choose to reveal their identity
+          🕵️ Posts are anonymous by default · <span className="text-sky-500 font-medium">Plus</span> members can choose to reveal their identity
         </div>
       </div>
     </AppShell>
