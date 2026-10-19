@@ -1178,7 +1178,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
 
         <button
           onClick={() => { setShowEmoji(!showEmoji); setShowTripPanel(false); }}
-          className={`p-2 transition rounded-lg ${showEmoji ? "text-sky-600 bg-sky-50" : "text-slate-400 hover:text-sky-500"}`}
+          className={`p-2 shrink-0 transition rounded-lg ${showEmoji ? "text-sky-600 bg-sky-50" : "text-slate-400 hover:text-sky-500"}`}
         >
           <Smile className="h-5 w-5" />
         </button>
@@ -1194,7 +1194,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           onClick={handlePhotoClick}
           disabled={uploadingPhoto}
           title={user?.isPremium ? "Send a photo" : "Photo sharing — Plus only"}
-          className={`p-2 transition rounded-lg relative ${
+          className={`p-2 shrink-0 transition rounded-lg relative ${
             user?.isPremium
               ? "text-slate-400 hover:text-sky-500"
               : "text-slate-300 hover:text-slate-400"
@@ -1215,12 +1215,12 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
           placeholder="Type a message..."
-          className="flex-1 px-4 py-2 text-sm border border-slate-200 rounded-full focus:ring-2 focus:ring-sky-500 outline-none"
+          className="flex-1 min-w-0 px-4 py-2 text-sm border border-slate-200 rounded-full focus:ring-2 focus:ring-sky-500 outline-none"
         />
         <button
           onClick={() => handleSend()}
           disabled={!input.trim() || sending}
-          className="h-9 w-9 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white rounded-full flex items-center justify-center transition"
+          className="h-9 w-9 shrink-0 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white rounded-full flex items-center justify-center transition"
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </button>
