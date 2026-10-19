@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import { useAuthStore, createNotification } from "../stores";
-import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight, Flag, MoreHorizontal, Heart, MessageSquare, Crown } from "lucide-react";
+import { MapPin, MessageCircle, ChevronUp, Plus, X, Loader2, Image, Share2, Send, CornerDownRight, Flag, MoreHorizontal, Heart, MessageSquare, Crown, Eye } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 interface Comment {
@@ -232,6 +232,8 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
   // Own posts always show your own identity regardless of reveal choice
   const showRealIdentity = (!!post.reveal_identity && hasAuthor) || isOwn || (!!currentUserIsPremium && !!post.user_id);
   const isAnonymous = !showRealIdentity;
+  // Plus viewer seeing someone who chose to stay anonymous — reveal is active
+  const isPlusReveal = !!currentUserIsPremium && !isOwn && !post.reveal_identity && !!post.user_id && showRealIdentity;
 
   const initials = post.author_name
     ? post.author_name.trim().split(/\s+/).map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)
@@ -293,7 +295,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
         ) : (
           <button
             onClick={() => !isOwn && post.user_id && navigate(`/profile/${post.user_id}`)}
-            className={`h-9 w-9 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold ${!isOwn && post.user_id ? "cursor-pointer hover:ring-2 hover:ring-sky-400 transition" : "cursor-default"}`}
+            className={`h-9 w-9 rounded-full shrink-0 overflow-hidden flex items-center justify-center text-white text-xs font-bold transition ${isPlusReveal ? "bg-gradient-to-br from-[#07BDD6] to-[#0A8093] ring-2 ring-[#F5B731] ring-offset-1" : "bg-gradient-to-br from-sky-400 to-indigo-500"} ${!isOwn && post.user_id ? "cursor-pointer" : "cursor-default"}`}
           >
             {post.author_avatar
               ? <img src={post.author_avatar} alt="" className="h-full w-full object-cover" />
@@ -317,6 +319,19 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
             </button>
           ) : isOwn ? (
             <p className="text-xs font-semibold text-slate-700 truncate">{post.author_name}</p>
+          ) : isPlusReveal ? (
+            <button
+              onClick={() => post.user_id && navigate(`/profile/${post.user_id}`)}
+              className="flex items-center gap-1.5 group"
+            >
+              <span className="text-xs font-semibold text-slate-800 group-hover:text-[#07BDD6] transition truncate">
+                {post.author_name || "Unnamed Traveler"}
+              </span>
+              <span className="flex items-center gap-0.5 text-[9px] bg-[#07BDD6]/10 text-[#07BDD6] border border-[#07BDD6]/20 px-1.5 py-0.5 rounded-full font-bold shrink-0 whitespace-nowrap">
+                <Eye className="h-2.5 w-2.5" />
+                Plus Reveal
+              </span>
+            </button>
           ) : (
             <button
               onClick={() => post.user_id && navigate(`/profile/${post.user_id}`)}
