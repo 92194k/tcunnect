@@ -42,6 +42,16 @@ interface FeaturedGem {
   is_featured?: boolean;
 }
 
+interface FeaturedSpot {
+  id: string;
+  name: string;
+  section: "places" | "activities" | "food" | "products" | "stays" | "experiences";
+  category_label: string | null;
+  image_url: string | null;
+  description: string;
+  hidden_gems: { id: string; name: string; location: string } | null;
+}
+
 interface TravelerCard {
   id: string;
   full_name: string;
@@ -72,6 +82,65 @@ function timeAgo(ts: string): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ─── Featured Spots Row ────────────────────────────────────────────────────────
+const SECTION_META: Record<string, { label: string; emoji: string }> = {
+  places:      { label: "Place",      emoji: "🗺" },
+  activities:  { label: "Activity",   emoji: "🎯" },
+  food:        { label: "Food & Drink", emoji: "🍽" },
+  products:    { label: "Local Find",  emoji: "🛍" },
+  stays:       { label: "Stay",        emoji: "🏡" },
+  experiences: { label: "Experience",  emoji: "✨" },
+};
+
+function FeaturedSpotsRow({ spots }: { spots: FeaturedSpot[] }) {
+  if (!spots.length) return null;
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-amber-500 text-lg">🌟</span>
+          <h2 className="text-base font-bold text-slate-900">Featured Spots</h2>
+        </div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-3 xl:grid-cols-4 snap-x snap-mandatory">
+        {spots.map(spot => {
+          const meta = SECTION_META[spot.section] ?? { label: spot.section, emoji: "📍" };
+          const gem = spot.hidden_gems;
+          return (
+            <Link
+              key={spot.id}
+              to={gem ? `/gems/${gem.id}` : "#"}
+              className="flex-shrink-0 w-56 lg:w-auto snap-start bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition group"
+            >
+              {/* Photo or emoji placeholder */}
+              <div className="relative h-32 bg-gradient-to-br from-sky-50 to-amber-50 flex items-center justify-center overflow-hidden">
+                {spot.image_url ? (
+                  <img src={spot.image_url} alt={spot.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                ) : (
+                  <span className="text-4xl">{meta.emoji}</span>
+                )}
+                <span className="absolute top-2 left-2 text-[9px] font-extrabold tracking-widest uppercase bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full shadow-sm">
+                  ✨ Featured
+                </span>
+              </div>
+              {/* Text */}
+              <div className="p-3">
+                <p className="font-bold text-slate-900 text-sm truncate">{spot.name}</p>
+                <p className="text-[10px] font-semibold text-sky-600 mt-0.5">{meta.label}{spot.category_label ? ` · ${spot.category_label}` : ""}</p>
+                {gem && (
+                  <p className="flex items-center gap-0.5 text-[10px] text-slate-400 mt-1 truncate">
+                    <MapPin className="h-2.5 w-2.5 shrink-0" />{gem.name}
+                  </p>
+                )}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 // ─── Featured Gem Carousel ────────────────────────────────────────────────────
@@ -477,6 +546,7 @@ function CommunityPromoCard() {
 export default function Dashboard() {
   const { user } = useAuthStore();
   const [featuredGems, setFeaturedGems] = useState<FeaturedGem[]>([]);
+  const [featuredSpots, setFeaturedSpots] = useState<FeaturedSpot[]>([]);
   const [travelers, setTravelers] = useState<TravelerCard[]>([]);
   const [posts, setPosts] = useState<PostCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -489,7 +559,7 @@ export default function Dashboard() {
       setLoading(true);
       if (!isSupabaseConfigured) { setLoading(false); return; }
 
-      const [gemsRes, travelersRes, postsRes] = await Promise.all([
+      const [gemsRes, travelersRes, postsRes, spotsRes] = await Promise.all([
         supabase
           .from("hidden_gems")
           .select("id, name, location, category, images, budget_level, description, is_featured")
@@ -508,6 +578,11 @@ export default function Dashboard() {
           .select("id, content, location, upvotes, comment_count, created_at, user_id, profiles:user_id(full_name, profile_photo)")
           .order("created_at", { ascending: false })
           .limit(3),
+        supabase
+          .from("gem_content_items")
+          .select("id, name, section, category_label, image_url, description, hidden_gems:gem_id(id, name, location)")
+          .eq("is_featured", true)
+          .limit(12),
       ]);
 
       const gems = (gemsRes.data ?? []) as FeaturedGem[];
@@ -516,6 +591,7 @@ export default function Dashboard() {
       setFeaturedGems(featured);
 
       setTravelers((travelersRes.data ?? []) as TravelerCard[]);
+      setFeaturedSpots((spotsRes.data ?? []) as unknown as FeaturedSpot[]);
       setPosts((postsRes.data ?? []) as unknown as PostCard[]);
 
       setLoading(false);
@@ -580,6 +656,9 @@ export default function Dashboard() {
           <>
             {/* ── Featured Gems Carousel ────────────────────────────────────── */}
             {featuredGems.length > 0 && <FeaturedCarousel gems={featuredGems} />}
+
+            {/* ── Featured Spots ────────────────────────────────────────────── */}
+            {featuredSpots.length > 0 && <FeaturedSpotsRow spots={featuredSpots} />}
 
             {/* ── Recommended Travelers ─────────────────────────────────────── */}
             {travelers.length > 0 && (
