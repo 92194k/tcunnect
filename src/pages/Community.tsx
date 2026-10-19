@@ -138,9 +138,9 @@ function ReportPostModal({ postId, reporterId, onClose }: {
 // ─── Mystery Avatar keyframe (injected once) ──────────────────────────────────
 const MYSTERY_STYLE = `
 @keyframes tcMysteryPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(7,189,214,0.6); }
-  70%  { box-shadow: 0 0 0 9px rgba(7,189,214,0); }
-  100% { box-shadow: 0 0 0 0 rgba(7,189,214,0); }
+  0%   { box-shadow: 0 0 0 0 rgba(2,132,199,0.6); }
+  70%  { box-shadow: 0 0 0 9px rgba(2,132,199,0); }
+  100% { box-shadow: 0 0 0 0 rgba(2,132,199,0); }
 }
 @keyframes tcMysteryRing {
   0%   { transform: scale(1); opacity: 0.6; }
@@ -155,7 +155,7 @@ const MYSTERY_STYLE = `
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  background: rgba(7,189,214,0.3);
+  background: rgba(2,132,199,0.3);
   animation: tcMysteryRing 1.8s ease-out infinite;
   pointer-events: none;
 }
@@ -185,7 +185,7 @@ function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPl
             <p className="text-slate-700 text-sm mb-5">
               This traveler is a <span className="font-bold text-indigo-600">TCUnnect Plus</span> member who chose to keep their identity hidden on this post. Their privacy is respected. 🕵️
             </p>
-            <button onClick={onClose} className="w-full bg-[#07BDD6] hover:bg-[#06AABF] text-white font-semibold py-3 rounded-xl text-sm transition">
+            <button onClick={onClose} className="w-full bg-[#0284c7] hover:bg-[#0369a1] text-white font-semibold py-3 rounded-xl text-sm transition">
               Got it
             </button>
           </div>
@@ -201,7 +201,7 @@ function AnonymousPlusModal({ onClose, isPlusUser }: { onClose: () => void; isPl
             </div>
             <button
               onClick={() => { onClose(); navigate("/premium"); }}
-              className="w-full bg-gradient-to-r from-[#07BDD6] to-[#0A8093] hover:from-[#06AABF] hover:to-[#097380] text-white font-semibold py-3 rounded-xl text-sm transition mb-2 shadow-md shadow-[#07BDD6]/20 flex items-center justify-center gap-1.5"
+              className="w-full bg-gradient-to-r from-[#0284c7] to-[#0369a1] hover:from-[#0369a1] hover:to-[#075985] text-white font-semibold py-3 rounded-xl text-sm transition mb-2 shadow-md shadow-[#0284c7]/20 flex items-center justify-center gap-1.5"
             >
               <Crown className="h-4 w-4" />
               Upgrade to Plus
@@ -288,14 +288,14 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
           <button
             onClick={handleMysteryClick}
             title={currentUserIsPremium ? "Anonymous traveler" : "Unlock with Plus"}
-            className="h-9 w-9 rounded-full shrink-0 bg-gradient-to-br from-[#07BDD6] to-[#0A8093] flex items-center justify-center text-white text-sm font-black tc-mystery-pulse focus:outline-none focus-visible:ring-2 focus-visible:ring-[#07BDD6]"
+            className="h-9 w-9 rounded-full shrink-0 bg-gradient-to-br from-[#0284c7] to-[#0369a1] flex items-center justify-center text-white text-sm font-black tc-mystery-pulse focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0284c7]"
           >
             ?
           </button>
         ) : (
           <button
             onClick={() => !isOwn && post.user_id && navigate(`/profile/${post.user_id}`)}
-            className={`h-9 w-9 rounded-full shrink-0 overflow-hidden flex items-center justify-center text-white text-xs font-bold transition ${isPlusReveal ? "bg-gradient-to-br from-[#07BDD6] to-[#0A8093] ring-2 ring-[#F5B731] ring-offset-1" : "bg-gradient-to-br from-sky-400 to-indigo-500"} ${!isOwn && post.user_id ? "cursor-pointer" : "cursor-default"}`}
+            className={`h-9 w-9 rounded-full shrink-0 overflow-hidden flex items-center justify-center text-white text-xs font-bold transition ${isPlusReveal ? "bg-gradient-to-br from-[#0284c7] to-[#0369a1] ring-2 ring-[#F5B731] ring-offset-1" : "bg-gradient-to-br from-sky-400 to-indigo-500"} ${!isOwn && post.user_id ? "cursor-pointer" : "cursor-default"}`}
           >
             {post.author_avatar
               ? <img src={post.author_avatar} alt="" className="h-full w-full object-cover" />
@@ -310,7 +310,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
               onClick={handleMysteryClick}
               className="flex items-center gap-1 group"
             >
-              <p className="text-xs font-semibold text-[#0A8093] group-hover:text-[#07BDD6] transition truncate">
+              <p className="text-xs font-semibold text-[#0369a1] group-hover:text-[#0284c7] transition truncate">
                 TCUnnect Traveler
               </p>
               {!currentUserIsPremium && (
@@ -324,10 +324,10 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
               onClick={() => post.user_id && navigate(`/profile/${post.user_id}`)}
               className="flex items-center gap-1.5 group"
             >
-              <span className="text-xs font-semibold text-slate-800 group-hover:text-[#07BDD6] transition truncate">
+              <span className="text-xs font-semibold text-slate-800 group-hover:text-[#0284c7] transition truncate">
                 {post.author_name || "Unnamed Traveler"}
               </span>
-              <span className="flex items-center gap-0.5 text-[9px] bg-[#07BDD6]/10 text-[#07BDD6] border border-[#07BDD6]/20 px-1.5 py-0.5 rounded-full font-bold shrink-0 whitespace-nowrap">
+              <span className="flex items-center gap-0.5 text-[9px] bg-[#0284c7]/10 text-[#0284c7] border border-[#0284c7]/20 px-1.5 py-0.5 rounded-full font-bold shrink-0 whitespace-nowrap">
                 <Eye className="h-2.5 w-2.5" />
                 Plus Reveal
               </span>
