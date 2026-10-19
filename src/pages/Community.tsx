@@ -230,7 +230,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
   const hasAuthor = !!(post.user_id && post.author_name);
   // Identity is revealed only when the POSTER explicitly chose to reveal it (Plus feature)
   // Own posts always show your own identity regardless of reveal choice
-  const showRealIdentity = (!!post.reveal_identity && hasAuthor) || isOwn;
+  const showRealIdentity = (!!post.reveal_identity && hasAuthor) || isOwn || (!!currentUserIsPremium && hasAuthor);
   const isAnonymous = !showRealIdentity;
 
   const initials = post.author_name
