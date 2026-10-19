@@ -17,7 +17,7 @@ const NAV = [
   { to: "/community", label: "Community", Icon: MessageCircle },
 ];
 
-export default function AppShell({ children, chat }: { children: React.ReactNode; chat?: boolean }) {
+export default function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -360,7 +360,7 @@ export default function AppShell({ children, chat }: { children: React.ReactNode
       </header>
 
       {/* ── Page content ── */}
-      <div className={`pt-16 lg:pt-16 ${chat ? "pb-16 lg:pb-0 h-[calc(100dvh-0px)] overflow-hidden" : "pb-20 lg:pb-8"}`}>
+      <div className="pt-16 lg:pt-16 pb-20 lg:pb-8">
         {children}
       </div>
 
