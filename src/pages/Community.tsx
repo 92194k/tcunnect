@@ -159,6 +159,30 @@ const MYSTERY_STYLE = `
   animation: tcMysteryRing 1.8s ease-out infinite;
   pointer-events: none;
 }
+@keyframes tcPlusShine {
+  0%   { opacity: 1; filter: drop-shadow(0 0 0px #F5B731); }
+  50%  { opacity: 1; filter: drop-shadow(0 0 5px #F5B731) drop-shadow(0 0 2px #fff); }
+  100% { opacity: 1; filter: drop-shadow(0 0 0px #F5B731); }
+}
+@keyframes tcPlusBadgeGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,183,49,0); background-position: 0% 50%; }
+  50%       { box-shadow: 0 0 6px 2px rgba(245,183,49,0.35); background-position: 100% 50%; }
+}
+.tc-plus-crown {
+  animation: tcPlusShine 2.2s ease-in-out infinite;
+}
+.tc-plus-name {
+  background: linear-gradient(90deg, #0284c7 0%, #F5B731 40%, #F26B38 70%, #0284c7 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: tcNameShimmer 3s linear infinite;
+}
+@keyframes tcNameShimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
 `;
 
 // ─── Plus upgrade modal (anonymous poster) ────────────────────────────────────
@@ -321,7 +345,14 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
               )}
             </button>
           ) : isOwn ? (
-            <p className="text-xs font-semibold text-slate-700 truncate">{post.author_name}</p>
+            <div className="flex items-center gap-1 min-w-0">
+              <p className={`text-xs font-semibold truncate ${post.reveal_identity ? "tc-plus-name" : "text-slate-700"}`}>
+                {post.author_name}
+              </p>
+              {post.reveal_identity && (
+                <Crown className="h-3 w-3 tc-plus-crown shrink-0" style={{ color: "#F5B731" }} />
+              )}
+            </div>
           ) : isPlusReveal ? (
             <button
               onClick={() => post.user_id && navigate(`/profile/${post.user_id}`)}
@@ -338,9 +369,14 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
           ) : (
             <button
               onClick={() => post.user_id && navigate(`/profile/${post.user_id}`)}
-              className="text-xs font-semibold text-sky-600 hover:text-sky-700 transition truncate text-left"
+              className="flex items-center gap-1 group text-left min-w-0"
             >
-              {post.author_name || "TCUnnect Traveler"}
+              <span className={`text-xs font-semibold truncate transition ${post.reveal_identity ? "tc-plus-name" : "text-sky-600 group-hover:text-sky-700"}`}>
+                {post.author_name || "TCUnnect Traveler"}
+              </span>
+              {post.reveal_identity && (
+                <Crown className="h-3 w-3 tc-plus-crown shrink-0" style={{ color: "#F5B731" }} />
+              )}
             </button>
           )}
           <p className="text-[10px] text-slate-400 flex items-center gap-1">
