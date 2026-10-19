@@ -68,6 +68,8 @@ interface ContentItem {
   seller: string | null;
   // experiences
   action_type: string | null;
+  // featured
+  is_featured: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -125,7 +127,12 @@ function PlacesSection({ items }: { items: ContentItem[] }) {
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                    {item.is_featured && (
+                      <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">✨ Featured</span>
+                    )}
+                  </div>
                   {item.distance && (
                     <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full flex-shrink-0">📍 {item.distance}</span>
                   )}
@@ -165,7 +172,12 @@ function ActivitiesSection({ items }: { items: ContentItem[] }) {
         {items.map((item) => (
           <div key={item.id} className="bg-slate-50 rounded-xl p-4">
             <div className="flex items-center justify-between gap-2 mb-1">
-              <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                {item.is_featured && (
+                  <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">✨ Featured</span>
+                )}
+              </div>
               {item.duration && <span className="text-[10px] text-slate-400 flex-shrink-0">⏱ {item.duration}</span>}
             </div>
             <p className="text-xs text-slate-500 leading-relaxed">{item.description}</p>
@@ -189,7 +201,12 @@ function FoodSection({ items }: { items: ContentItem[] }) {
           <div key={item.id} className="border border-slate-100 bg-white rounded-xl p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                  <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                  {item.is_featured && (
+                    <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">✨ Featured</span>
+                  )}
+                </div>
                 {item.category_label && (
                   <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">{item.category_label}</span>
                 )}
@@ -214,7 +231,12 @@ function ProductsSection({ items }: { items: ContentItem[] }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {items.map((item) => (
           <div key={item.id} className="bg-slate-50 rounded-xl p-4">
-            <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+              <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+              {item.is_featured && (
+                <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">✨ Featured</span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.description}</p>
             {item.seller && (
               <p className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
@@ -238,7 +260,12 @@ function StaysSection({ items }: { items: ContentItem[] }) {
           <div key={item.id} className="border border-slate-100 bg-white rounded-xl p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                  <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                  {item.is_featured && (
+                    <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">✨ Featured</span>
+                  )}
+                </div>
                 {item.category_label && (
                   <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{item.category_label}</span>
                 )}
@@ -280,7 +307,12 @@ function ExperiencesSection({ items }: { items: ContentItem[] }) {
             <div key={item.id} className="bg-gradient-to-br from-sky-50 to-indigo-50 border border-sky-100 rounded-xl p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="flex-1">
-                  <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                    <p className="font-semibold text-slate-900 text-sm">{item.name}</p>
+                    {item.is_featured && (
+                      <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0">✨ Featured</span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500 mt-1 leading-relaxed">{item.description}</p>
                   {item.price_range && (
                     <p className="text-xs font-bold text-emerald-700 mt-2">{item.price_range}</p>

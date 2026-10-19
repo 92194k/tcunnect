@@ -1415,6 +1415,7 @@ interface ContentItemDraft {
   action_type: string;
   image_url: string;
   image_source: string;
+  is_featured: boolean;
 }
 
 function emptyItem(section: ContentSection, idx: number): ContentItemDraft {
@@ -1433,6 +1434,7 @@ function emptyItem(section: ContentSection, idx: number): ContentItemDraft {
     action_type: "Inquire",
     image_url: "",
     image_source: "",
+    is_featured: false,
   };
 }
 
@@ -1525,6 +1527,7 @@ function GemEditorModal({
             action_type: row.action_type ?? "Inquire",
             image_url: row.image_url ?? "",
             image_source: row.image_source ?? "",
+            is_featured: Boolean(row.is_featured),
           });
         });
         setItems(grouped);
@@ -1534,6 +1537,13 @@ function GemEditorModal({
   }, [gemId]);
 
   function updateItem(section: ContentSection, key: string, field: keyof ContentItemDraft, value: string) {
+    setItems(prev => ({
+      ...prev,
+      [section]: prev[section].map(it => it._key === key ? { ...it, [field]: value } : it),
+    }));
+  }
+
+  function updateItemBool(section: ContentSection, key: string, field: keyof ContentItemDraft, value: boolean) {
     setItems(prev => ({
       ...prev,
       [section]: prev[section].map(it => it._key === key ? { ...it, [field]: value } : it),
@@ -1635,6 +1645,7 @@ function GemEditorModal({
             action_type: it.action_type || null,
             image_url: it.image_url.trim() || null,
             image_source: it.image_source.trim() || null,
+            is_featured: it.is_featured ?? false,
           });
         });
       });
@@ -1812,6 +1823,7 @@ function GemEditorModal({
                   onAdd={() => addItem("places")}
                   onRemove={key => removeItem("places", key)}
                   onUpdate={(key, field, val) => updateItem("places", key, field, val)}
+                  onUpdateBool={(key, field, val) => updateItemBool("places", key, field, val)}
                   fields={[
                     { key: "name", label: "Place Name *", placeholder: "e.g. Summit Viewdeck" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
@@ -1831,6 +1843,7 @@ function GemEditorModal({
                   onAdd={() => addItem("activities")}
                   onRemove={key => removeItem("activities", key)}
                   onUpdate={(key, field, val) => updateItem("activities", key, field, val)}
+                  onUpdateBool={(key, field, val) => updateItemBool("activities", key, field, val)}
                   fields={[
                     { key: "name", label: "Activity Name *", placeholder: "e.g. Guided Summit Trek" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
@@ -1848,6 +1861,7 @@ function GemEditorModal({
                   onAdd={() => addItem("food")}
                   onRemove={key => removeItem("food", key)}
                   onUpdate={(key, field, val) => updateItem("food", key, field, val)}
+                  onUpdateBool={(key, field, val) => updateItemBool("food", key, field, val)}
                   fields={[
                     { key: "name", label: "Name *", placeholder: "e.g. Mountain View Eatery" },
                     { key: "category_label", label: "Category", placeholder: "e.g. Filipino / Comfort Food" },
@@ -1865,6 +1879,7 @@ function GemEditorModal({
                   onAdd={() => addItem("products")}
                   onRemove={key => removeItem("products", key)}
                   onUpdate={(key, field, val) => updateItem("products", key, field, val)}
+                  onUpdateBool={(key, field, val) => updateItemBool("products", key, field, val)}
                   fields={[
                     { key: "name", label: "Product / Find Name *", placeholder: "e.g. Local Strawberry Jam" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
@@ -1881,6 +1896,7 @@ function GemEditorModal({
                   onAdd={() => addItem("stays")}
                   onRemove={key => removeItem("stays", key)}
                   onUpdate={(key, field, val) => updateItem("stays", key, field, val)}
+                  onUpdateBool={(key, field, val) => updateItemBool("stays", key, field, val)}
                   fields={[
                     { key: "name", label: "Accommodation Name *", placeholder: "e.g. Pine Lodge Guesthouse" },
                     { key: "category_label", label: "Type", placeholder: "e.g. 🏡 Guesthouse" },
@@ -1898,6 +1914,7 @@ function GemEditorModal({
                   onAdd={() => addItem("experiences")}
                   onRemove={key => removeItem("experiences", key)}
                   onUpdate={(key, field, val) => updateItem("experiences", key, field, val)}
+                  onUpdateBool={(key, field, val) => updateItemBool("experiences", key, field, val)}
                   fields={[
                     { key: "name", label: "Experience Name *", placeholder: "e.g. Coffee Farm Tour" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
@@ -1944,6 +1961,7 @@ function ContentItemList({
   onAdd,
   onRemove,
   onUpdate,
+  onUpdateBool,
   fields,
   addLabel,
 }: {
@@ -1951,6 +1969,7 @@ function ContentItemList({
   onAdd: () => void;
   onRemove: (key: string) => void;
   onUpdate: (key: string, field: keyof ContentItemDraft, value: string) => void;
+  onUpdateBool: (key: string, field: keyof ContentItemDraft, value: boolean) => void;
   fields: FieldDef[];
   addLabel: string;
 }) {
@@ -1982,6 +2001,18 @@ function ContentItemList({
               )}
             </div>
           ))}
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-200 mt-1">
+            <input
+              type="checkbox"
+              id={`feat_${item._key}`}
+              checked={!!item.is_featured}
+              onChange={e => onUpdateBool(item._key, "is_featured", e.target.checked)}
+              className="h-4 w-4 rounded accent-amber-400"
+            />
+            <label htmlFor={`feat_${item._key}`} className="text-xs font-semibold text-slate-600 cursor-pointer select-none">
+              ✨ Feature this item
+            </label>
+          </div>
         </div>
       ))}
       <button
