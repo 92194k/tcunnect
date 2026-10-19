@@ -33,7 +33,7 @@ function EmojiPicker({ onSelect, onClose }: { onSelect: (e: string) => void; onC
   return (
     <div
       ref={ref}
-      className="absolute bottom-14 left-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 w-64"
+      className="absolute bottom-14 left-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 w-64 max-w-[calc(100vw-2rem)]"
     >
       <div className="grid grid-cols-10 gap-0.5">
         {EMOJIS.map((e) => (
@@ -1025,7 +1025,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   }
 
   return (
-    <div className="fixed inset-x-0 top-16 bottom-16 lg:bottom-0 flex flex-col bg-white overflow-hidden z-10">
+    <div className="fixed inset-x-0 top-16 lg:bottom-0 flex flex-col bg-white z-10" style={{ bottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
       {/* Header */}
       <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center gap-3">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
