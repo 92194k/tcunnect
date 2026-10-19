@@ -1476,6 +1476,7 @@ function GemEditorModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
+  const [uploadingItemKeys, setUploadingItemKeys] = useState<Set<string>>(new Set());
 
   // Load existing gem + content items when editing
   useEffect(() => {
@@ -1559,6 +1560,20 @@ function GemEditorModal({
 
   function removeItem(section: ContentSection, key: string) {
     setItems(prev => ({ ...prev, [section]: prev[section].filter(it => it._key !== key) }));
+  }
+
+  async function uploadItemImage(section: ContentSection, key: string, file: File) {
+    setUploadingItemKeys(prev => new Set(prev).add(key));
+    const ext = file.name.split(".").pop() ?? "jpg";
+    const path = `gem-images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("gem-images").upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) {
+      setError(`Upload failed: ${upErr.message}`);
+    } else {
+      const { data: urlData } = supabase.storage.from("gem-images").getPublicUrl(path);
+      updateItem(section, key, "image_url", urlData.publicUrl);
+    }
+    setUploadingItemKeys(prev => { const n = new Set(prev); n.delete(key); return n; });
   }
 
   async function handleImageUpload(files: FileList | null) {
@@ -1824,13 +1839,13 @@ function GemEditorModal({
                   onRemove={key => removeItem("places", key)}
                   onUpdate={(key, field, val) => updateItem("places", key, field, val)}
                   onUpdateBool={(key, field, val) => updateItemBool("places", key, field, val)}
+                  onUploadImage={(key, file) => uploadItemImage("places", key, file)}
+                  uploadingKeys={uploadingItemKeys}
                   fields={[
                     { key: "name", label: "Place Name *", placeholder: "e.g. Summit Viewdeck" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
                     { key: "distance", label: "Distance", placeholder: "e.g. 1.5 km" },
                     { key: "tag", label: "Type Tag", placeholder: "e.g. 🏔 Viewpoint" },
-                    { key: "image_url", label: "Photo URL", placeholder: "https://... (paste image link)" },
-                    { key: "image_source", label: "Photo Credit / Source URL", placeholder: "e.g. https://unsplash.com/..." },
                   ]}
                   addLabel="+ Add Place"
                 />
@@ -1844,6 +1859,8 @@ function GemEditorModal({
                   onRemove={key => removeItem("activities", key)}
                   onUpdate={(key, field, val) => updateItem("activities", key, field, val)}
                   onUpdateBool={(key, field, val) => updateItemBool("activities", key, field, val)}
+                  onUploadImage={(key, file) => uploadItemImage("activities", key, file)}
+                  uploadingKeys={uploadingItemKeys}
                   fields={[
                     { key: "name", label: "Activity Name *", placeholder: "e.g. Guided Summit Trek" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
@@ -1862,6 +1879,8 @@ function GemEditorModal({
                   onRemove={key => removeItem("food", key)}
                   onUpdate={(key, field, val) => updateItem("food", key, field, val)}
                   onUpdateBool={(key, field, val) => updateItemBool("food", key, field, val)}
+                  onUploadImage={(key, file) => uploadItemImage("food", key, file)}
+                  uploadingKeys={uploadingItemKeys}
                   fields={[
                     { key: "name", label: "Name *", placeholder: "e.g. Mountain View Eatery" },
                     { key: "category_label", label: "Category", placeholder: "e.g. Filipino / Comfort Food" },
@@ -1880,6 +1899,8 @@ function GemEditorModal({
                   onRemove={key => removeItem("products", key)}
                   onUpdate={(key, field, val) => updateItem("products", key, field, val)}
                   onUpdateBool={(key, field, val) => updateItemBool("products", key, field, val)}
+                  onUploadImage={(key, file) => uploadItemImage("products", key, file)}
+                  uploadingKeys={uploadingItemKeys}
                   fields={[
                     { key: "name", label: "Product / Find Name *", placeholder: "e.g. Local Strawberry Jam" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
@@ -1897,6 +1918,8 @@ function GemEditorModal({
                   onRemove={key => removeItem("stays", key)}
                   onUpdate={(key, field, val) => updateItem("stays", key, field, val)}
                   onUpdateBool={(key, field, val) => updateItemBool("stays", key, field, val)}
+                  onUploadImage={(key, file) => uploadItemImage("stays", key, file)}
+                  uploadingKeys={uploadingItemKeys}
                   fields={[
                     { key: "name", label: "Accommodation Name *", placeholder: "e.g. Pine Lodge Guesthouse" },
                     { key: "category_label", label: "Type", placeholder: "e.g. 🏡 Guesthouse" },
@@ -1915,6 +1938,8 @@ function GemEditorModal({
                   onRemove={key => removeItem("experiences", key)}
                   onUpdate={(key, field, val) => updateItem("experiences", key, field, val)}
                   onUpdateBool={(key, field, val) => updateItemBool("experiences", key, field, val)}
+                  onUploadImage={(key, file) => uploadItemImage("experiences", key, file)}
+                  uploadingKeys={uploadingItemKeys}
                   fields={[
                     { key: "name", label: "Experience Name *", placeholder: "e.g. Coffee Farm Tour" },
                     { key: "description", label: "Description", placeholder: "Brief description...", multiline: true },
@@ -1962,6 +1987,8 @@ function ContentItemList({
   onRemove,
   onUpdate,
   onUpdateBool,
+  onUploadImage,
+  uploadingKeys,
   fields,
   addLabel,
 }: {
@@ -1970,6 +1997,8 @@ function ContentItemList({
   onRemove: (key: string) => void;
   onUpdate: (key: string, field: keyof ContentItemDraft, value: string) => void;
   onUpdateBool: (key: string, field: keyof ContentItemDraft, value: boolean) => void;
+  onUploadImage: (key: string, file: File) => Promise<void>;
+  uploadingKeys: Set<string>;
   fields: FieldDef[];
   addLabel: string;
 }) {
@@ -2012,6 +2041,38 @@ function ContentItemList({
             <label htmlFor={`feat_${item._key}`} className="text-xs font-semibold text-slate-600 cursor-pointer select-none">
               ✨ Feature this item
             </label>
+          </div>
+          {/* ── Per-item Photo Upload ── */}
+          <div className="border-t border-slate-200 pt-3 mt-1 space-y-2">
+            <p className="text-xs font-semibold text-slate-600">📷 Item Photo</p>
+            {item.image_url ? (
+              <div className="relative w-full rounded-lg overflow-hidden bg-slate-100 h-28">
+                <img src={item.image_url} alt="item" className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => onUpdate(item._key, "image_url", "")}
+                  className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full h-5 w-5 flex items-center justify-center text-[10px] font-bold transition"
+                  title="Remove photo"
+                >✕</button>
+              </div>
+            ) : (
+              <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-lg py-3 cursor-pointer transition text-xs font-medium ${uploadingKeys.has(item._key) ? "border-sky-300 bg-sky-50 text-sky-500" : "border-slate-200 hover:border-sky-300 hover:bg-sky-50/40 text-slate-400 hover:text-sky-600"}`}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingKeys.has(item._key)}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) onUploadImage(item._key, f); e.target.value = ""; }}
+                />
+                {uploadingKeys.has(item._key) ? "Uploading…" : "Upload photo"}
+              </label>
+            )}
+            <input
+              className={inputCls}
+              placeholder="Photo credit / source URL (optional)"
+              value={String(item.image_source ?? "")}
+              onChange={e => onUpdate(item._key, "image_source", e.target.value)}
+            />
           </div>
         </div>
       ))}
