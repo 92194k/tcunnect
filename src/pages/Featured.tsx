@@ -19,6 +19,25 @@ interface FeaturedGem {
   review_count: number;
 }
 
+interface FeaturedSpot {
+  id: string;
+  name: string;
+  section: string;
+  category_label: string | null;
+  image_url: string | null;
+  description: string;
+  hidden_gems: { id: string; name: string; location: string } | null;
+}
+
+const SPOT_SECTION_META: Record<string, { label: string; emoji: string }> = {
+  places:      { label: "Place",        emoji: "🗺" },
+  activities:  { label: "Activity",     emoji: "🎯" },
+  food:        { label: "Food & Drink", emoji: "🍽" },
+  products:    { label: "Local Find",   emoji: "🛍" },
+  stays:       { label: "Stay",         emoji: "🏡" },
+  experiences: { label: "Experience",   emoji: "✨" },
+};
+
 const CATEGORY_META: Record<string, { subtitle: string }> = {
   Beach:                    { subtitle: "The Philippines' most breathtaking shores" },
   "Beach & Island Hopping": { subtitle: "The Philippines' most breathtaking shores" },
@@ -41,6 +60,7 @@ const CATEGORY_META: Record<string, { subtitle: string }> = {
 
 export default function Featured() {
   const [gems, setGems] = useState<FeaturedGem[]>([]);
+  const [spots, setSpots] = useState<FeaturedSpot[]>([]);
   const [loading, setLoading] = useState(true);
   const [heroIndex, setHeroIndex] = useState(0);
 
@@ -55,6 +75,12 @@ export default function Featured() {
         .eq("is_featured", true)
         .order("rating", { ascending: false });
       setGems((data as FeaturedGem[]) ?? []);
+      const { data: spotsData } = await supabase
+        .from("gem_content_items")
+        .select("id, name, section, category_label, image_url, description, hidden_gems:gem_id(id, name, location)")
+        .eq("is_featured", true)
+        .limit(20);
+      setSpots((spotsData as unknown as FeaturedSpot[]) ?? []);
       setLoading(false);
     }
     fetchFeatured();
@@ -203,6 +229,24 @@ export default function Featured() {
               </div>
             </section>
 
+            {/* ── Featured Spots ───────────────────────────────── */}
+            {spots.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xl">✨</span>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Featured Spots</h2>
+                    <p className="text-xs text-slate-500">Hand-picked highlights inside TCUnnect destinations</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {spots.map((spot) => (
+                    <SpotCard key={spot.id} spot={spot} />
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* ── Per-category sections ─────────────────────────── */}
             {Object.entries(byCategory).map(([cat, catGems]) => {
               const meta = CATEGORY_META[cat] ?? { subtitle: "" };
@@ -227,6 +271,50 @@ export default function Featured() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+function SpotCard({ spot }: { spot: FeaturedSpot }) {
+  const meta = SPOT_SECTION_META[spot.section] ?? { label: spot.section, emoji: "📍" };
+  const gem = spot.hidden_gems;
+  return (
+    <Link
+      to={gem ? `/gems/${gem.id}` : "#"}
+      className="group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition"
+    >
+      <div className="relative h-36 overflow-hidden bg-slate-100">
+        {spot.image_url ? (
+          <img
+            src={spot.image_url}
+            alt={spot.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-4xl">
+            {meta.emoji}
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+        <span className="absolute top-2.5 left-2.5 bg-amber-400 text-amber-950 text-[9px] font-extrabold px-2 py-0.5 rounded-full shadow">
+          ✨ FEATURED
+        </span>
+        <span className="absolute top-2.5 right-2.5 bg-white/90 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+          {meta.emoji} {meta.label}
+        </span>
+      </div>
+      <div className="p-3">
+        <p className="font-bold text-sm text-slate-900 leading-tight line-clamp-1">{spot.name}</p>
+        {spot.category_label && (
+          <p className="text-[11px] text-slate-500 mt-0.5">{spot.category_label}</p>
+        )}
+        {gem && (
+          <p className="text-[11px] text-sky-600 mt-1 flex items-center gap-1 font-medium">
+            <MapPin className="h-3 w-3 shrink-0" />
+            {gem.name}
+          </p>
+        )}
+      </div>
+    </Link>
   );
 }
 
