@@ -467,7 +467,7 @@ function PhotoUpgradeModal({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-sky-600 font-medium">Lifetime · Founding Explorer</p>
           </div>
           <button
-            onClick={() => { onClose(); navigate("/plans"); }}
+            onClick={() => { onClose(); navigate("/premium"); }}
             className="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 rounded-xl text-sm transition mb-2"
           >
             Upgrade to Plus
