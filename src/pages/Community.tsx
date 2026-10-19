@@ -230,7 +230,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
   const hasAuthor = !!(post.user_id && post.author_name);
   // Identity is revealed only when the POSTER explicitly chose to reveal it (Plus feature)
   // Own posts always show your own identity regardless of reveal choice
-  const showRealIdentity = (!!post.reveal_identity && hasAuthor) || isOwn || (!!currentUserIsPremium && hasAuthor);
+  const showRealIdentity = (!!post.reveal_identity && hasAuthor) || isOwn || (!!currentUserIsPremium && !!post.user_id);
   const isAnonymous = !showRealIdentity;
 
   const initials = post.author_name
@@ -322,7 +322,7 @@ function AuthorRow({ post, currentUserId, currentUserIsPremium }: {
               onClick={() => post.user_id && navigate(`/profile/${post.user_id}`)}
               className="text-xs font-semibold text-sky-600 hover:text-sky-700 transition truncate text-left"
             >
-              {post.author_name}
+              {post.author_name || "TCUnnect Traveler"}
             </button>
           )}
           <p className="text-[10px] text-slate-400 flex items-center gap-1">
