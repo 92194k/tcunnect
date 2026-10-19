@@ -59,7 +59,7 @@ interface PostCard {
   upvotes: number;
   comment_count: number;
   created_at: string;
-  profiles?: { full_name: string; profile_photo: string } | null;
+  // author identity intentionally omitted — all posts are anonymous
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -295,10 +295,6 @@ function TravelerCardUI({ t }: { t: TravelerCard }) {
 
 // ─── Community Post Card ──────────────────────────────────────────────────────
 function CommunityPostCard({ post }: { post: PostCard }) {
-  const authorName = post.profiles?.full_name ?? "TCUnnect Traveler";
-  const authorPhoto = post.profiles?.profile_photo ?? "";
-  const initial = authorName[0]?.toUpperCase() ?? "T";
-
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.upvotes ?? 0);
   const [liking, setLiking] = useState(false);
@@ -332,22 +328,26 @@ function CommunityPostCard({ post }: { post: PostCard }) {
 
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 h-full">
-      {/* Author row */}
+      {/* Author row — anonymous, matches Community page */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          {authorPhoto ? (
-            <img
-              src={authorPhoto}
-              alt={authorName}
-              className="h-10 w-10 rounded-full object-cover border-2 border-slate-100"
-            />
-          ) : (
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              {initial}
-            </div>
-          )}
+          <style>{`
+            @keyframes anonSpin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+            @keyframes anonPing { 0%,100%{opacity:.2;transform:scale(1)} 50%{opacity:0;transform:scale(1.6)} }
+            .tc-anon-ring { animation: anonSpin 3s linear infinite; }
+            .tc-anon-ping { animation: anonPing 2s ease-in-out infinite; }
+          `}</style>
+          <div className="relative h-10 w-10 shrink-0">
+            <span className="absolute inset-0 rounded-full tc-anon-ring" style={{background:"linear-gradient(135deg,#07BDD6,#F26B38)",padding:"2px"}}>
+              <span className="block h-full w-full rounded-full bg-white" />
+            </span>
+            <span className="absolute inset-[2px] rounded-full flex items-center justify-center" style={{background:"linear-gradient(135deg,rgba(7,189,214,0.15),rgba(10,128,147,0.25))"}}>
+              <span className="text-[#0A8093] text-xs font-bold">T</span>
+            </span>
+            <span className="absolute inset-0 rounded-full tc-anon-ping" style={{background:"#07BDD6"}} />
+          </div>
           <div>
-            <p className="text-sm font-bold text-slate-900 leading-tight">{authorName}</p>
+            <p className="text-sm font-bold text-[#0A8093] leading-tight">TCUnnect Traveler</p>
             <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
               {post.location && (
                 <>
@@ -481,7 +481,7 @@ export default function Dashboard() {
           .limit(4),
         supabase
           .from("posts")
-          .select("id, content, location, upvotes, comment_count, created_at, profiles:user_id(full_name, profile_photo)")
+          .select("id, content, location, upvotes, comment_count, created_at")
           .order("created_at", { ascending: false })
           .limit(3),
       ]);
