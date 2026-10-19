@@ -115,13 +115,20 @@ function RichMessageCard({ msg, onBookTrip }: { msg: Message; onBookTrip?: (gemI
   }
   if (msg.messageType === "image") {
     return (
-      <img
-        src={msg.content}
-        alt="Shared photo"
-        className="rounded-2xl max-w-[240px] max-h-64 object-cover shadow-sm border border-slate-100 cursor-pointer"
+      <div
+        className="relative rounded-2xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer max-w-[52vw] sm:max-w-[220px]"
         onClick={() => window.open(msg.content, "_blank")}
-        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-      />
+      >
+        <img
+          src={msg.content}
+          alt="Shared photo"
+          className="w-full max-h-52 object-cover block"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+        <span className="absolute bottom-1.5 right-2 text-[10px] text-white/90 font-medium drop-shadow">
+          {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+        </span>
+      </div>
     );
   }
   return <p className="text-sm">{msg.content}</p>;
@@ -1018,7 +1025,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-2xl mx-auto relative">
+    <div className="flex flex-col h-[calc(100dvh-8rem)] max-w-2xl mx-auto relative">
       {/* Header */}
       <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center gap-3">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
@@ -1076,7 +1083,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
 
       {/* Messages */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-slate-50"
+        className="flex-1 overflow-y-auto px-4 py-4 pb-2 space-y-3 bg-slate-50 min-h-0"
         onClick={() => { setShowHeaderMenu(false); setShowEmoji(false); }}
       >
         {systemMessage && (
@@ -1102,7 +1109,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
                 <img src={partner.profilePhoto} alt=""
                   className="h-7 w-7 rounded-full object-cover mr-2 self-end" />
               )}
-              <div className="max-w-[80%]">
+              <div className="max-w-[75%] sm:max-w-[80%]">
                 {isCard ? (
                   <div className={`${isMe ? "ml-auto" : ""}`}>
                     <RichMessageCard msg={msg} onBookTrip={(gemId) => navigate(`/booking/${gemId}`)} />
@@ -1149,10 +1156,10 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
       </div>
 
       {/* Quick replies */}
-      <div className="px-4 pt-2 pb-1 bg-white border-t border-slate-100 flex gap-2 overflow-x-auto scrollbar-hide">
+      <div className="px-3 pt-2 pb-1 bg-white border-t border-slate-100 flex gap-1.5 overflow-x-auto scrollbar-hide">
         {QUICK_REPLIES.map((qr) => (
           <button key={qr} onClick={() => setInput(qr)}
-            className="shrink-0 text-xs bg-sky-50 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-full hover:bg-sky-600 hover:text-white transition">
+            className="shrink-0 text-[11px] bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 rounded-full hover:bg-sky-600 hover:text-white transition whitespace-nowrap">
             {qr}
           </button>
         ))}
