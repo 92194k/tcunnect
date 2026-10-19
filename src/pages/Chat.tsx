@@ -1025,7 +1025,7 @@ function ChatThread({ matchId, onBack }: { matchId: string; onBack: () => void }
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-8rem)] max-w-2xl mx-auto relative">
+    <div className="flex flex-col h-full max-w-2xl mx-auto relative overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center gap-3">
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 p-1">
@@ -1288,7 +1288,7 @@ export default function Chat() {
 
   if (activeMatch) {
     return (
-      <AppShell>
+      <AppShell chat>
         <ChatThread
           matchId={activeMatch}
           onBack={() => { setActiveMatch(null); navigate("/chat"); }}
